@@ -1,0 +1,1 @@
+Приложение векторного поиска через построение эмбеддингов с помощью QWEN-Embedding-8B-8bit, векторный поиск FAISS-CPU и reranking через bge-reranker-v2-m3.
