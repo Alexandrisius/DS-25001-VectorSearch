@@ -13,6 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 from sentence_transformers import CrossEncoder
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.responses import HTMLResponse
+from fastapi import Request
 from pydantic import BaseModel
 from typing import List, Dict, Optional
 from collections import defaultdict
@@ -20,6 +21,9 @@ from functools import lru_cache
 import weakref
 import gc
 import xxhash
+from datetime import datetime
+import csv
+import pathlib
 
 # === НАСТРОЙКА ЛОГИРОВАНИЯ ===
 logging.basicConfig(level=logging.INFO)
@@ -532,6 +536,51 @@ async def get_stats():
         "device": db_manager.device,
         "executor_workers": db_manager.executor._max_workers
     }
+    
+# === СБОР АНАЛИТИКИ: Конфигурация ===
+FEEDBACK_DIR = os.path.join(PROJECT_ROOT, "data", "04_feedback")
+FEEDBACK_FILE = os.path.join(FEEDBACK_DIR, "copy_events.csv")
+os.makedirs(FEEDBACK_DIR, exist_ok=True)
+
+# Создаем файл с заголовками, если его нет
+if not os.path.exists(FEEDBACK_FILE):
+    with open(FEEDBACK_FILE, "w", encoding="utf-8", newline='') as f:
+        writer = csv.writer(f, delimiter=';', quoting=csv.QUOTE_MINIMAL)
+        writer.writerow(["timestamp", "query", "selected_code", "position", "description", "database"])
+
+# === СБОР АНАЛИТИКИ: Модель данных ===
+class CopyEvent(BaseModel):
+    query: str
+    selected_code: str
+    position: int
+    description: str
+    database: str
+
+# === СБОР АНАЛИТИКИ: API эндпоинт ===
+@app.post("/feedback/copy")
+async def record_copy_event(event: CopyEvent):
+    """Записывает событие копирования в CSV файл"""
+    try:
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        # Запись в CSV
+        with open(FEEDBACK_FILE, "a", encoding="utf-8", newline='') as f:
+            writer = csv.writer(f, delimiter=';', quoting=csv.QUOTE_MINIMAL, escapechar='\\')
+            writer.writerow([
+                timestamp,
+                event.query,
+                event.selected_code,
+                event.position,
+                event.description,
+                event.database
+            ])
+        
+        logger.info(f"📊 Событие копирования сохранено: {event.selected_code} (позиция {event.position})")
+        return {"status": "success", "message": "Данные сохранены"}
+    
+    except Exception as e:
+        logger.error(f"❌ Ошибка записи данных: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Ошибка сохранения данных: {str(e)}")
 
 # === Запуск сервера ===
 if __name__ == "__main__":
