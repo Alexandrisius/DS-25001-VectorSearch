@@ -270,8 +270,10 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 20px;
-            padding-bottom: 10px;
+            margin-top: 5px;
+            padding-top: 5px;
+            margin-bottom: 5px;
+            padding-bottom: 5px;
             border-bottom: 2px solid var(--border);
         }
 
@@ -609,10 +611,9 @@
         </header>
 
         <div class="main-card">
-            <div class="card-header">
+            <div class="card-header"> 
                 <div>
-                    <i class="fas fa-search"></i> Поиск кода
-                    <span class="current-database" id="currentDatabase">Основная база КСР</span>
+                    <i class="fas fa-search"></i> Семантический поиск по векторным базам
                 </div>
                 <div class="database-selector">
                     <i class="fas fa-database"></i>
@@ -645,7 +646,7 @@
                         <i class="fas fa-trash"></i> Очистить
                     </button>
                     <button id="searchBtn" class="btn btn-primary">
-                        <i class="fas fa-bolt"></i> Найти ТОП-20
+                        <i class="fas fa-bolt"></i> Поиск
                     </button>
                 </div>
 
@@ -657,9 +658,7 @@
         </div>
 
         <div class="main-card">
-            <div class="card-header">
-                <i class="fas fa-list-ol"></i> ТОП-20 результатов
-            </div>
+            
 
             <div class="results-section">
                 <div class="results-header">
@@ -734,7 +733,6 @@
             const processingTimeElement = document.getElementById('processingTime');
             const databaseSelect = document.getElementById('databaseSelect');
             const databaseOptions = document.getElementById('databaseOptions');
-            const currentDatabaseElement = document.getElementById('currentDatabase');
             const resultsDatabaseBadge = document.getElementById('resultsDatabaseBadge');
             const databaseStats = document.getElementById('databaseStats');
 
@@ -875,7 +873,7 @@
                     updateStatus('Поиск выполняется', 'info');
                     updateProcessingInfo(`Обработка запроса в базе ${getDatabaseDisplayName(currentDatabase)}...`);
                 } else {
-                    searchBtn.innerHTML = `<i class="fas fa-bolt"></i> Найти ТОП-20`;
+                    searchBtn.innerHTML = `<i class="fas fa-bolt"></i> Поиск`;
                 }
             }
 
@@ -945,7 +943,6 @@
                 currentDatabase = dbName;
                 databaseSelect.value = dbName;
                 // Обновляем отображение
-                currentDatabaseElement.textContent = getDatabaseDisplayName(dbName);
                 resultsDatabaseBadge.textContent = getDatabaseDisplayName(dbName);
                 resultsDatabaseBadge.className = `database-badge ${getDatabaseBadgeClass(dbName)}`;
                 const db = databases.find(d => d.name === dbName);
