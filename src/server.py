@@ -430,7 +430,7 @@ async def clear_cache():
 
 @app.post("/match", response_model=MatchResponse)
 async def match_ksr(request: MatchRequest):
-    """Оптимизированный поиск с кэшированием"""
+    """Оптимизированный поиск с фильтрацией по порогам на каждом этапе"""
     start_time = time.time()
     query_text = request.text.strip()
     if not query_text:
@@ -455,13 +455,17 @@ async def match_ksr(request: MatchRequest):
         columns = db_manager.get_columns()
         code_col = columns["code"]
         desc_col = columns["description"]
-
-        # Пороговые значения
+        
+        # Пороговые значения - устанавливаем "умные" значения по умолчанию
         COSINE_THRESHOLD, RERANK_THRESHOLD = db_manager.get_thresholds()
-
-        TOP_K_FAISS = 100
-        TOP_K_RERANK = 20
-
+        
+        # Увеличиваем количество для FAISS, чтобы точно захватить все релевантные
+        TOP_K_FAISS = 1500
+        # Максимальное количество для reranking (ограничение для производительности)
+        MAX_FOR_RERANK = 200
+        # Максимальное количество результатов для возврата
+        MAX_RESULTS = 100
+        
         # Получение эмбеддинга запроса с кэшированием
         query_emb = await db_manager.get_embedding_cached(query_text)
         query_emb_reshaped = query_emb.reshape(1, -1)
@@ -471,52 +475,93 @@ async def match_ksr(request: MatchRequest):
         distances, indices = await loop.run_in_executor(
             db_manager.executor, lambda: index.search(query_emb_reshaped, TOP_K_FAISS)
         )
-
-        best_cos_sim = float(distances[0][0])
-        if best_cos_sim < COSINE_THRESHOLD:
+        
+        # === НОВОЕ: Фильтрация по косинусному сходству ===
+        cosine_scores = distances[0]  # для IndexFlatIP это косинусное сходство
+        # Находим индексы, где косинусное сходство выше порога
+        valid_cosine_indices = np.where(cosine_scores >= COSINE_THRESHOLD)[0]
+        
+        if len(valid_cosine_indices) == 0:
+            # Если нет результатов выше основного порога, проверяем топ-3 для информативной ошибки
+            top3_scores = cosine_scores[:3]
+            max_score = float(np.max(top3_scores))
             raise HTTPException(
                 status_code=404,
-                detail=f"По вашему запросу ничего похожего не найдено. Максимальная семантическая близость: {best_cos_sim:.4f}",
+                detail=f"По вашему запросу не найдено релевантных результатов. Максимальное косинусное сходство: {max_score:.4f} (порог: {COSINE_THRESHOLD:.2f})"
             )
-
-        # Reranking
-        global_indices = indices[0][:TOP_K_FAISS]
-        candidate_pairs = [(query_text, df.iloc[i][desc_col]) for i in global_indices]
-
+        
+        # Берем индексы и соответствующие косинусные сходства только для валидных результатов
+        filtered_indices = indices[0][valid_cosine_indices]
+        filtered_cosine_scores = cosine_scores[valid_cosine_indices]
+        
+        # Ограничиваем количество для reranking (для производительности)
+        if len(filtered_indices) > MAX_FOR_RERANK:
+            # Сортируем по косинусному сходству и берем топ MAX_FOR_RERANK
+            top_indices = np.argsort(filtered_cosine_scores)[::-1][:MAX_FOR_RERANK]
+            filtered_indices = filtered_indices[top_indices]
+            filtered_cosine_scores = filtered_cosine_scores[top_indices]
+        
+        # === Reranking только отфильтрованных результатов ===
+        candidate_pairs = [(query_text, df.iloc[i][desc_col]) for i in filtered_indices]
+        
         rerank_scores = await loop.run_in_executor(
             db_manager.executor, lambda: reranker.predict(candidate_pairs)
         )
-
-        best_rerank_score = float(np.max(rerank_scores))
-        if best_rerank_score < RERANK_THRESHOLD:
+        
+        # === НОВОЕ: Фильтрация по порогу reranker ===
+        valid_rerank_indices = np.where(rerank_scores >= RERANK_THRESHOLD)[0]
+        
+        if len(valid_rerank_indices) == 0:
+            # Если нет результатов выше порога reranker, берем топ-3 для информативной ошибки
+            top3_indices = np.argsort(rerank_scores)[::-1][:3]
+            top3_scores = rerank_scores[top3_indices]
+            max_score = float(np.max(top3_scores))
             raise HTTPException(
                 status_code=404,
-                detail=f"Похожие варианты найдены, но ни один не является достоверно релевантным. Лучший reranker score: {best_rerank_score:.4f}",
+                detail=f"Найдены похожие материалы, но ни один не прошел порог релевантности reranker. Максимальный reranker score: {max_score:.4f} (порог: {RERANK_THRESHOLD:.2f})"
             )
-
-        # Сортировка результатов
-        reranked_order = np.argsort(rerank_scores)[::-1]
+        
+        # Берем только валидные результаты после reranking
+        final_indices = filtered_indices[valid_rerank_indices]
+        final_cosine_scores = filtered_cosine_scores[valid_rerank_indices]
+        final_rerank_scores = rerank_scores[valid_rerank_indices]
+        
+        # Сортировка по reranker score (в порядке убывания)
+        sorted_order = np.argsort(final_rerank_scores)[::-1]
+        
+        # Ограничиваем максимальное количество результатов
+        if len(sorted_order) > MAX_RESULTS:
+            sorted_order = sorted_order[:MAX_RESULTS]
+        
+        # === ФОРМИРОВАНИЕ ФИНАЛЬНЫХ РЕЗУЛЬТАТОВ ===
         candidates = []
-
-        for rank in range(min(TOP_K_RERANK, len(reranked_order))):
-            local_idx = reranked_order[rank]
-            global_idx = global_indices[local_idx]
-            score = rerank_scores[local_idx]
-            cosine_val = float(distances[0][local_idx])
+        
+        for rank_idx, sort_idx in enumerate(sorted_order):
+            idx = sort_idx
+            global_idx = final_indices[idx]
+            cosine_val = float(final_cosine_scores[idx])
+            rerank_val = float(final_rerank_scores[idx])
             code = str(df.iloc[global_idx][code_col])
             desc = df.iloc[global_idx][desc_col]
-
-            candidates.append(
-                CandidateResult(
-                    rank=rank + 1,
-                    code=code,
-                    description=desc,
-                    reranker_score=float(score),
-                    cosine_similarity=cosine_val,
-                )
-            )
-
+            
+            candidates.append(CandidateResult(
+                rank=rank_idx + 1,
+                code=code,
+                description=desc,
+                reranker_score=rerank_val,
+                cosine_similarity=cosine_val
+            ))
+        
         processing_time = time.time() - start_time
+        
+        # Статистика для логирования
+        logger.info(f"Запрос: '{query_text[:50]}...' | "
+                   f"Найдено: {len(cosine_scores)} | "
+                   f"Прошло косинусный фильтр: {len(valid_cosine_indices)} | "
+                   f"Прошло reranker фильтр: {len(valid_rerank_indices)} | "
+                   f"Возвращено результатов: {len(candidates)} | "
+                   f"Время: {processing_time:.3f}с")
+        
         return MatchResponse(
             query=query_text,
             database=db_manager.current_db,
