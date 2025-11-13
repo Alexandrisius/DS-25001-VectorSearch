@@ -796,12 +796,17 @@
 
                         // === НОВОЕ: Отправка данных аналитики ===
                         if (currentQuery && currentResults.length > 0) {
+                            // Находим соответствующий результат по позиции
+                            const selectedResult = currentResults.find(result => result.rank === position);
+
                             sendCopyAnalytics({
                                 query: currentQuery,
                                 selected_code: code,
                                 position: position,
                                 description: description,
-                                database: currentDatabase
+                                database: currentDatabase,
+                                reranker_score: selectedResult ? selectedResult.reranker_score : null,
+                                cosine_similarity: selectedResult ? selectedResult.cosine_similarity : null
                             });
                         }
                     }).catch(err => {
@@ -844,9 +849,10 @@
                     selected_code: cleanText(data.selected_code),
                     position: data.position,
                     description: cleanText(data.description),
-                    database: cleanText(data.database)
+                    database: cleanText(data.database),
+                    reranker_score: data.reranker_score !== undefined ? data.reranker_score : null,
+                    cosine_similarity: data.cosine_similarity !== undefined ? data.cosine_similarity : null
                 };
-
                 fetch('/feedback/copy', {
                     method: 'POST',
                     headers: {

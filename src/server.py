@@ -264,7 +264,9 @@ class OptimizedVectorDatabaseManager:
                 "description": db["metadata"]["description"],
                 "record_count": db["metadata"]["record_count"],
                 "is_active": name == self.current_db,
-                "thresholds": db["metadata"]["thresholds"],  # Добавляем пороговые значения
+                "thresholds": db["metadata"][
+                    "thresholds"
+                ],  # Добавляем пороговые значения
             }
             for name, db in self.databases.items()
         ]
@@ -610,25 +612,13 @@ async def get_stats():
 
 # === СБОР АНАЛИТИКИ: Конфигурация ===
 FEEDBACK_DIR = os.path.join(PROJECT_ROOT, "data", "04_feedback")
-FEEDBACK_FILE = os.path.join(
-    FEEDBACK_DIR, "copy_events.jsonl"
-)  # Изменено расширение файла
+FEEDBACK_FILE = os.path.join(FEEDBACK_DIR, "copy_events.jsonl")
 os.makedirs(FEEDBACK_DIR, exist_ok=True)
 
-# Создаем файл с заголовками, если его нет
+# Создаем пустой файл, если его нет (для JSONL формата)
 if not os.path.exists(FEEDBACK_FILE):
-    with open(FEEDBACK_FILE, "w", encoding="utf-8", newline="") as f:
-        writer = csv.writer(f, delimiter=";", quoting=csv.QUOTE_MINIMAL)
-        writer.writerow(
-            [
-                "timestamp",
-                "query",
-                "selected_code",
-                "position",
-                "description",
-                "database",
-            ]
-        )
+    open(FEEDBACK_FILE, "w", encoding="utf-8").close()  # ИСПРАВЛЕНО
+    print(f"✅ Создан файл для сбора аналитики: {FEEDBACK_FILE}")
 
 
 # === СБОР АНАЛИТИКИ: Модель данных ===
@@ -638,6 +628,8 @@ class CopyEvent(BaseModel):
     position: int
     description: str
     database: str
+    reranker_score: Optional[float] = None  # Новое поле
+    cosine_similarity: Optional[float] = None  # Новое поле
 
 
 # === СБОР АНАЛИТИКИ: Функция очистки текста ===
@@ -665,11 +657,11 @@ def clean_text_for_json(text):
 
 # === СБОР АНАЛИТИКИ: API эндпоинт ===
 @app.post("/feedback/copy")
+@app.post("/feedback/copy")
 async def record_copy_event(event: CopyEvent):
     """Записывает событие копирования в JSONL файл с очисткой данных"""
     try:
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
         # Очищаем все текстовые поля
         cleaned_data = {
             "timestamp": timestamp,
@@ -678,17 +670,17 @@ async def record_copy_event(event: CopyEvent):
             "position": event.position,
             "description": clean_text_for_json(event.description),
             "database": clean_text_for_json(event.database),
+            "reranker_score": event.reranker_score,  # Добавляем новые поля
+            "cosine_similarity": event.cosine_similarity,
         }
-
         # Запись в JSONL файл (каждая запись на новой строке)
         with open(FEEDBACK_FILE, "a", encoding="utf-8") as f:
             json_line = json.dumps(
                 cleaned_data, ensure_ascii=False, separators=(",", ":")
             )
             f.write(json_line + "\n")
-
         logger.info(
-            f"📊 Событие копирования сохранено: {cleaned_data['selected_code']} (позиция {cleaned_data['position']})"
+            f"📊 Событие копирования сохранено: {cleaned_data['selected_code']} (позиция {cleaned_data['position']}, rerank: {event.reranker_score:.4f}, cosine: {event.cosine_similarity:.4f})"
         )
         return {"status": "success", "message": "Данные сохранены в JSON"}
     except Exception as e:
