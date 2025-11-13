@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>⚡ KSR Matcher Ultra</title>
+    <title>⚡ KSR Matcher</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
@@ -604,14 +604,14 @@
 <body>
     <div class="container">
         <header>
-            <h1><i class="fas fa-bolt"></i> KSR Matcher Ultra</h1>
+            <h1><i class="fas fa-bolt"></i> KSR Matcher</h1>
             <p class="subtitle">Сверхбыстрый подбор кодов с поддержкой <span class="tooltip">нескольких векторных
                     баз<span class="tooltip-text">Выбирайте нужную базу данных для поиска: основную КСР, расширенную или
                         другие доступные базы</span></span></p>
         </header>
 
         <div class="main-card">
-            <div class="card-header"> 
+            <div class="card-header">
                 <div>
                     <i class="fas fa-search"></i> Семантический поиск по векторным базам
                 </div>
@@ -658,7 +658,7 @@
         </div>
 
         <div class="main-card">
-            
+
 
             <div class="results-section">
                 <div class="results-header">
@@ -715,7 +715,7 @@
         </div>
 
         <footer>
-            <p>© 2025 KSR Matcher Ultra | Версия 3.0 </p>
+            <p>© 2025 KSR Matcher | Версия 3.1 </p>
             <p>⚡ Скорость | 🛡️ Надежность | 🔍 Точность</p>
         </footer>
     </div>
@@ -811,8 +811,9 @@
                 }
 
                 // Выбор векторной базы
-                if (e.target.classList.contains('database-option')) {
-                    const dbName = e.target.dataset.name;
+                const databaseOption = e.target.closest('.database-option');
+                if (databaseOption) {
+                    const dbName = databaseOption.dataset.name;
                     setCurrentDatabase(dbName);
                 }
             });
@@ -949,6 +950,11 @@
                 if (db) {
                     databaseStats.innerHTML = `📊 Записей в базе: <strong>${db.record_count.toLocaleString('ru')}</strong>`;
                     updateProcessingInfo(`Готов к работе • База: ${getDatabaseDisplayName(dbName)}`);
+
+                    // Добавляем обновление пороговых значений
+                    const thresholds = db.thresholds || { rerank: 0.6, cosine: 0.45 };
+                    document.getElementById('rerankThreshold').textContent = thresholds.rerank.toFixed(2);
+                    document.getElementById('cosineThreshold').textContent = thresholds.cosine.toFixed(2);
                 }
                 // Обновляем активный класс для опций
                 document.querySelectorAll('.database-option').forEach(option => {
@@ -978,12 +984,16 @@
                     });
                     // Обновляем блок с опциями баз
                     updateDatabaseOptions();
-                    // Устанавливаем текущую базу
+                    // Устанавливаем текущую базу (это автоматически обновит пороговые значения)
                     setCurrentDatabase(currentDatabase);
                     console.log('Доступные векторные базы:', databases);
                 } catch (error) {
                     console.error('Ошибка загрузки векторных баз:', error);
                     updateStatus(`Ошибка загрузки баз: ${error.message}`, 'error');
+
+                    // Устанавливаем значения по умолчанию при ошибке
+                    document.getElementById('rerankThreshold').textContent = '0.60';
+                    document.getElementById('cosineThreshold').textContent = '0.45';
                 }
             }
 
