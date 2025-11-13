@@ -612,13 +612,31 @@ async def get_stats():
 
 # === СБОР АНАЛИТИКИ: Конфигурация ===
 FEEDBACK_DIR = os.path.join(PROJECT_ROOT, "data", "04_feedback")
-FEEDBACK_FILE = os.path.join(FEEDBACK_DIR, "copy_events.jsonl")
+FEEDBACK_FILE = os.path.join(FEEDBACK_DIR, "positive.jsonl")
 os.makedirs(FEEDBACK_DIR, exist_ok=True)
 
 # Создаем пустой файл, если его нет (для JSONL формата)
 if not os.path.exists(FEEDBACK_FILE):
     open(FEEDBACK_FILE, "w", encoding="utf-8").close()  # ИСПРАВЛЕНО
-    print(f"✅ Создан файл для сбора аналитики: {FEEDBACK_FILE}")
+    print(f"✅ Создан файл для сбора позитивов: {FEEDBACK_FILE}")
+
+DISLIKE_FILE = os.path.join(FEEDBACK_DIR, "negative.jsonl")
+if not os.path.exists(DISLIKE_FILE):
+    open(DISLIKE_FILE, "w", encoding="utf-8").close()
+    print(f"✅ Создан файл для сбора негативов: {DISLIKE_FILE}")
+
+
+# Добавьте новую модель данных
+class DislikeEvent(BaseModel):
+    timestamp: str
+    query: str
+    selected_code: str
+    position: int
+    description: str
+    database: str
+    reranker_score: Optional[float] = None
+    cosine_similarity: Optional[float] = None
+    action: str = "dislike"
 
 
 # === СБОР АНАЛИТИКИ: Модель данных ===
@@ -634,29 +652,26 @@ class CopyEvent(BaseModel):
 
 # === СБОР АНАЛИТИКИ: Функция очистки текста ===
 def clean_text_for_json(text):
-    """Очищает текст от проблемных символов для безопасного хранения в JSON"""
-    if not text or not isinstance(text, str):
+    if not isinstance(text, str):
         return text
+    # 1. Удаляем опасные управляющие символы (но не стрелки!)
+    text = re.sub(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]", " ", text)
+    # 2. Нормализуем стрелки и разделители → к единому виду
+    text = re.sub(r"[→⟶➡➤→>]", " → ", text)      # все стрелки → " → "
+    text = re.sub(r"[\/|\\]", "/", text)       # слэши → " / "
+    # 3. Сжимаем пробелы
+    text = re.sub(r"\s+", " ", text).strip()
+    # 4. Убираем ТОЛЬКО реально опасные символы (теги, control, emoji)
+    #    — оставляем буквы, цифры, пунктуацию, знаки валют, и доп. символы
+    text = re.sub(
+        r"[^\w\s\d.,;:!?()\"'«»\[\]{}\-_+=*%#@&$€₽¥£¢§°±→/\\u0400-\u04FF\\u00C0-\u017F]",
+        "",
+        text
+    )
+    return text
 
-    # Удаляем невидимые символы управления (ASCII и Unicode)
-    cleaned = re.sub(r"[\x00-\x1F\x7F-\x9F]", " ", text)
-
-    # Заменяем множественные кавычки на одинарные
-    cleaned = re.sub(r'""+', '"', cleaned)
-
-    # Удаляем лишние пробелы
-    cleaned = re.sub(r"\s+", " ", cleaned).strip()
-
-    # Обработка специальных символов - убираем все, кроме разрешенных
-    # Разрешенные символы: буквы, цифры, пробелы, знаки препинания, некоторые специальные символы
-    allowed_chars = r"[^\w\s\d.,;:!?()'\"«»\[\]{}\-_+=*%#@&$€₽¥£¢§°±\\/\\u0400-\\u04FF\\u00C0-\\u017F]"
-    cleaned = re.sub(allowed_chars, "", cleaned)
-
-    return cleaned
-
-
+ 
 # === СБОР АНАЛИТИКИ: API эндпоинт ===
-@app.post("/feedback/copy")
 @app.post("/feedback/copy")
 async def record_copy_event(event: CopyEvent):
     """Записывает событие копирования в JSONL файл с очисткой данных"""
@@ -687,6 +702,39 @@ async def record_copy_event(event: CopyEvent):
         logger.error(f"❌ Ошибка записи данных в JSON: {str(e)}")
         raise HTTPException(
             status_code=500, detail=f"Ошибка сохранения данных: {str(e)}"
+        )
+
+
+@app.post("/feedback/dislike")
+async def record_dislike_event(event: DislikeEvent):
+    """Записывает событие дизлайка в JSONL файл с очисткой данных"""
+    try:
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        cleaned_data = {
+            "timestamp": timestamp,
+            "query": clean_text_for_json(event.query),
+            "selected_code": clean_text_for_json(event.selected_code),
+            "position": event.position,
+            "description": clean_text_for_json(event.description),
+            "database": clean_text_for_json(event.database),
+            "reranker_score": event.reranker_score,
+            "cosine_similarity": event.cosine_similarity,
+            "action": event.action,
+        }
+
+        with open(DISLIKE_FILE, "a", encoding="utf-8") as f:
+            json_line = json.dumps(
+                cleaned_data, ensure_ascii=False, separators=(",", ":")
+            )
+            f.write(json_line + "\n")
+        logger.info(
+            f"📊 Событие дизлайка сохранено: {cleaned_data['selected_code']} (позиция {cleaned_data['position']})"
+        )
+        return {"status": "success", "message": "Данные дизлайка сохранены"}
+    except Exception as e:
+        logger.error(f"❌ Ошибка записи данных дизлайка: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Ошибка сохранения данных дизлайка: {str(e)}"
         )
 
 

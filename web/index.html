@@ -598,6 +598,48 @@
             background-color: rgba(255, 152, 0, 0.2);
             color: #e65100;
         }
+
+        .actions-cell {
+            min-width: 40px !important;
+            width: 40px !important;
+            padding: 0 5px !important;
+            text-align: center;
+        }
+
+        .dislike-btn {
+            background: none !important;
+            border: none !important;
+            color: var(--danger);
+            cursor: pointer;
+            opacity: 0.7;
+            padding: 4px !important;
+            border-radius: 4px !important;
+            transition: all 0.2s;
+            width: auto !important;
+            height: auto !important;
+            display: inline-flex !important;
+            justify-content: center !important;
+            align-items: center !important;
+            margin: 0 auto !important;
+            box-shadow: none !important;
+        }
+
+        .dislike-btn:hover {
+            opacity: 1;
+            background-color: rgba(33, 150, 243, 0.1) !important;
+            transform: scale(1.1);
+        }
+
+        .dislike-btn:active {
+            transform: scale(0.95);
+        }
+
+        .dislike-btn i {
+            font-size: 0.9rem;
+            width: 16px;
+            height: 16px;
+            display: block;
+        }
     </style>
 </head>
 
@@ -679,13 +721,14 @@
                                 <th style="width: 20%;">Код <i class="fas fa-copy"
                                         style="margin-left: 5px; font-size: 0.8em;"
                                         title="Нажмите на код для копирования"></i></th>
-                                <th style="width: 60%;">Описание</th>
+                                <th style="width: 65%;">Описание</th>
+                                <th style="width: 5%;">Оценка</th> <!-- Новая колонка -->
                                 <th style="width: 15%;">Точность</th>
                             </tr>
                         </thead>
                         <tbody id="resultsBody">
                             <tr>
-                                <td colspan="4" style="text-align: center; padding: 40px; color: #888;">
+                                <td colspan="5" style="text-align: center; padding: 40px; color: #888;">
                                     <i class="fas fa-info-circle" style="font-size: 24px; margin-bottom: 10px;"></i><br>
                                     Результаты поиска появятся здесь после выполнения запроса
                                 </td>
@@ -776,6 +819,7 @@
                 // Обработка копирования кода
                 if (e.target.classList.contains('copy-btn') || e.target.closest('.copy-btn')) {
                     const button = e.target.closest('.copy-btn');
+                    if (button.disabled) return;
                     const row = button.closest('tr');
                     const codeElement = row.querySelector('.code-value');
                     const code = codeElement.textContent;
@@ -787,9 +831,11 @@
                         const originalIcon = button.innerHTML;
                         button.innerHTML = '<i class="fas fa-check"></i>';
                         button.style.color = '#4CAF50';
+                        button.disabled = true;
                         setTimeout(() => {
                             button.innerHTML = originalIcon;
                             button.style.color = '';
+                            button.disabled = false;
                         }, 1500);
 
                         showNotification(`Код "${code}" скопирован`, 'success');
@@ -812,6 +858,7 @@
                     }).catch(err => {
                         console.error('Ошибка копирования:', err);
                         showNotification('Ошибка при копировании кода', 'error');
+                        button.disabled = false;
                     });
                 }
 
@@ -821,22 +868,61 @@
                     const dbName = databaseOption.dataset.name;
                     setCurrentDatabase(dbName);
                 }
+                if (e.target.closest('.dislike-btn')) {
+                    const button = e.target.closest('.dislike-btn');
+                    const row = button.closest('tr');
+                    const rank = parseInt(button.dataset.rank);
+                    const codeElement = row.querySelector('.code-value');
+                    const code = codeElement.textContent;
+                    const description = row.querySelector('.description-cell').textContent.trim();
+
+                    // Находим соответствующий результат
+                    const dislikedResult = currentResults.find(result => result.rank === rank);
+
+                    // Визуальная обратная связь
+                    const originalIcon = button.innerHTML;
+                    button.innerHTML = '<i class="fas fa-check" style="color: #4CAF50;"></i>';
+                    button.disabled = true;
+                    button.title = "Отзыв отправлен";
+
+                    setTimeout(() => {
+                        button.innerHTML = originalIcon;
+                        button.disabled = false;
+                        button.title = "Плохой результат";
+                    }, 1500);
+
+                    // Отправка аналитики
+                    if (currentQuery && dislikedResult) {
+                        sendDislikeAnalytics({
+                            query: currentQuery,
+                            selected_code: code,
+                            position: rank,
+                            description: description,
+                            database: currentDatabase,
+                            reranker_score: dislikedResult.reranker_score,
+                            cosine_similarity: dislikedResult.cosine_similarity
+                        });
+                        showNotification(`Отзыв о результате №${rank} отправлен`, 'info');
+                    }
+                }
             });
 
             function cleanText(text) {
                 if (!text || typeof text !== 'string') return text;
 
-                // Удаляем невидимые символы
-                let cleaned = text.replace(/[\r\n\t\f\v\u00A0\u200B-\u200D\uFEFF]/g, ' ');
+                // 1. Удаляем только реально опасные control-символы
+                let cleaned = text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, ' ');
 
-                // Заменяем множественные кавычки на одинарные
-                cleaned = cleaned.replace(/"""+/g, '"');
+                // 2. Нормализуем разделители → в один вид (→), если нужно
+                cleaned = cleaned.replace(/[→⟶➡➤→>]/g, ' → ');  // ← опционально, на ваше усмотрение
+                cleaned = cleaned.replace(/[|\\/]/g, '/');
 
-                // Удаляем лишние пробелы
+                // 3. Сжимаем пробелы
                 cleaned = cleaned.replace(/\s+/g, ' ').trim();
 
-                // Обрабатываем специальные символы Unicode
-                cleaned = cleaned.replace(/[^\x00-\x7F\u0400-\u04FF.,;:!?()"'«»\[\]{}\-_+=*%#@&$€₽¥£¢§°±\s\d]/g, '');
+                // 4. Убираем ТОЛЬКО действительно вредные символы (emoji, box-drawing и т.п.)
+                // Разрешаем: латиницу, кириллицу, цифры, пунктуацию, денежные символы, пробелы и → / | : -
+                cleaned = cleaned.replace(/[^\w\s\d.,;:!?()"'«»\[\]{}\-_+=*%#@&$€₽¥£¢§°±→|/\\u0400-\u04FF\\u00C0-\\u017F]/g, '');
 
                 return cleaned;
             }
@@ -887,7 +973,7 @@
             function clearResults() {
                 resultsBody.innerHTML = `
                 <tr>
-                    <td colspan="4" style="text-align: center; padding: 40px; color: #888;">
+                    <td colspan="5" style="text-align: center; padding: 40px; color: #888;">
                         <i class="fas fa-info-circle" style="font-size: 24px; margin-bottom: 10px;"></i><br>
                         Результаты поиска появятся здесь после выполнения запроса
                     </td>
@@ -1053,6 +1139,11 @@
                         <td class="description-cell">
                             ${candidate.description}
                         </td>
+                        <td class="actions-cell"> <!-- Новая колонка с кнопкой дизлайка -->
+                            <button class="dislike-btn" title="Плохой результат" data-rank="${candidate.rank}">
+                                <i class="fas fa-thumbs-down"></i>
+                            </button>
+                        </td>
                         <td class="scores-cell">
                             <div style="margin-bottom: 8px;">
                                 <small>Reranker:</small><br>
@@ -1125,6 +1216,38 @@
                     setLoading(false);
                 }
             }
+
+            function sendDislikeAnalytics(data) {
+                // Очищаем все текстовые поля
+                const cleanedData = {
+                    timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
+                    query: cleanText(data.query),
+                    selected_code: cleanText(data.selected_code),
+                    position: data.position,
+                    description: cleanText(data.description),
+                    database: cleanText(data.database),
+                    reranker_score: data.reranker_score !== undefined ? data.reranker_score : null,
+                    cosine_similarity: data.cosine_similarity !== undefined ? data.cosine_similarity : null,
+                    action: 'dislike'
+                };
+
+                fetch('/feedback/dislike', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(cleanedData)
+                })
+                    .then(response => {
+                        if (!response.ok) {
+                            console.warn('Не удалось отправить данные о дизлайке');
+                        }
+                    })
+                    .catch(error => {
+                        console.warn('Ошибка отправки данных о дизлайке:', error);
+                    });
+            }
+
 
             // Auto-resize textarea
             queryInput.addEventListener('input', function () {
