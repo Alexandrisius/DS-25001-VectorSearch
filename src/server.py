@@ -14,6 +14,7 @@ from sentence_transformers import CrossEncoder
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.responses import HTMLResponse
 from fastapi import Request
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import List, Dict, Optional
 from collections import defaultdict
@@ -342,6 +343,13 @@ app = FastAPI(
     docs_url=None,  # Отключаем docs для скорости
     redoc_url=None,
 )
+# Раздача статических файлов (CSS, JS, изображения)
+STATIC_DIR = os.path.join(WEB_DIR, "static")
+if os.path.exists(STATIC_DIR):
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+    print(f"✅ Статические файлы подключены из: {STATIC_DIR}")
+else:
+    print(f"⚠️ Папка static не найдена: {STATIC_DIR}")
 
 
 # Модели данных
@@ -657,8 +665,8 @@ def clean_text_for_json(text):
     # 1. Удаляем опасные управляющие символы (но не стрелки!)
     text = re.sub(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]", " ", text)
     # 2. Нормализуем стрелки и разделители → к единому виду
-    text = re.sub(r"[→⟶➡➤→>]", " → ", text)      # все стрелки → " → "
-    text = re.sub(r"[\/|\\]", "/", text)       # слэши → " / "
+    text = re.sub(r"[→⟶➡➤→>]", " → ", text)  # все стрелки → " → "
+    text = re.sub(r"[\/|\\]", "/", text)  # слэши → " / "
     # 3. Сжимаем пробелы
     text = re.sub(r"\s+", " ", text).strip()
     # 4. Убираем ТОЛЬКО реально опасные символы (теги, control, emoji)
@@ -666,11 +674,11 @@ def clean_text_for_json(text):
     text = re.sub(
         r"[^\w\s\d.,;:!?()\"'«»\[\]{}\-_+=*%#@&$€₽¥£¢§°±→/\\u0400-\u04FF\\u00C0-\u017F]",
         "",
-        text
+        text,
     )
     return text
 
- 
+
 # === СБОР АНАЛИТИКИ: API эндпоинт ===
 @app.post("/feedback/copy")
 async def record_copy_event(event: CopyEvent):
