@@ -7,35 +7,59 @@
     <title>⚡ KSR Matcher AI</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
+
     <style>
         :root {
-            /* Цветовая палитра */
+            /* Светлая тема (по умолчанию) */
             --primary: #6366f1;
             --primary-dark: #4f46e5;
             --primary-light: #e0e7ff;
             --primary-glow: rgba(99, 102, 241, 0.25);
-            
+
             --success: #10b981;
             --success-bg: #d1fae5;
             --danger: #ef4444;
             --danger-bg: #fee2e2;
-            
+
             --bg-body: #f1f5f9;
             --surface: #ffffff;
-            
+
             --text-main: #1e293b;
             --text-secondary: #64748b;
             --border: #e2e8f0;
-            
+
             --radius-sm: 8px;
             --radius-md: 16px;
             --radius-lg: 24px;
-            
-            --shadow-card: 0 4px 20px -2px rgba(0,0,0,0.08);
-            --shadow-float: 0 10px 40px -10px rgba(0,0,0,0.15);
+
+            --shadow-card: 0 4px 20px -2px rgba(0, 0, 0, 0.08);
+            --shadow-float: 0 10px 40px -10px rgba(0, 0, 0, 0.15);
+        }
+
+        /* Тёмная тема */
+        [data-theme="dark"] {
+            --primary: #818cf8;
+            --primary-dark: #6366f1;
+            --primary-light: #312e81;
+            --primary-glow: rgba(129, 140, 248, 0.3);
+
+            --success: #34d399;
+            --success-bg: #064e3b;
+            --danger: #f87171;
+            --danger-bg: #7f1d1d;
+
+            --bg-body: #0f172a;
+            --surface: #1e293b;
+
+            --text-main: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --border: #334155;
+
+            --shadow-card: 0 4px 20px -2px rgba(0, 0, 0, 0.4);
+            --shadow-float: 0 10px 40px -10px rgba(0, 0, 0, 0.6);
         }
 
         * {
@@ -53,6 +77,7 @@
             padding: 20px;
             min-height: 100vh;
             padding-bottom: 40px;
+            transition: background-color 0.3s ease, color 0.3s ease;
         }
 
         .container {
@@ -65,6 +90,7 @@
             text-align: center;
             margin-bottom: 30px;
             padding-top: 10px;
+            position: relative;
         }
 
         h1 {
@@ -84,25 +110,68 @@
             margin: 0 auto;
         }
 
-        /* --- Cards --- */
+        /* --- Переключатель темы --- */
+        .theme-toggle {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: var(--surface);
+            border: 2px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 8px 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: var(--shadow-card);
+            transition: all 0.3s ease;
+        }
+
+        .theme-toggle:hover {
+            border-color: var(--primary);
+            transform: scale(1.05);
+        }
+
+        .theme-toggle i {
+            font-size: 1.1rem;
+            color: var(--primary);
+            transition: transform 0.3s ease;
+        }
+
+        .theme-toggle:hover i {
+            transform: rotate(20deg);
+        }
+
+        /* --- Cards (ИСПРАВЛЕНЫ УГЛЫ И РАМКИ) --- */
         .main-card {
             background: var(--surface);
             border-radius: var(--radius-lg);
+            /* КРУГЛЫЕ УГЛЫ */
             box-shadow: var(--shadow-card);
             margin-bottom: 25px;
-            border: 1px solid rgba(255,255,255,0.8);
-            overflow: visible; /* Важно для выпадающего списка! */
+            border: 2px solid var(--border);
+            /* ДОБАВЛЕНА ВИДИМАЯ РАМКА */
+            overflow: hidden;
+            /* Важно для корректного отображения border-radius */
+            transition: background-color 0.3s ease, border-color 0.3s ease;
         }
 
+        /* ОБНОВЛЁННАЯ СТРУКТУРА CARD-HEADER */
         .card-header {
-            background: rgba(248, 250, 252, 0.8);
+            background: var(--bg-body);
             border-bottom: 1px solid var(--border);
             padding: 20px 25px;
+            position: relative;
+            z-index: 10;
+            transition: background-color 0.3s ease;
+        }
+
+        /* Верхняя строка: заголовок + селектор */
+        .header-top-row {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            position: relative;
-            z-index: 10; /* Чтобы меню было поверх всего */
+            margin-bottom: 15px;
         }
 
         .header-title {
@@ -111,6 +180,35 @@
             display: flex;
             align-items: center;
             gap: 10px;
+        }
+
+        /* Нижняя строка: метрики (МИНИМАЛЬНАЯ ШИРИНА) */
+        .metrics-panel {
+            display: inline-flex;
+            /* ИЗМЕНЕНО: inline-flex вместо flex */
+            align-items: center;
+            gap: 20px;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            padding: 12px 16px;
+            background: var(--surface);
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border);
+            width: auto;
+            /* ДОБАВЛЕНО: автоматическая ширина */
+        }
+
+        .metric-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            white-space: nowrap;
+            /* ДОБАВЛЕНО: запрет переноса */
+        }
+
+        .metric-item strong {
+            color: var(--primary);
+            font-weight: 700;
         }
 
         /* --- NEW MODERN DROPDOWN --- */
@@ -129,16 +227,16 @@
             font-size: 0.9rem;
             font-weight: 600;
             color: var(--text-main);
-            background: #ffffff;
+            background: var(--surface);
             border: 1px solid var(--border);
-            border-radius: 50px;
+            border-radius: var(--radius-md);
             cursor: pointer;
             transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         .custom-select-trigger:hover {
             border-color: var(--primary);
-            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.15);
+            box-shadow: 0 4px 12px var(--primary-glow);
             transform: translateY(-1px);
         }
 
@@ -146,15 +244,11 @@
             margin-right: 10px;
         }
 
+        /* ОБЫЧНАЯ ИКОНКА СТРЕЛКИ - Font Awesome */
         .arrow {
-            position: relative;
-            height: 8px;
-            width: 8px;
-            border-right: 2px solid var(--primary);
-            border-bottom: 2px solid var(--primary);
-            transform: rotate(45deg);
-            transition: all 0.3s;
-            margin-top: -4px;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            transition: transform 0.3s;
         }
 
         /* Открытое состояние триггера */
@@ -164,8 +258,7 @@
         }
 
         .custom-select-wrapper.open .arrow {
-            transform: rotate(225deg);
-            margin-top: 4px;
+            transform: rotate(180deg);
         }
 
         /* Выпадающий список */
@@ -174,7 +267,7 @@
             top: calc(100% + 8px);
             left: 0;
             right: 0;
-            background: #ffffff;
+            background: var(--surface);
             border: 1px solid var(--border);
             border-radius: 16px;
             box-shadow: var(--shadow-float);
@@ -204,7 +297,7 @@
         }
 
         .custom-option:hover {
-            background-color: #f1f5f9;
+            background-color: var(--bg-body);
             color: var(--primary);
         }
 
@@ -220,8 +313,10 @@
         }
 
         /* --- Input Section --- */
-        .input-section { padding: 25px; }
-        
+        .input-section {
+            padding: 25px;
+        }
+
         .db-options-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -235,18 +330,30 @@
             padding: 12px 15px;
             cursor: pointer;
             transition: all 0.2s;
-            background: white;
+            background: var(--surface);
         }
 
-        .db-card:hover { border-color: var(--primary-light); }
+        .db-card:hover {
+            border-color: var(--primary-light);
+        }
+
         .db-card.active {
             border-color: var(--primary);
-            background-color: rgba(99, 102, 241, 0.03);
+            background-color: rgba(99, 102, 241, 0.08);
             box-shadow: 0 0 0 1px var(--primary);
         }
 
-        .db-card-name { font-weight: 700; color: var(--text-main); font-size: 0.95rem; }
-        .db-card-desc { font-size: 0.8rem; color: var(--text-secondary); margin-top: 2px; }
+        .db-card-name {
+            font-weight: 700;
+            color: var(--text-main);
+            font-size: 0.95rem;
+        }
+
+        .db-card-desc {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
 
         textarea {
             width: 100%;
@@ -258,12 +365,20 @@
             font-size: 1rem;
             resize: vertical;
             outline: none;
-            transition: border 0.2s, box-shadow 0.2s;
+            transition: all 0.2s;
+            background: var(--surface);
+            color: var(--text-main);
         }
 
         textarea:focus {
             border-color: var(--primary);
             box-shadow: 0 0 0 4px var(--primary-glow);
+        }
+
+        /* Placeholder цвет для тёмной темы */
+        textarea::placeholder {
+            color: var(--text-secondary);
+            opacity: 0.7;
         }
 
         .button-group {
@@ -286,16 +401,20 @@
             transition: transform 0.1s;
         }
 
-        .btn:active { transform: scale(0.97); }
+        .btn:active {
+            transform: scale(0.97);
+        }
+
         .btn-primary {
             background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
             color: white;
             box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
         }
+
         .btn-danger {
-            background: white;
+            background: var(--surface);
             color: var(--danger);
-            border: 1px solid #fecaca;
+            border: 2px solid var(--danger);
         }
 
         /* --- Results Table --- */
@@ -315,7 +434,7 @@
         .ksr-table th {
             text-align: left;
             padding: 15px 25px;
-            background: #f8fafc;
+            background: var(--bg-body);
             color: var(--text-secondary);
             font-size: 0.75rem;
             text-transform: uppercase;
@@ -341,7 +460,7 @@
             font-weight: 700;
             font-size: 0.95rem;
             color: var(--primary-dark);
-            background: rgba(99, 102, 241, 0.05);
+            background: var(--primary-light);
             padding: 4px 8px;
             border-radius: 6px;
         }
@@ -356,76 +475,145 @@
             align-items: center;
             transition: color 0.2s;
         }
-        .copy-btn:hover { color: var(--primary); }
 
-        .score-wrapper { margin-bottom: 8px; }
-        .score-label { font-size: 0.7rem; color: var(--text-secondary); display: block; margin-bottom: 2px; }
+        .copy-btn:hover {
+            color: var(--primary);
+        }
+
+        .score-wrapper {
+            margin-bottom: 8px;
+        }
+
+        .score-label {
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            display: block;
+            margin-bottom: 2px;
+        }
+
         .progress-bg {
             height: 6px;
-            background: #e2e8f0;
+            background: var(--border);
             border-radius: 3px;
             overflow: hidden;
             width: 120px;
         }
+
         .progress-fill {
             height: 100%;
             background: linear-gradient(90deg, var(--primary) 0%, var(--success) 100%);
         }
 
+        /* Статус-бар внизу (убрали метрики оттуда) */
         .app-status-bar {
-            background: #f8fafc;
+            background: var(--bg-body);
             padding: 15px 25px;
             display: flex;
-            justify-content: space-between;
+            justify-content: center;
             font-size: 0.85rem;
             color: var(--text-secondary);
             border-top: 1px solid var(--border);
         }
-        .metrics { display: flex; gap: 20px; }
 
         .error-message {
             background: var(--danger-bg);
-            color: #b91c1c;
+            color: var(--danger);
             padding: 15px;
             margin: 20px 25px;
             border-radius: var(--radius-sm);
-            border: 1px solid #fecaca;
+            border: 1px solid var(--danger);
         }
-        
-        .hidden { display: none !important; }
+
+        .hidden {
+            display: none !important;
+        }
+
         .loading-spinner {
             width: 18px;
             height: 18px;
-            border: 2px solid rgba(255,255,255,0.3);
+            border: 2px solid rgba(255, 255, 255, 0.3);
             border-top-color: white;
             border-radius: 50%;
             animation: spin 1s infinite linear;
         }
-        @keyframes spin { to { transform: rotate(360deg); } }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
 
         /* Mobile & Tablet Styles (Breakpoint 992px) */
         @media (max-width: 992px) {
-            body { padding: 10px; }
-            .container { width: 100%; }
-            
-            .card-header { flex-direction: column; align-items: flex-start; gap: 15px; padding: 15px; }
-            
+            body {
+                padding: 10px;
+            }
+
+            .container {
+                width: 100%;
+            }
+
+            .theme-toggle {
+                position: fixed;
+                top: 15px;
+                right: 15px;
+                z-index: 1000;
+                padding: 10px;
+            }
+
+            .theme-toggle span {
+                display: none;
+            }
+
+            .header-top-row {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 15px;
+            }
+
+            /* Метрики в колонку на мобильных + ПОЛНАЯ ШИРИНА */
+            .metrics-panel {
+                display: flex;
+                /* Возвращаем flex для вертикального размещения */
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 8px;
+                width: 100%;
+                /* На мобильных - полная ширина */
+            }
+
             /* Dropdown full width on mobile */
-            .custom-select-wrapper { width: 100%; }
-            
-            .button-group { flex-direction: column-reverse; }
-            .btn { width: 100%; }
-            
-            .ksr-table, .ksr-table tbody, .ksr-table tr, .ksr-table td { display: block; width: 100%; }
-            .ksr-table thead { display: none; }
-            
-            .ksr-table tr { 
-                margin-bottom: 15px; 
+            .custom-select-wrapper {
+                width: 100%;
+            }
+
+            .button-group {
+                flex-direction: column-reverse;
+            }
+
+            .btn {
+                width: 100%;
+            }
+
+            .ksr-table,
+            .ksr-table tbody,
+            .ksr-table tr,
+            .ksr-table td {
+                display: block;
+                width: 100%;
+            }
+
+            .ksr-table thead {
+                display: none;
+            }
+
+            .ksr-table tr {
+                margin-bottom: 15px;
                 border-bottom: 1px solid var(--border);
                 padding-bottom: 15px;
-                position: relative; 
+                position: relative;
             }
-            
+
             .ksr-table td:nth-child(1) {
                 display: inline-block;
                 width: auto;
@@ -448,7 +636,7 @@
                 border: none;
                 clear: both;
             }
-            
+
             .ksr-table td:nth-child(4) {
                 position: absolute;
                 right: 10px;
@@ -464,11 +652,18 @@
                 display: flex;
                 gap: 15px;
             }
-            
-            .score-wrapper { flex: 1; }
-            .progress-bg { width: 100%; }
-            
-            .app-status-bar { flex-direction: column; gap: 10px; text-align: center; }
+
+            .score-wrapper {
+                flex: 1;
+            }
+
+            .progress-bg {
+                width: 100%;
+            }
+
+            .app-status-bar {
+                text-align: center;
+            }
         }
     </style>
 </head>
@@ -476,33 +671,60 @@
 <body>
     <div class="container">
         <header>
+            <!-- Переключатель темы с обычными углами -->
+            <div class="theme-toggle" id="themeToggle" title="Переключить тему">
+                <i class="fas fa-moon"></i>
+                <span>Тёмная тема</span>
+            </div>
+
             <h1><i class="fas fa-bolt" style="color: #f59e0b;"></i> KSR Matcher</h1>
             <p class="subtitle">Умный поиск кодов КСР с поддержкой нейросетей</p>
         </header>
 
         <div class="main-card">
             <div class="card-header">
-                <div class="header-title">
-                    <i class="fas fa-search" style="color: var(--primary);"></i> Поиск материала
-                </div>
-                
-                <div class="custom-select-wrapper" id="customSelect">
-                    <div class="custom-select-trigger">
-                        <span id="customSelectValue">Загрузка баз...</span>
-                        <div class="arrow"></div>
+                <!-- ВЕРХНЯЯ СТРОКА: Заголовок + Селектор -->
+                <div class="header-top-row">
+                    <div class="header-title">
+                        <i class="fas fa-search" style="color: var(--primary);"></i> Поиск материала
                     </div>
-                    <div class="custom-options" id="customOptions">
+
+                    <div class="custom-select-wrapper" id="customSelect">
+                        <div class="custom-select-trigger">
+                            <span id="customSelectValue">Загрузка баз...</span>
+                            <!-- ОБЫЧНАЯ ИКОНКА Font Awesome -->
+                            <i class="fas fa-chevron-down arrow"></i>
                         </div>
-                    <select id="databaseSelect">
-                        <option value="ksr_main">Основная КСР</option>
-                    </select>
+                        <div class="custom-options" id="customOptions">
+                        </div>
+                        <select id="databaseSelect">
+                            <option value="ksr_main">Основная КСР</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- НИЖНЯЯ СТРОКА: Метрики (МИНИМАЛЬНАЯ ШИРИНА) -->
+                <div class="metrics-panel">
+                    <div class="metric-item">
+                        <i class="fas fa-database" style="color: var(--primary);"></i>
+                        Rerank: <strong id="rerankThreshold">0.60</strong>
+                    </div>
+                    <div class="metric-item">
+                        <i class="fas fa-wave-square" style="color: var(--success);"></i>
+                        Cosine: <strong id="cosineThreshold">0.45</strong>
+                    </div>
+                    <div class="metric-item">
+                        <i class="fas fa-clock" style="color: var(--text-secondary);"></i>
+                        Time: <strong id="processingTime">0.00s</strong>
+                    </div>
                 </div>
             </div>
 
             <div class="input-section">
                 <div class="db-options-grid" id="databaseOptions"></div>
 
-                <textarea id="query" placeholder="Введите описание материала...&#10;Например: 'Кран шаровой фланцевый Ду 50'"></textarea>
+                <textarea id="query"
+                    placeholder="Введите описание материала...&#10;Например: 'Кран шаровой фланцевый Ду 50'"></textarea>
 
                 <div class="button-group">
                     <button id="clearBtn" class="btn btn-danger">
@@ -518,7 +740,8 @@
         <div class="main-card">
             <div class="results-header">
                 <div class="header-title">Результаты</div>
-                <div id="statusInfo" style="font-size: 0.9rem; color: var(--success); font-weight: 600;">Готов к работе</div>
+                <div id="statusInfo" style="font-size: 0.9rem; color: var(--success); font-weight: 600;">Готов к работе
+                </div>
             </div>
 
             <div id="errorContainer" class="error-message hidden"></div>
@@ -536,8 +759,10 @@
                     </thead>
                     <tbody id="resultsBody">
                         <tr>
-                            <td colspan="5" style="text-align: center; padding: 60px 20px; color: var(--text-secondary);">
-                                <i class="fas fa-search" style="font-size: 32px; opacity: 0.3; margin-bottom: 10px;"></i>
+                            <td colspan="5"
+                                style="text-align: center; padding: 60px 20px; color: var(--text-secondary);">
+                                <i class="fas fa-search"
+                                    style="font-size: 32px; opacity: 0.3; margin-bottom: 10px;"></i>
                                 <div>Здесь появятся результаты поиска</div>
                             </td>
                         </tr>
@@ -545,21 +770,16 @@
                 </table>
             </div>
 
+            <!-- Статус-бар упрощён - только текстовая информация -->
             <div class="app-status-bar">
                 <div id="processingInfo">Ожидание запроса...</div>
-                <div class="metrics">
-                    <div>Rerank: <strong id="rerankThreshold">0.60</strong></div>
-                    <div>Cosine: <strong id="cosineThreshold">0.45</strong></div>
-                    <div>Time: <strong id="processingTime">0.00s</strong></div>
-                </div>
             </div>
         </div>
-        
-        <footer style="text-align: center; margin-top: 30px; color: #94a3b8; font-size: 0.8rem;">
+
+        <footer style="text-align: center; margin-top: 30px; color: var(--text-secondary); font-size: 0.8rem;">
             © 2025 KSR Matcher
         </footer>
     </div>
-
     <script>
         document.addEventListener('DOMContentLoaded', function () {
             const queryInput = document.getElementById('query');
@@ -572,29 +792,62 @@
             const processingTimeElement = document.getElementById('processingTime');
             const databaseSelect = document.getElementById('databaseSelect');
             const databaseOptions = document.getElementById('databaseOptions');
-            
+
             // New Custom Select Elements
             const customSelectWrapper = document.getElementById('customSelect');
             const customSelectTrigger = customSelectWrapper.querySelector('.custom-select-trigger');
             const customOptionsContainer = document.getElementById('customOptions');
             const customSelectValue = document.getElementById('customSelectValue');
-            
+
+            // Theme Toggle Elements
+            const themeToggle = document.getElementById('themeToggle');
+            const themeIcon = themeToggle.querySelector('i');
+            const themeText = themeToggle.querySelector('span');
+
             let currentDatabase = 'ksr_main';
             let databases = [];
             let currentQuery = '';
-            
+            let currentResults = []; // ДОБАВЛЕНО: для хранения результатов с метриками
+
             queryInput.focus();
             loadAvailableDatabases();
-            
+            initTheme();
+
+            // --- THEME TOGGLE LOGIC ---
+
+            function initTheme() {
+                const savedTheme = localStorage.getItem('theme') || 'light';
+                setTheme(savedTheme);
+            }
+
+            function setTheme(theme) {
+                document.documentElement.setAttribute('data-theme', theme);
+                localStorage.setItem('theme', theme);
+
+                if (theme === 'dark') {
+                    themeIcon.classList.remove('fa-moon');
+                    themeIcon.classList.add('fa-sun');
+                    if (themeText) themeText.textContent = 'Светлая тема';
+                } else {
+                    themeIcon.classList.remove('fa-sun');
+                    themeIcon.classList.add('fa-moon');
+                    if (themeText) themeText.textContent = 'Тёмная тема';
+                }
+            }
+
+            themeToggle.addEventListener('click', () => {
+                const currentTheme = document.documentElement.getAttribute('data-theme');
+                const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+                setTheme(newTheme);
+            });
+
             // --- CUSTOM DROPDOWN LOGIC ---
-            
-            // Toggle Dropdown
+
             customSelectTrigger.addEventListener('click', (e) => {
-                e.stopPropagation(); // Prevent document click from closing immediately
+                e.stopPropagation();
                 customSelectWrapper.classList.toggle('open');
             });
 
-            // Close on click outside
             document.addEventListener('click', (e) => {
                 if (!customSelectWrapper.contains(e.target)) {
                     customSelectWrapper.classList.remove('open');
@@ -603,43 +856,41 @@
 
             function initCustomSelect() {
                 customOptionsContainer.innerHTML = '';
-                
-                // Get options from the real hidden select
+
                 Array.from(databaseSelect.options).forEach(option => {
                     const div = document.createElement('div');
                     div.classList.add('custom-option');
                     div.textContent = option.textContent;
                     div.dataset.value = option.value;
-                    
+
                     if (option.selected) {
                         div.classList.add('selected');
                         customSelectValue.textContent = option.textContent;
                     }
 
-                    div.addEventListener('click', function() {
-                        // Visual Update
+                    div.addEventListener('click', function () {
                         customSelectWrapper.querySelectorAll('.custom-option').forEach(el => el.classList.remove('selected'));
                         this.classList.add('selected');
                         customSelectValue.textContent = this.textContent;
                         customSelectWrapper.classList.remove('open');
 
-                        // Update Hidden Select & Logic
                         databaseSelect.value = this.dataset.value;
                         setCurrentDatabase(this.dataset.value);
                     });
-                    
+
                     customOptionsContainer.appendChild(div);
                 });
             }
 
-            // Listeners for Other Buttons
             clearBtn.addEventListener('click', () => {
                 queryInput.value = '';
                 queryInput.focus();
                 clearResults();
                 processingInfo.textContent = 'Ожидание запроса...';
+                processingTimeElement.textContent = '0.00s';
+                currentResults = []; // ДОБАВЛЕНО: очищаем сохраненные результаты
             });
-            
+
             searchBtn.addEventListener('click', performSearch);
             queryInput.addEventListener('keydown', (e) => {
                 if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); performSearch(); }
@@ -651,23 +902,53 @@
                     const btn = e.target.closest('.copy-btn');
                     const row = btn.closest('tr');
                     const code = row.querySelector('.code-text').textContent;
+                    const rank = parseInt(row.dataset.rank); // ИСПРАВЛЕНО: берем rank из data-атрибута
+
                     navigator.clipboard.writeText(code).then(() => {
                         const originalHtml = btn.innerHTML;
                         btn.innerHTML = '<i class="fas fa-check" style="color:var(--success)"></i>';
                         setTimeout(() => btn.innerHTML = originalHtml, 1500);
-                        if (currentQuery) sendAnalytics('copy', { code });
+
+                        // ИСПРАВЛЕНО: отправляем с правильными данными
+                        if (currentQuery && currentResults.length > 0) {
+                            const result = currentResults.find(r => r.rank === rank);
+                            if (result) {
+                                sendAnalytics('copy', {
+                                    code: result.code,
+                                    rank: result.rank,
+                                    description: result.description,
+                                    reranker_score: result.reranker_score,
+                                    cosine_similarity: result.cosine_similarity
+                                });
+                            }
+                        }
                     });
                 }
+
                 if (e.target.closest('.dislike-btn')) {
                     const btn = e.target.closest('.dislike-btn');
+                    const row = btn.closest('tr');
+                    const rank = parseInt(row.dataset.rank); // ИСПРАВЛЕНО: берем rank из data-атрибута
+
                     btn.innerHTML = '<i class="fas fa-thumbs-down" style="color:var(--danger)"></i>';
-                    if (currentQuery) sendAnalytics('dislike', { rank: btn.dataset.rank });
+
+                    // ИСПРАВЛЕНО: отправляем с правильными данными
+                    if (currentQuery && currentResults.length > 0) {
+                        const result = currentResults.find(r => r.rank === rank);
+                        if (result) {
+                            sendAnalytics('dislike', {
+                                code: result.code,
+                                rank: result.rank,
+                                description: result.description,
+                                reranker_score: result.reranker_score,
+                                cosine_similarity: result.cosine_similarity
+                            });
+                        }
+                    }
                 }
-                
-                // Handle DB Card Clicks to sync with Custom Select
+
                 if (e.target.closest('.db-card')) {
                     const dbName = e.target.closest('.db-card').dataset.name;
-                    // Find corresponding custom option and click it
                     const option = Array.from(customOptionsContainer.children).find(div => div.dataset.value === dbName);
                     if (option) option.click();
                 }
@@ -687,8 +968,8 @@
 
             function clearResults() {
                 resultsBody.innerHTML = `
-                    <tr><td colspan="5" style="text-align: center; padding: 60px 20px; color: var(--text-secondary);">
-                    Результаты очищены</td></tr>`;
+                <tr><td colspan="5" style="text-align: center; padding: 60px 20px; color: var(--text-secondary);">
+                Результаты очищены</td></tr>`;
                 errorContainer.classList.add('hidden');
                 statusInfo.textContent = 'Готов к работе';
                 statusInfo.style.color = 'var(--success)';
@@ -702,27 +983,25 @@
             async function loadAvailableDatabases() {
                 try {
                     const res = await fetch('/databases');
-                    if(res.ok) {
+                    if (res.ok) {
                         const data = await res.json();
                         databases = data.databases;
                         currentDatabase = data.current_database || 'ksr_main';
-                        
-                        // Update Hidden Select
+
                         databaseSelect.innerHTML = '';
                         databases.forEach(db => {
                             const opt = document.createElement('option');
                             opt.value = db.name;
                             opt.textContent = db.description.split('(')[0];
-                            if(db.name === currentDatabase) opt.selected = true;
+                            if (db.name === currentDatabase) opt.selected = true;
                             databaseSelect.appendChild(opt);
                         });
-                        
+
                         renderDbCards();
-                        // Initialize Custom Select AFTER loading options
-                        initCustomSelect(); 
+                        initCustomSelect();
                         setCurrentDatabase(currentDatabase);
                     }
-                } catch(e) { console.error(e); }
+                } catch (e) { console.error(e); }
             }
 
             function renderDbCards() {
@@ -730,34 +1009,31 @@
                 databases.forEach(db => {
                     const active = db.name === currentDatabase ? 'active' : '';
                     html += `
-                        <div class="db-card ${active}" data-name="${db.name}">
-                            <div class="db-card-name">${db.description.split('(')[0]}</div>
-                            <div class="db-card-desc">${db.record_count.toLocaleString()} записей</div>
-                        </div>`;
+                    <div class="db-card ${active}" data-name="${db.name}">
+                        <div class="db-card-name">${db.description.split('(')[0]}</div>
+                        <div class="db-card-desc">${db.record_count.toLocaleString()} записей</div>
+                    </div>`;
                 });
                 databaseOptions.innerHTML = html;
             }
 
             function setCurrentDatabase(name) {
                 currentDatabase = name;
-                // Sync hidden select
                 databaseSelect.value = name;
-                
-                // Sync visual cards
+
                 renderDbCards();
-                
-                // Sync custom dropdown label if called externally
+
                 if (customOptionsContainer.children.length > 0) {
-                     const selectedOption = Array.from(customOptionsContainer.children).find(div => div.dataset.value === name);
-                     if(selectedOption) {
-                         customSelectValue.textContent = selectedOption.textContent;
-                         Array.from(customOptionsContainer.children).forEach(el => el.classList.remove('selected'));
-                         selectedOption.classList.add('selected');
-                     }
+                    const selectedOption = Array.from(customOptionsContainer.children).find(div => div.dataset.value === name);
+                    if (selectedOption) {
+                        customSelectValue.textContent = selectedOption.textContent;
+                        Array.from(customOptionsContainer.children).forEach(el => el.classList.remove('selected'));
+                        selectedOption.classList.add('selected');
+                    }
                 }
-                
+
                 const db = databases.find(d => d.name === name);
-                if(db) {
+                if (db) {
                     document.getElementById('rerankThreshold').textContent = (db.thresholds?.rerank || 0.6).toFixed(2);
                     document.getElementById('cosineThreshold').textContent = (db.thresholds?.cosine || 0.45).toFixed(2);
                     processingInfo.textContent = `Выбрана база: ${db.description.split('(')[0]}`;
@@ -766,22 +1042,22 @@
 
             async function performSearch() {
                 const q = queryInput.value.trim();
-                if(!q) return;
-                
+                if (!q) return;
+
                 setLoading(true);
                 errorContainer.classList.add('hidden');
 
                 try {
                     const res = await fetch('/match', {
                         method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
+                        headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ text: q, database: currentDatabase })
                     });
-                    if(!res.ok) throw new Error("Ошибка соединения с сервером");
-                    
+                    if (!res.ok) throw new Error("Ошибка соединения с сервером");
+
                     const data = await res.json();
                     displayResults(data);
-                } catch(e) {
+                } catch (e) {
                     errorContainer.textContent = e.message;
                     errorContainer.classList.remove('hidden');
                     statusInfo.textContent = 'Ошибка';
@@ -794,59 +1070,99 @@
 
             function displayResults(data) {
                 currentQuery = data.query;
+                currentResults = data.candidates; // ДОБАВЛЕНО: сохраняем результаты с метриками
                 processingTimeElement.textContent = data.processing_time.toFixed(2) + 's';
                 statusInfo.textContent = `Найдено: ${data.candidates.length}`;
                 statusInfo.style.color = 'var(--success)';
-                
+
                 const dbName = databases.find(d => d.name === currentDatabase)?.description.split('(')[0] || currentDatabase;
                 processingInfo.textContent = `Поиск завершен по базе "${dbName}"`;
-                
+
                 let html = '';
                 data.candidates.forEach(c => {
                     const isTop = c.rank === 1;
+                    // ИСПРАВЛЕНО: добавляем data-rank для доступа к рангу
                     html += `
-                        <tr>
-                            <td style="font-weight:bold; color:${isTop ? 'var(--success)' : '#ccc'}">${c.rank}</td>
-                            <td>
-                                <div class="code-wrapper">
-                                    <span class="code-text">${c.code}</span>
-                                    <button class="copy-btn" title="Копировать">
-                                        <i class="fas fa-copy"></i>
-                                    </button>
-                                </div>
-                            </td>
-                            <td>${c.description}</td>
-                            <td>
-                                <button class="dislike-btn" data-rank="${c.rank}" style="background:none; border:none; opacity:0.5; cursor:pointer;">
-                                    <i class="far fa-thumbs-down"></i>
+                    <tr data-rank="${c.rank}">
+                        <td style="font-weight:bold; color:${isTop ? 'var(--success)' : 'var(--text-secondary)'}">${c.rank}</td>
+                        <td>
+                            <div class="code-wrapper">
+                                <span class="code-text">${c.code}</span>
+                                <button class="copy-btn" title="Копировать">
+                                    <i class="fas fa-copy"></i>
                                 </button>
-                            </td>
-                            <td>
-                                <div class="score-wrapper">
-                                    <span class="score-label">Rerank: ${c.reranker_score.toFixed(4)}</span>
-                                    ${createScoreBar(c.reranker_score)}
-                                </div>
-                                <div class="score-wrapper">
-                                    <span class="score-label">Cosine: ${c.cosine_similarity.toFixed(4)}</span>
-                                    ${createScoreBar(c.cosine_similarity)}
-                                </div>
-                            </td>
-                        </tr>
-                    `;
+                            </div>
+                        </td>
+                        <td>${c.description}</td>
+                        <td>
+                            <button class="dislike-btn" data-rank="${c.rank}" style="background:none; border:none; opacity:0.5; cursor:pointer;">
+                                <i class="far fa-thumbs-down"></i>
+                            </button>
+                        </td>
+                        <td>
+                            <div class="score-wrapper">
+                                <span class="score-label">Rerank: ${c.reranker_score.toFixed(4)}</span>
+                                ${createScoreBar(c.reranker_score)}
+                            </div>
+                            <div class="score-wrapper">
+                                <span class="score-label">Cosine: ${c.cosine_similarity.toFixed(4)}</span>
+                                ${createScoreBar(c.cosine_similarity)}
+                            </div>
+                        </td>
+                    </tr>
+                `;
                 });
                 resultsBody.innerHTML = html;
             }
 
             function sendAnalytics(type, payload) {
-                const body = { query: currentQuery, database: currentDatabase, ...payload };
-                const endpoint = type === 'dislike' ? '/feedback/dislike' : '/feedback/copy';
-                fetch(endpoint, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(body)
-                }).catch(e => console.log('Analytics skip'));
+                if (type === 'copy') {
+                    // ИСПРАВЛЕНО: правильные названия полей для /feedback/copy
+                    const copyData = {
+                        query: currentQuery,
+                        selected_code: payload.code,
+                        position: payload.rank,
+                        description: payload.description,
+                        database: currentDatabase,
+                        reranker_score: payload.reranker_score,
+                        cosine_similarity: payload.cosine_similarity
+                    };
+
+                    fetch('/feedback/copy', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(copyData)
+                    })
+                        .then(res => res.json())
+                        .then(data => console.log('✅ Copy event записан:', data))
+                        .catch(e => console.error('❌ Ошибка записи copy event:', e));
+
+                } else if (type === 'dislike') {
+                    // ИСПРАВЛЕНО: правильные названия полей для /feedback/dislike
+                    const dislikeData = {
+                        timestamp: new Date().toISOString(),
+                        query: currentQuery,
+                        selected_code: payload.code,
+                        position: payload.rank,
+                        description: payload.description,
+                        database: currentDatabase,
+                        reranker_score: payload.reranker_score,
+                        cosine_similarity: payload.cosine_similarity,
+                        action: 'dislike'
+                    };
+
+                    fetch('/feedback/dislike', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(dislikeData)
+                    })
+                        .then(res => res.json())
+                        .then(data => console.log('✅ Dislike event записан:', data))
+                        .catch(e => console.error('❌ Ошибка записи dislike event:', e));
+                }
             }
         });
     </script>
 </body>
+
 </html>
