@@ -55,16 +55,18 @@ class EmbeddingCache:
         self.lock = asyncio.Lock()
 
     async def get(self, text: str) -> Optional[np.ndarray]:
+        """Получение эмбеддинга из кэша (ключ всегда в нижнем регистре)"""
         async with self.lock:
-            key = text.lower().strip()
+            key = text.lower().strip()  # Нормализация ключа
             if key in self.cache:
                 self.access_times[key] = time.time()
                 return self.cache[key]
             return None
 
     async def set(self, text: str, embedding: np.ndarray):
+        """Сохранение эмбеддинга в кэш (ключ всегда в нижнем регистре)"""
         async with self.lock:
-            key = text.lower().strip()
+            key = text.lower().strip()  # Нормализация ключа
             if len(self.cache) >= self.max_size:
                 # Удаляем самый старый элемент
                 oldest_key = min(self.access_times, key=self.access_times.get)
@@ -74,6 +76,7 @@ class EmbeddingCache:
             self.access_times[key] = time.time()
 
     def clear(self):
+        """Очистка кэша"""
         self.cache.clear()
         self.access_times.clear()
 
@@ -117,11 +120,18 @@ class OptimizedVectorDatabaseManager:
         print("✅ Модель эмбеддингов загружена")
 
     def _get_embedding_sync(self, text: str) -> np.ndarray:
-        """Синхронное получение эмбеддинга через локальную модель"""
+        """Синхронное получение эмбеддинга через локальную модель
+        
+        ВАЖНО: Текст автоматически приводится к нижнему регистру для
+        обеспечения регистронезависимости семантического поиска
+        """
         try:
-            # Токенизация
+            # ИСПРАВЛЕНИЕ: Приводим текст к нижнему регистру перед обработкой
+            normalized_text = text.lower().strip()
+            
+            # Токенизация нормализованного текста
             inputs = self.tokenizer(
-                [text],
+                [normalized_text],  # Используем нормализованный текст
                 max_length=1024,
                 padding=True,
                 truncation=True,
@@ -148,7 +158,7 @@ class OptimizedVectorDatabaseManager:
                     sequence_lengths,
                 ]
 
-            # Нормализация
+            # Нормализация эмбеддингов
             embeddings = torch.nn.functional.normalize(embeddings, p=2, dim=1)
 
             # Конвертация в numpy
@@ -265,9 +275,7 @@ class OptimizedVectorDatabaseManager:
                 "description": db["metadata"]["description"],
                 "record_count": db["metadata"]["record_count"],
                 "is_active": name == self.current_db,
-                "thresholds": db["metadata"][
-                    "thresholds"
-                ],  # Добавляем пороговые значения
+                "thresholds": db["metadata"]["thresholds"],
             }
             for name, db in self.databases.items()
         ]
@@ -299,18 +307,24 @@ class OptimizedVectorDatabaseManager:
 
     # === Кэшированный метод получения эмбеддинга ===
     async def get_embedding_cached(self, text: str) -> np.ndarray:
-        """Получает эмбеддинг с кэшированием"""
+        """Получает эмбеддинг с кэшированием
+        
+        Текст автоматически нормализуется (приводится к нижнему регистру)
+        перед генерацией эмбеддинга для обеспечения регистронезависимости
+        """
+        # Проверяем наличие в кэше (кэш использует нормализованный ключ)
         cached_emb = await self.embedding_cache.get(text)
         if cached_emb is not None:
             return cached_emb
 
         # Если нет в кэше, запрашиваем у модели
+        # ВАЖНО: _get_embedding_sync сам нормализует текст внутри
         loop = asyncio.get_event_loop()
         embedding = await loop.run_in_executor(
             self.executor, self._get_embedding_sync, text
         )
 
-        # Сохраняем в кэш
+        # Сохраняем в кэш (кэш использует нормализованный ключ)
         await self.embedding_cache.set(text, embedding)
         return embedding
 
@@ -340,7 +354,7 @@ print("✅ Reranker загружен.")
 app = FastAPI(
     title="KSR Matcher API Ultra",
     description="Сверхбыстрая система поиска с кэшированием и оптимизацией",
-    docs_url=None,  # Отключаем docs для скорости
+    docs_url=None,
     redoc_url=None,
 )
 # Раздача статических файлов (CSS, JS, изображения)
@@ -371,7 +385,7 @@ class DatabaseInfo(BaseModel):
     description: str
     record_count: int
     is_active: bool
-    thresholds: dict  # Добавляем это поле
+    thresholds: dict
 
 
 class MatchResponse(BaseModel):
@@ -471,14 +485,13 @@ async def match_ksr(request: MatchRequest):
         # Пороговые значения - устанавливаем "умные" значения по умолчанию
         COSINE_THRESHOLD, RERANK_THRESHOLD = db_manager.get_thresholds()
 
-        # Увеличиваем количество для FAISS, чтобы точно захватить все релевантные
+        # Параметры поиска
         TOP_K_FAISS = 1500
-        # Максимальное количество для reranking (ограничение для производительности)
         MAX_FOR_RERANK = 200
-        # Максимальное количество результатов для возврата
         MAX_RESULTS = 100
 
         # Получение эмбеддинга запроса с кэшированием
+        # ВАЖНО: get_embedding_cached автоматически нормализует текст
         query_emb = await db_manager.get_embedding_cached(query_text)
         query_emb_reshaped = query_emb.reshape(1, -1)
 
@@ -488,13 +501,11 @@ async def match_ksr(request: MatchRequest):
             db_manager.executor, lambda: index.search(query_emb_reshaped, TOP_K_FAISS)
         )
 
-        # === НОВОЕ: Фильтрация по косинусному сходству ===
-        cosine_scores = distances[0]  # для IndexFlatIP это косинусное сходство
-        # Находим индексы, где косинусное сходство выше порога
+        # === Фильтрация по косинусному сходству ===
+        cosine_scores = distances[0]
         valid_cosine_indices = np.where(cosine_scores >= COSINE_THRESHOLD)[0]
 
         if len(valid_cosine_indices) == 0:
-            # Если нет результатов выше основного порога, проверяем топ-3 для информативной ошибки
             top3_scores = cosine_scores[:3]
             max_score = float(np.max(top3_scores))
             raise HTTPException(
@@ -508,23 +519,23 @@ async def match_ksr(request: MatchRequest):
 
         # Ограничиваем количество для reranking (для производительности)
         if len(filtered_indices) > MAX_FOR_RERANK:
-            # Сортируем по косинусному сходству и берем топ MAX_FOR_RERANK
             top_indices = np.argsort(filtered_cosine_scores)[::-1][:MAX_FOR_RERANK]
             filtered_indices = filtered_indices[top_indices]
             filtered_cosine_scores = filtered_cosine_scores[top_indices]
 
         # === Reranking только отфильтрованных результатов ===
-        candidate_pairs = [(query_text, df.iloc[i][desc_col]) for i in filtered_indices]
+        # ВАЖНО: Для reranker также используем нормализованный запрос
+        normalized_query = query_text.lower().strip()
+        candidate_pairs = [(normalized_query, df.iloc[i][desc_col]) for i in filtered_indices]
 
         rerank_scores = await loop.run_in_executor(
             db_manager.executor, lambda: reranker.predict(candidate_pairs)
         )
 
-        # === НОВОЕ: Фильтрация по порогу reranker ===
+        # === Фильтрация по порогу reranker ===
         valid_rerank_indices = np.where(rerank_scores >= RERANK_THRESHOLD)[0]
 
         if len(valid_rerank_indices) == 0:
-            # Если нет результатов выше порога reranker, берем топ-3 для информативной ошибки
             top3_indices = np.argsort(rerank_scores)[::-1][:3]
             top3_scores = rerank_scores[top3_indices]
             max_score = float(np.max(top3_scores))
@@ -623,9 +634,8 @@ FEEDBACK_DIR = os.path.join(PROJECT_ROOT, "data", "04_feedback")
 FEEDBACK_FILE = os.path.join(FEEDBACK_DIR, "positive.jsonl")
 os.makedirs(FEEDBACK_DIR, exist_ok=True)
 
-# Создаем пустой файл, если его нет (для JSONL формата)
 if not os.path.exists(FEEDBACK_FILE):
-    open(FEEDBACK_FILE, "w", encoding="utf-8").close()  # ИСПРАВЛЕНО
+    open(FEEDBACK_FILE, "w", encoding="utf-8").close()
     print(f"✅ Создан файл для сбора позитивов: {FEEDBACK_FILE}")
 
 DISLIKE_FILE = os.path.join(FEEDBACK_DIR, "negative.jsonl")
@@ -634,7 +644,6 @@ if not os.path.exists(DISLIKE_FILE):
     print(f"✅ Создан файл для сбора негативов: {DISLIKE_FILE}")
 
 
-# Добавьте новую модель данных
 class DislikeEvent(BaseModel):
     timestamp: str
     query: str
@@ -647,30 +656,28 @@ class DislikeEvent(BaseModel):
     action: str = "dislike"
 
 
-# === СБОР АНАЛИТИКИ: Модель данных ===
 class CopyEvent(BaseModel):
     query: str
     selected_code: str
     position: int
     description: str
     database: str
-    reranker_score: Optional[float] = None  # Новое поле
-    cosine_similarity: Optional[float] = None  # Новое поле
+    reranker_score: Optional[float] = None
+    cosine_similarity: Optional[float] = None
 
 
-# === СБОР АНАЛИТИКИ: Функция очистки текста ===
 def clean_text_for_json(text):
+    """Очистка текста для безопасного сохранения в JSON"""
     if not isinstance(text, str):
         return text
-    # 1. Удаляем опасные управляющие символы (но не стрелки!)
+    # Удаляем опасные управляющие символы
     text = re.sub(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]", " ", text)
-    # 2. Нормализуем стрелки и разделители → к единому виду
-    text = re.sub(r"[→⟶➡➤→>]", " → ", text)  # все стрелки → " → "
-    text = re.sub(r"[\/|\\]", "/", text)  # слэши → " / "
-    # 3. Сжимаем пробелы
+    # Нормализуем стрелки и разделители
+    text = re.sub(r"[→⟶➡➤→>]", " → ", text)
+    text = re.sub(r"[\/|\\]", "/", text)
+    # Сжимаем пробелы
     text = re.sub(r"\s+", " ", text).strip()
-    # 4. Убираем ТОЛЬКО реально опасные символы (теги, control, emoji)
-    #    — оставляем буквы, цифры, пунктуацию, знаки валют, и доп. символы
+    # Убираем опасные символы
     text = re.sub(
         r"[^\w\s\d.,;:!?()\"'«»\[\]{}\-_+=*%#@&$€₽¥£¢§°±→/\\u0400-\u04FF\\u00C0-\u017F]",
         "",
@@ -679,13 +686,11 @@ def clean_text_for_json(text):
     return text
 
 
-# === СБОР АНАЛИТИКИ: API эндпоинт ===
 @app.post("/feedback/copy")
 async def record_copy_event(event: CopyEvent):
     """Записывает событие копирования в JSONL файл с очисткой данных"""
     try:
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        # Очищаем все текстовые поля
         cleaned_data = {
             "timestamp": timestamp,
             "query": clean_text_for_json(event.query),
@@ -693,10 +698,9 @@ async def record_copy_event(event: CopyEvent):
             "position": event.position,
             "description": clean_text_for_json(event.description),
             "database": clean_text_for_json(event.database),
-            "reranker_score": event.reranker_score,  # Добавляем новые поля
+            "reranker_score": event.reranker_score,
             "cosine_similarity": event.cosine_similarity,
         }
-        # Запись в JSONL файл (каждая запись на новой строке)
         with open(FEEDBACK_FILE, "a", encoding="utf-8") as f:
             json_line = json.dumps(
                 cleaned_data, ensure_ascii=False, separators=(",", ":")
@@ -759,16 +763,16 @@ if __name__ == "__main__":
     print("   💾 Оптимизированные типы данных (float32)")
     print("   🚀 Batched обработка для reranker")
     print("   📦 Локальная модель Qwen3-Embedding-4B вместо LM Studio API")
+    print("   🔤 РЕГИСТРОНЕЗАВИСИМЫЙ поиск (все запросы → lowercase)")
     print(f"📚 Доступные векторные базы: {list(db_manager.databases.keys())}")
 
-    # Запуск uvicorn
     uvicorn.run(
         app,
         host="127.0.0.1",
         port=8000,
-        workers=1,  # Один воркер для избежания проблем с GPU
+        workers=1,
         loop="asyncio",
         http="httptools",
-        access_log=False,  # Отключаем лишнее логирование
+        access_log=False,
         log_level="info",
     )
