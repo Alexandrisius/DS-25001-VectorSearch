@@ -1,7 +1,5 @@
 {
   "ksr_main": {
-    "embeddings_path": "C:/Users/klim9/Yandex.Disk/02_Work/#Projects/04_DataScience/DS-25001-VectorSearch\\data\\03_processed\\embeddings.npy",
-    "metadata_path": "C:/Users/klim9/Yandex.Disk/02_Work/#Projects/04_DataScience/DS-25001-VectorSearch\\data\\03_processed\\metadata.parquet",
     "description": "База КСР 'ЕвроХим'",
     "columns": {
       "code": "Код КСР",
@@ -12,17 +10,15 @@
       "rerank": 0.6
     }
   },
-  "ksr_main_2": {
-    "embeddings_path": "C:/Users/klim9/Yandex.Disk/02_Work/#Projects/04_DataScience/DS-25001-VectorSearch\\data\\03_processed\\embeddings.npy",
-    "metadata_path": "C:/Users/klim9/Yandex.Disk/02_Work/#Projects/04_DataScience/DS-25001-VectorSearch\\data\\03_processed\\metadata.parquet",
-    "description": "Лояльная база КСР 'ЕвроХим'",
+  "ksr_test_2": {
+    "description": "Векторная база ksr_test_2",
     "columns": {
-      "code": "Код КСР",
-      "description": "full_path"
+      "code": "code",
+      "description": "description"
     },
     "thresholds": {
-      "cosine": 0.3,
-      "rerank": 0.4
+      "cosine": 0.45,
+      "rerank": 0.6
     }
   }
 }

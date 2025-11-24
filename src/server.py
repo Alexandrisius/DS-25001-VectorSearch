@@ -1,9 +1,8 @@
-# server_optimized.py - АДАПТИРОВАННАЯ ВЕРСИЯ ПОД НОВЫЙ PIPELINE
+# server.py - ВЕРСИЯ С QDRANT ВЕКТОРНОЙ БД
 import os
 import re
 import numpy as np
 import pandas as pd
-import faiss
 import torch
 import time
 import json
@@ -17,14 +16,20 @@ from fastapi import Request
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import List, Dict, Optional
-from collections import defaultdict
-from functools import lru_cache
-import weakref
-import gc
-import xxhash
 from datetime import datetime
-import csv
-import pathlib
+import gc
+
+# === QDRANT ИМПОРТЫ ===
+from qdrant_client import QdrantClient
+from qdrant_client.models import (
+    Distance,
+    VectorParams,
+    PointStruct,
+    Filter,
+    FieldCondition,
+    MatchValue,
+    SearchParams,
+)
 
 # === НАСТРОЙКА ЛОГИРОВАНИЯ ===
 logging.basicConfig(level=logging.INFO)
@@ -37,7 +42,9 @@ PROJECT_ROOT = (
 )
 
 # Пути к данным
-VECTORS_DIR = os.path.join(PROJECT_ROOT, "data", "03_processed")
+QDRANT_STORAGE_PATH = os.path.join(
+    PROJECT_ROOT, "data", "03_processed", "qdrant_storage"
+)
 DATA_DIR = os.path.join(PROJECT_ROOT, "data", "02_interim")
 WEB_DIR = os.path.join(PROJECT_ROOT, "web")
 
@@ -48,6 +55,15 @@ RERANKER_PATH = r"D:\hf_cache\bge-reranker-v2-m3"
 
 # === ОПТИМИЗАЦИЯ: Кэш для эмбеддингов ===
 class EmbeddingCache:
+    """
+    Кэш для хранения сгенерированных эмбеддингов запросов
+
+    Особенности:
+    - Ключи нормализуются (приводятся к lowercase)
+    - LRU политика вытеснения при переполнении
+    - Потокобезопасность через asyncio.Lock
+    """
+
     def __init__(self, max_size=10000):
         self.cache = {}
         self.max_size = max_size
@@ -68,7 +84,7 @@ class EmbeddingCache:
         async with self.lock:
             key = text.lower().strip()  # Нормализация ключа
             if len(self.cache) >= self.max_size:
-                # Удаляем самый старый элемент
+                # Удаляем самый старый элемент (LRU)
                 oldest_key = min(self.access_times, key=self.access_times.get)
                 del self.cache[oldest_key]
                 del self.access_times[oldest_key]
@@ -79,268 +95,517 @@ class EmbeddingCache:
         """Очистка кэша"""
         self.cache.clear()
         self.access_times.clear()
+        logger.info("🧹 Кэш эмбеддингов очищен")
 
 
-# === ОПТИМИЗИРОВАННЫЙ КЛАСС ВЕКТОРНЫХ БАЗ ===
-class OptimizedVectorDatabaseManager:
-    def __init__(self):
-        self.databases = {}  # {name: {index, df, metadata}}
-        self.current_db = None
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        print(f"🧠 Устройство для вычислений: {self.device}")
+# === МЕНЕДЖЕР ВЕКТОРНЫХ БАЗ НА ОСНОВЕ QDRANT ===
+class QdrantVectorDatabaseManager:
+    """
+    Менеджер для работы с Qdrant векторными базами данных
 
-        # === ИНИЦИАЛИЗАЦИЯ МОДЕЛИ ЭМБЕДДИНГОВ ===
-        self._init_embedding_model()
+    Особенности:
+    - Поддержка нескольких коллекций одновременно
+    - Горячее переключение между коллекциями
+    - Горячая перезагрузка конфигурации без перезапуска
+    - Асинхронная работа с пулом потоков
+    - Кэширование метаданных коллекций
+    - Поиск с косинусным сходством
+    - Reranking результатов через CrossEncoder
+    """
 
-        self._load_available_databases()
+    def __init__(self, storage_path: str):
+        """
+        Инициализация менеджера Qdrant баз данных
 
-        # === ОПТИМИЗАЦИЯ: Кэш для эмбеддингов ===
-        self.embedding_cache = EmbeddingCache(max_size=15000)
-
-        # === Thread pool для CPU-операций ===
+        Args:
+            storage_path: Путь к хранилищу Qdrant
+        """
+        self.storage_path = storage_path
         self.executor = ThreadPoolExecutor(max_workers=4)
 
-    def _init_embedding_model(self):
-        """Инициализация локальной модели эмбеддингов Qwen3"""
-        print(f"📥 Загрузка модели эмбеддингов: {QWEN_MODEL_PATH}")
-        from transformers import AutoTokenizer, AutoModel
+        # Определение устройства для вычислений (CPU/CUDA)
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        logger.info(f"🖥️ Устройство для вычислений: {self.device}")
 
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            QWEN_MODEL_PATH, padding_side="left", trust_remote_code=True
+        # КРИТИЧНО: Сохраняем путь к конфигу для перезагрузки
+        self.config_path = os.path.join(BASE_DIR, "vector_databases.json")
+
+        # Инициализация Qdrant клиента
+        logger.info(f"🔌 Подключение к Qdrant: {storage_path}")
+        self.client = QdrantClient(path=storage_path)
+
+        # Словарь метаданных коллекций {название: метаданные}
+        self.collections_metadata = {}
+
+        # Загрузка конфигурации баз из JSON
+        self.load_configuration()
+
+        # Текущая активная коллекция
+        self.current_collection = (
+            next(iter(self.collections_metadata)) if self.collections_metadata else None
         )
 
-        self.embedding_model = AutoModel.from_pretrained(
-            QWEN_MODEL_PATH,
-            trust_remote_code=True,
-            device_map=self.device,
-            torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
-        )
-        self.embedding_model.eval()
-        torch.cuda.empty_cache()
-        print("✅ Модель эмбеддингов загружена")
+        if self.current_collection:
+            logger.info(f"🎯 Активная коллекция: {self.current_collection}")
+        else:
+            logger.warning("⚠️ Нет доступных коллекций в Qdrant")
 
-    def _get_embedding_sync(self, text: str) -> np.ndarray:
-        """Синхронное получение эмбеддинга через локальную модель
-        
-        ВАЖНО: Текст автоматически приводится к нижнему регистру для
-        обеспечения регистронезависимости семантического поиска
+    def load_configuration(self):
         """
-        try:
-            # ИСПРАВЛЕНИЕ: Приводим текст к нижнему регистру перед обработкой
-            normalized_text = text.lower().strip()
-            
-            # Токенизация нормализованного текста
-            inputs = self.tokenizer(
-                [normalized_text],  # Используем нормализованный текст
-                max_length=1024,
-                padding=True,
-                truncation=True,
-                return_tensors="pt",
-            ).to(self.device)
+        Загрузка/перезагрузка конфигурации векторных баз из JSON файла
 
-            # Получение эмбеддингов
-            with torch.no_grad():
-                outputs = self.embedding_model(**inputs)
+        Может вызываться повторно для обновления списка баз без перезапуска сервера
 
-            # Last token pooling (как в документации Qwen)
-            last_hidden_state = outputs.last_hidden_state
-            attention_mask = inputs["attention_mask"]
-
-            # Определяем тип паддинга
-            left_padding = attention_mask[:, -1].sum() == attention_mask.shape[0]
-            if left_padding:
-                embeddings = last_hidden_state[:, -1]
-            else:
-                sequence_lengths = attention_mask.sum(dim=1) - 1
-                batch_size = last_hidden_state.shape[0]
-                embeddings = last_hidden_state[
-                    torch.arange(batch_size, device=last_hidden_state.device),
-                    sequence_lengths,
-                ]
-
-            # Нормализация эмбеддингов
-            embeddings = torch.nn.functional.normalize(embeddings, p=2, dim=1)
-
-            # Конвертация в numpy
-            emb = embeddings.cpu().numpy()[0].astype(np.float32)
-
-            return emb
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Ошибка эмбеддинга: {str(e)}")
-
-    def _load_available_databases(self):
-        """Загружает все доступные векторные базы с оптимизацией"""
-        config_path = os.path.join(BASE_DIR, "vector_databases.json")
-        if not os.path.exists(config_path):
-            print(f"⚠️ Конфигурационный файл не найден: {config_path}")
-            self._create_default_config(config_path)
+        Конфигурация содержит:
+        - Названия коллекций
+        - Описания баз
+        - Пороговые значения (cosine, rerank)
+        - Маппинг колонок метаданных
+        """
+        if not os.path.exists(self.config_path):
+            logger.warning(f"⚠️ Конфигурационный файл не найден: {self.config_path}")
+            self._create_default_config(self.config_path)
+            return
 
         try:
-            with open(config_path, "r", encoding="utf-8") as f:
+            logger.info(f"📂 Загрузка конфигурации из: {self.config_path}")
+
+            with open(self.config_path, "r", encoding="utf-8") as f:
                 config = json.load(f)
 
-            for db_name, db_config in config.items():
-                try:
-                    print(f"🔍 Загрузка векторной базы: {db_name}")
-                    self._load_database_optimized(db_name, db_config)
-                except Exception as e:
-                    print(f"❌ Ошибка при загрузке базы '{db_name}': {str(e)}")
-                    continue
+            # Проверяем существование коллекций в Qdrant
+            existing_collections = [
+                c.name for c in self.client.get_collections().collections
+            ]
 
-            if self.databases:
-                self.current_db = next(iter(self.databases))
-                print(f"✅ Текущая активная база: {self.current_db}")
-            else:
-                print("❌ Не удалось загрузить ни одну векторную базу")
+            # Запоминаем старое состояние для логирования изменений
+            old_collections = set(self.collections_metadata.keys())
+
+            # Очищаем старые метаданные перед обновлением
+            self.collections_metadata = {}
+
+            for collection_name, db_config in config.items():
+                if collection_name in existing_collections:
+                    # Получаем информацию о коллекции из Qdrant
+                    collection_info = self.client.get_collection(collection_name)
+
+                    # Сохраняем метаданные коллекции
+                    self.collections_metadata[collection_name] = {
+                        "name": collection_name,
+                        "description": db_config.get(
+                            "description", f"База {collection_name}"
+                        ),
+                        "columns": db_config.get(
+                            "columns", {"code": "code", "description": "description"}
+                        ),
+                        "thresholds": db_config.get(
+                            "thresholds", {"cosine": 0.45, "rerank": 0.6}
+                        ),
+                        "record_count": collection_info.points_count,
+                        "dimension": collection_info.config.params.vectors.size,
+                        "last_updated": time.strftime("%Y-%m-%d %H:%M:%S"),
+                    }
+
+                    logger.info(
+                        f"✅ Коллекция '{collection_name}' найдена: "
+                        f"{collection_info.points_count} записей, "
+                        f"размерность {collection_info.config.params.vectors.size}"
+                    )
+                else:
+                    logger.warning(
+                        f"⚠️ Коллекция '{collection_name}' указана в конфиге, "
+                        f"но не найдена в Qdrant"
+                    )
+
+            # Проверка текущей активной коллекции
+            if (
+                hasattr(self, "current_collection")
+                and self.current_collection not in self.collections_metadata
+            ):
+                if self.collections_metadata:
+                    # Устанавливаем первую найденную коллекцию как активную
+                    self.current_collection = next(iter(self.collections_metadata))
+                    logger.warning(
+                        f"⚠️ Предыдущая активная коллекция '{self.current_collection}' недоступна, "
+                        f"переключено на: {self.current_collection}"
+                    )
+                else:
+                    self.current_collection = None
+                    logger.error("❌ Не найдено ни одной коллекции в Qdrant")
+
+            # Логируем изменения при перезагрузке
+            new_collections = set(self.collections_metadata.keys())
+            added = new_collections - old_collections
+            removed = old_collections - new_collections
+
+            if added:
+                logger.info(f"➕ Добавлены коллекции: {', '.join(added)}")
+            if removed:
+                logger.info(f"➖ Удалены коллекции: {', '.join(removed)}")
+
+            logger.info(
+                f"✅ Конфигурация загружена: {len(self.collections_metadata)} коллекций доступно"
+            )
+
+        except json.JSONDecodeError as e:
+            logger.error(f"❌ Ошибка парсинга JSON конфига: {str(e)}")
+            raise
         except Exception as e:
-            print(f"❌ Ошибка при чтении конфигурации: {str(e)}")
+            logger.error(f"❌ Ошибка при загрузке конфигурации: {str(e)}")
             raise
 
     def _create_default_config(self, config_path: str):
-        """Создает базовую конфигурацию"""
-        default_config = {
-            "ksr_main": {
-                "embeddings_path": os.path.join(VECTORS_DIR, "embeddings.npy"),
-                "metadata_path": os.path.join(VECTORS_DIR, "metadata.parquet"),
-                "description": "Основная база КСР 'Склад реагентов'",
-                "columns": {"code": "Код КСР", "description": "full_path"},
+        """
+        Создание конфигурации по умолчанию если файл не найден
+
+        Args:
+            config_path: Путь для сохранения конфига
+        """
+        logger.info("📝 Создание конфигурации по умолчанию...")
+
+        # Получаем список существующих коллекций в Qdrant
+        existing_collections = [
+            c.name for c in self.client.get_collections().collections
+        ]
+
+        default_config = {}
+        for collection_name in existing_collections:
+            collection_info = self.client.get_collection(collection_name)
+
+            default_config[collection_name] = {
+                "description": f"Векторная база {collection_name}",
+                "columns": {"code": "code", "description": "description"},
                 "thresholds": {"cosine": 0.45, "rerank": 0.6},
             }
-        }
-        os.makedirs(os.path.dirname(config_path), exist_ok=True)
+
+            # Сохраняем метаданные
+            self.collections_metadata[collection_name] = {
+                "name": collection_name,
+                "description": f"Векторная база {collection_name}",
+                "columns": {"code": "code", "description": "description"},
+                "thresholds": {"cosine": 0.45, "rerank": 0.6},
+                "record_count": collection_info.points_count,
+                "dimension": collection_info.config.params.vectors.size,
+                "last_updated": time.strftime("%Y-%m-%d %H:%M:%S"),
+            }
+
+        # Сохраняем конфиг
         with open(config_path, "w", encoding="utf-8") as f:
             json.dump(default_config, f, indent=2, ensure_ascii=False)
-        print(f"✅ Создан базовый конфигурационный файл: {config_path}")
 
-    def _load_database_optimized(self, name: str, config: dict):
-        """Оптимизированная загрузка базы данных"""
-        embeddings_path = os.path.normpath(config["embeddings_path"])
-        metadata_path = os.path.normpath(config["metadata_path"])
+        logger.info(f"✅ Создана конфигурация для {len(default_config)} коллекций")
 
-        if not os.path.exists(embeddings_path):
-            raise FileNotFoundError(f"Файл эмбеддингов не найден: {embeddings_path}")
-        if not os.path.exists(metadata_path):
-            raise FileNotFoundError(f"Файл метаданных не найден: {metadata_path}")
+    def get_available_databases(self) -> List[Dict]:
+        """
+        Получение списка доступных баз данных с метаданными
 
-        # === Загрузка метаданных из parquet ===
-        print(f"  📊 Загрузка метаданных: {metadata_path}")
-        metadata_df = pd.read_parquet(metadata_path)
-
-        # === Загрузка эмбеддингов ===
-        print(f"  🧠 Загрузка эмбеддингов: {embeddings_path}")
-        embeddings = np.load(embeddings_path).astype(np.float32)
-
-        if len(metadata_df) != len(embeddings):
-            raise ValueError(
-                f"Несоответствие размеров: {len(metadata_df)} записей в метаданных, {len(embeddings)} эмбеддингов"
-            )
-
-        dim = embeddings.shape[1]
-        print(
-            f"  ✅ Загружено {len(metadata_df)} записей, размерность эмбеддингов: {dim}"
-        )
-
-        # === Создание FAISS индекса ===
-        print("  🔍 Создание FAISS индекса...")
-        index = faiss.IndexFlatIP(dim)
-        faiss.normalize_L2(embeddings)
-        index.add(embeddings)
-        print("  ✅ FAISS индекс создан")
-
-        # === Сохранение базы ===
-        self.databases[name] = {
-            "index": index,
-            "df": metadata_df,
-            "embeddings": embeddings.astype(np.float32).copy(),
-            "metadata": {
-                "name": name,
-                "description": config.get("description", f"База {name}"),
-                "columns": config["columns"],
-                "thresholds": config.get("thresholds", {"cosine": 0.45, "rerank": 0.6}),
-                "record_count": len(metadata_df),
-                "dimension": dim,
-                "last_updated": time.strftime("%Y-%m-%d %H:%M:%S"),
-            },
-        }
-
-        # Очистка памяти
-        del embeddings
-        gc.collect()
-
-    def get_available_databases(self) -> List[dict]:
-        """Возвращает список доступных баз с метаданными"""
+        Returns:
+            List[Dict]: Список баз с метаданными
+        """
         return [
             {
                 "name": name,
-                "description": db["metadata"]["description"],
-                "record_count": db["metadata"]["record_count"],
-                "is_active": name == self.current_db,
-                "thresholds": db["metadata"]["thresholds"],
+                "description": meta["description"],
+                "record_count": meta["record_count"],
+                "dimension": meta["dimension"],
+                "is_active": name == self.current_collection,
             }
-            for name, db in self.databases.items()
+            for name, meta in self.collections_metadata.items()
         ]
 
-    def set_active_database(self, name: str):
-        """Устанавливает активную базу для поиска"""
-        if name not in self.databases:
-            available = list(self.databases.keys())
-            raise ValueError(f"База '{name}' не найдена. Доступные базы: {available}")
-        self.current_db = name
-        print(f"🔄 Активная база изменена на: {name}")
-
-    def get_active_database(self):
-        """Возвращает текущую активную базу"""
-        if not self.current_db or self.current_db not in self.databases:
-            raise ValueError("Нет активной векторной базы")
-        return self.databases[self.current_db]
-
-    def get_thresholds(self):
-        """Возвращает пороговые значения для текущей базы"""
-        db = self.get_active_database()
-        thresholds = db["metadata"]["thresholds"]
-        return thresholds["cosine"], thresholds["rerank"]
-
-    def get_columns(self):
-        """Возвращает наименования колонок для текущей базы"""
-        db = self.get_active_database()
-        return db["metadata"]["columns"]
-
-    # === Кэшированный метод получения эмбеддинга ===
-    async def get_embedding_cached(self, text: str) -> np.ndarray:
-        """Получает эмбеддинг с кэшированием
-        
-        Текст автоматически нормализуется (приводится к нижнему регистру)
-        перед генерацией эмбеддинга для обеспечения регистронезависимости
+    def switch_database(self, database_name: str) -> bool:
         """
-        # Проверяем наличие в кэше (кэш использует нормализованный ключ)
-        cached_emb = await self.embedding_cache.get(text)
-        if cached_emb is not None:
-            return cached_emb
+        Переключение на другую базу данных
 
-        # Если нет в кэше, запрашиваем у модели
-        # ВАЖНО: _get_embedding_sync сам нормализует текст внутри
+        Args:
+            database_name: Название коллекции для переключения
+
+        Returns:
+            bool: True если успешно переключено
+        """
+        if database_name not in self.collections_metadata:
+            logger.error(f"❌ База '{database_name}' не найдена")
+            return False
+
+        old_db = self.current_collection
+        self.current_collection = database_name
+
+        logger.info(f"🔄 Переключение базы: {old_db} → {database_name}")
+        return True
+
+    def get_current_database_info(self) -> Dict:
+        """
+        Получение информации о текущей активной базе
+
+        Returns:
+            Dict: Метаданные текущей базы
+        """
+        if not self.current_collection:
+            return {}
+
+        return self.collections_metadata.get(self.current_collection, {})
+
+    async def search_vectors(
+        self,
+        query_embedding: List[float],
+        top_k: int = 10,
+        collection_name: Optional[str] = None,
+    ) -> List[Dict]:
+        """
+        Поиск похожих векторов в указанной коллекции
+
+        Args:
+            query_embedding: Вектор запроса
+            top_k: Количество результатов
+            collection_name: Название коллекции (если None - текущая)
+
+        Returns:
+            List[Dict]: Список найденных результатов с метаданными
+        """
+        collection = collection_name or self.current_collection
+
+        if not collection:
+            raise ValueError("Не указана коллекция для поиска")
+
+        if collection not in self.collections_metadata:
+            raise ValueError(f"Коллекция '{collection}' не найдена")
+
+        # Асинхронный поиск через ThreadPoolExecutor
         loop = asyncio.get_event_loop()
-        embedding = await loop.run_in_executor(
-            self.executor, self._get_embedding_sync, text
+
+        def _search():
+            return self.client.search(
+                collection_name=collection,
+                query_vector=query_embedding,
+                limit=top_k,
+            )
+
+        search_results = await loop.run_in_executor(self.executor, _search)
+
+        # Получаем маппинг колонок для этой коллекции
+        columns = self.collections_metadata[collection]["columns"]
+
+        # Форматирование результатов
+        results = []
+        for hit in search_results:
+            results.append(
+                {
+                    "id": hit.id,
+                    "score": hit.score,
+                    "code": hit.payload.get(columns["code"], ""),
+                    "description": hit.payload.get(columns["description"], ""),
+                    "metadata": hit.payload,
+                }
+            )
+
+        return results
+
+    def get_record_by_code(
+        self, code: str, collection_name: Optional[str] = None
+    ) -> Optional[Dict]:
+        """
+        Получение записи по коду КСР
+
+        Args:
+            code: Код КСР для поиска
+            collection_name: Название коллекции (если None - текущая)
+
+        Returns:
+            Optional[Dict]: Найденная запись или None
+        """
+        collection = collection_name or self.current_collection
+
+        if not collection or collection not in self.collections_metadata:
+            return None
+
+        columns = self.collections_metadata[collection]["columns"]
+        code_field = columns["code"]
+
+        # Поиск по фильтру
+        search_result = self.client.scroll(
+            collection_name=collection,
+            scroll_filter=Filter(
+                must=[FieldCondition(key=code_field, match=MatchValue(value=code))]
+            ),
+            limit=1,
         )
 
-        # Сохраняем в кэш (кэш использует нормализованный ключ)
-        await self.embedding_cache.set(text, embedding)
-        return embedding
+        if search_result[0]:
+            point = search_result[0][0]
+            return {
+                "id": point.id,
+                "code": point.payload.get(code_field, ""),
+                "description": point.payload.get(columns["description"], ""),
+                "metadata": point.payload,
+            }
 
-    def clear_cache(self):
-        """Очищает кэш эмбеддингов"""
-        self.embedding_cache.clear()
-        print("🧹 Кэш эмбеддингов очищен")
+        return None
+
+    def get_all_records(self, collection_name: Optional[str] = None) -> Dict[str, str]:
+        """
+        Получение всех записей из коллекции
+
+        Args:
+            collection_name: Название коллекции (если None - текущая)
+
+        Returns:
+            Dict[str, str]: Словарь {код: описание}
+        """
+        collection = collection_name or self.current_collection
+
+        if not collection or collection not in self.collections_metadata:
+            return {}
+
+        columns = self.collections_metadata[collection]["columns"]
+        code_field = columns["code"]
+        desc_field = columns["description"]
+
+        all_records = {}
+        offset = None
+
+        while True:
+            # Получаем батч записей
+            records, next_offset = self.client.scroll(
+                collection_name=collection,
+                limit=100,
+                offset=offset,
+            )
+
+            # Добавляем в словарь
+            for point in records:
+                code = point.payload.get(code_field, "")
+                description = point.payload.get(desc_field, "")
+                if code:
+                    all_records[code] = description
+
+            # Проверка завершения
+            if next_offset is None:
+                break
+
+            offset = next_offset
+
+        return all_records
+
+    def update_record(
+        self,
+        code: str,
+        description: str,
+        embedding: List[float],
+        collection_name: Optional[str] = None,
+    ) -> bool:
+        """
+        Обновление или создание записи
+
+        Args:
+            code: Код КСР
+            description: Описание
+            embedding: Вектор эмбеддинга
+            collection_name: Название коллекции (если None - текущая)
+
+        Returns:
+            bool: True если успешно
+        """
+        collection = collection_name or self.current_collection
+
+        if not collection or collection not in self.collections_metadata:
+            return False
+
+        columns = self.collections_metadata[collection]["columns"]
+
+        # Ищем существующую запись
+        existing = self.get_record_by_code(code, collection)
+
+        # Формируем payload
+        payload = {
+            columns["code"]: code,
+            columns["description"]: description,
+            "timestamp": time.time(),
+            "source": "update" if existing else "create",
+        }
+
+        # Используем существующий ID или генерируем новый
+        point_id = existing["id"] if existing else str(hash(code))
+
+        # Upsert точки
+        self.client.upsert(
+            collection_name=collection,
+            points=[
+                PointStruct(
+                    id=point_id,
+                    vector=embedding,
+                    payload=payload,
+                )
+            ],
+        )
+
+        return True
+
+    def delete_record(self, code: str, collection_name: Optional[str] = None) -> bool:
+        """
+        Удаление записи по коду
+
+        Args:
+            code: Код КСР для удаления
+            collection_name: Название коллекции (если None - текущая)
+
+        Returns:
+            bool: True если успешно удалено
+        """
+        collection = collection_name or self.current_collection
+
+        if not collection or collection not in self.collections_metadata:
+            return False
+
+        # Находим запись
+        record = self.get_record_by_code(code, collection)
+
+        if not record:
+            logger.warning(f"⚠️ Запись с кодом '{code}' не найдена")
+            return False
+
+        # Удаляем по ID
+        self.client.delete(
+            collection_name=collection,
+            points_selector=[record["id"]],
+        )
+
+        logger.info(f"🗑️ Удалена запись: {code}")
+        return True
+
+    def get_collection_stats(self, collection_name: Optional[str] = None) -> Dict:
+        """
+        Получение статистики коллекции
+
+        Args:
+            collection_name: Название коллекции (если None - текущая)
+
+        Returns:
+            Dict: Статистика коллекции
+        """
+        collection = collection_name or self.current_collection
+
+        if not collection or collection not in self.collections_metadata:
+            return {}
+
+        collection_info = self.client.get_collection(collection)
+
+        return {
+            "name": collection,
+            "points_count": collection_info.points_count,
+            "dimension": collection_info.config.params.vectors.size,
+            "distance": collection_info.config.params.vectors.distance.name,
+            "status": collection_info.status.name,
+        }
 
 
-# === ИНИЦИАЛИЗАЦИЯ ===
-print("⚙️ Инициализация АДАПТИРОВАННОЙ системы...")
-# Менеджер векторных баз
-db_manager = OptimizedVectorDatabaseManager()
+# === ИНИЦИАЛИЗАЦИЯ СИСТЕМЫ ===
+logger.info("⚙️ Инициализация системы поиска с Qdrant...")
 
-# === Загрузка reranker ===
-print(f"🧠 Загрузка reranker на устройстве: {db_manager.device}")
+# Инициализация менеджера векторных баз
+db_manager = QdrantVectorDatabaseManager(storage_path=QDRANT_STORAGE_PATH)
+
+# Загрузка reranker модели
+logger.info(f"🧠 Загрузка reranker на устройстве: {db_manager.device}")
 reranker = CrossEncoder(
     RERANKER_PATH,
     device=db_manager.device,
@@ -348,31 +613,38 @@ reranker = CrossEncoder(
         "torch_dtype": torch.float16 if db_manager.device == "cuda" else torch.float32
     },
 )
-print("✅ Reranker загружен.")
+logger.info("✅ Reranker загружен")
 
-# === FastAPI с оптимизациями ===
+
+# === FASTAPI ПРИЛОЖЕНИЕ ===
 app = FastAPI(
-    title="KSR Matcher API Ultra",
-    description="Сверхбыстрая система поиска с кэшированием и оптимизацией",
+    title="KSR Matcher API с Qdrant",
+    description="Высокопроизводительная система поиска с векторной базой Qdrant",
+    version="2.0.0",
     docs_url=None,
     redoc_url=None,
 )
-# Раздача статических файлов (CSS, JS, изображения)
+
+# Подключение статических файлов (CSS, JS, изображения)
 STATIC_DIR = os.path.join(WEB_DIR, "static")
 if os.path.exists(STATIC_DIR):
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
-    print(f"✅ Статические файлы подключены из: {STATIC_DIR}")
+    logger.info(f"✅ Статические файлы подключены из: {STATIC_DIR}")
 else:
-    print(f"⚠️ Папка static не найдена: {STATIC_DIR}")
+    logger.warning(f"⚠️ Папка static не найдена: {STATIC_DIR}")
 
 
-# Модели данных
+# === PYDANTIC МОДЕЛИ ===
 class MatchRequest(BaseModel):
+    """Запрос на поиск похожих записей"""
+
     text: str
     database: Optional[str] = None
 
 
 class CandidateResult(BaseModel):
+    """Результат поиска - один кандидат"""
+
     rank: int
     code: str
     description: str
@@ -381,6 +653,8 @@ class CandidateResult(BaseModel):
 
 
 class DatabaseInfo(BaseModel):
+    """Информация о векторной базе/коллекции"""
+
     name: str
     description: str
     record_count: int
@@ -389,6 +663,8 @@ class DatabaseInfo(BaseModel):
 
 
 class MatchResponse(BaseModel):
+    """Ответ на запрос поиска"""
+
     query: str
     database: str
     candidates: List[CandidateResult]
@@ -397,13 +673,50 @@ class MatchResponse(BaseModel):
 
 
 class DatabasesResponse(BaseModel):
+    """Список доступных баз данных"""
+
     databases: List[DatabaseInfo]
     current_database: str
 
 
-# === Middleware для логирования времени обработки ===
+class UpdateRequest(BaseModel):
+    """Запрос на обновление записи"""
+
+    code: str
+    description: str
+    database: Optional[str] = None
+
+
+class CopyEvent(BaseModel):
+    """События копирования кода (для аналитики)"""
+
+    query: str
+    selected_code: str
+    position: int
+    description: str
+    database: str
+    reranker_score: Optional[float] = None
+    cosine_similarity: Optional[float] = None
+
+
+class DislikeEvent(BaseModel):
+    """События дизлайка результата (для аналитики)"""
+
+    timestamp: str
+    query: str
+    selected_code: str
+    position: int
+    description: str
+    database: str
+    reranker_score: Optional[float] = None
+    cosine_similarity: Optional[float] = None
+    action: str = "dislike"
+
+
+# === MIDDLEWARE ===
 @app.middleware("http")
 async def log_processing_time(request, call_next):
+    """Логирование времени обработки каждого запроса"""
     start_time = time.time()
     response = await call_next(request)
     process_time = time.time() - start_time
@@ -411,7 +724,7 @@ async def log_processing_time(request, call_next):
     return response
 
 
-# === API Endpoints ===
+# === ОСНОВНЫЕ ENDPOINTS ===
 @app.get("/", response_class=HTMLResponse)
 async def root():
     """Возвращает веб-интерфейс приложения"""
@@ -425,23 +738,62 @@ async def root():
         )
 
 
-@app.get("/databases", response_model=DatabasesResponse)
+@app.get("/databases")
 async def get_databases():
-    """Возвращает список доступных векторных баз"""
-    return DatabasesResponse(
-        databases=db_manager.get_available_databases(),
-        current_database=db_manager.current_db if db_manager.current_db else "",
-    )
+    """
+    Получение списка доступных баз данных для фронтенда
+
+    Returns:
+        {
+            "databases": [
+                {
+                    "name": "ksr_main",
+                    "description": "ksr_main",
+                    "record_count": 121905,
+                    "dimension": 1024,
+                    "thresholds": {"cosine": 0.45, "rerank": 0.6}
+                }
+            ],
+            "current_database": "ksr_main"
+        }
+    """
+    try:
+        databases_list = []
+
+        # ИСПРАВЛЕНО: используем collections_metadata напрямую
+        for name, meta in db_manager.collections_metadata.items():
+            databases_list.append(
+                {
+                    "name": name,
+                    "description": meta.get("description", name),
+                    "record_count": meta.get("record_count", 0),
+                    "dimension": meta.get("dimension", 1024),
+                    "thresholds": meta.get(
+                        "thresholds", {"cosine": 0.45, "rerank": 0.6}
+                    ),
+                }
+            )
+
+        return {
+            "databases": databases_list,
+            "current_database": db_manager.current_collection,
+        }
+
+    except Exception as e:
+        logger.error(f"❌ Ошибка получения списка баз: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Ошибка получения баз данных: {str(e)}"
+        )
 
 
 @app.post("/set_database")
 async def set_database(database_name: str):
-    """Устанавливает активную векторную базу"""
+    """Устанавливает активную векторную коллекцию"""
     try:
-        db_manager.set_active_database(database_name)
+        db_manager.set_active_collection(database_name)
         return {
             "status": "success",
-            "message": f"Активная база установлена: {database_name}",
+            "message": f"Активная коллекция установлена: {database_name}",
         }
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -449,246 +801,394 @@ async def set_database(database_name: str):
 
 @app.post("/clear_cache")
 async def clear_cache():
-    """Очищает кэш эмбеддингов"""
+    """Очищает кэш эмбеддингов запросов"""
     db_manager.clear_cache()
-    return {"status": "success", "message": "Кэш очищен"}
+    return {"status": "success", "message": "Кэш эмбеддингов очищен"}
 
 
 @app.post("/match", response_model=MatchResponse)
 async def match_ksr(request: MatchRequest):
-    """Оптимизированный поиск с фильтрацией по порогам на каждом этапе"""
+    """Основной эндпоинт поиска похожих записей"""
     start_time = time.time()
     query_text = request.text.strip()
+
     if not query_text:
         raise HTTPException(status_code=400, detail="Текст не может быть пустым")
 
-    # Выбор базы для поиска
-    original_db = None
+    # Выбор коллекции для поиска
+    original_collection = None
     if request.database:
-        original_db = db_manager.current_db
+        original_collection = db_manager.current_collection
         try:
-            db_manager.set_active_database(request.database)
+            db_manager.set_active_collection(request.database)
         except ValueError as e:
             raise HTTPException(status_code=404, detail=str(e))
 
     try:
-        # Получение данных активной базы
-        db = db_manager.get_active_database()
-        index = db["index"]
-        df = db["df"]
+        collection_name = db_manager.current_collection
 
-        # Получение колонок из конфигурации
-        columns = db_manager.get_columns()
-        code_col = columns["code"]
-        desc_col = columns["description"]
-
-        # Пороговые значения - устанавливаем "умные" значения по умолчанию
+        # Получение порогов из конфигурации
         COSINE_THRESHOLD, RERANK_THRESHOLD = db_manager.get_thresholds()
 
+        # Получение маппинга колонок
+        columns = db_manager.get_columns()
+
         # Параметры поиска
-        TOP_K_FAISS = 1500
+        TOP_K_QDRANT = 1500
         MAX_FOR_RERANK = 200
         MAX_RESULTS = 100
 
-        # Получение эмбеддинга запроса с кэшированием
-        # ВАЖНО: get_embedding_cached автоматически нормализует текст
+        # === ШАГ 1: Генерация эмбеддинга запроса (асинхронно с кэшем) ===
         query_emb = await db_manager.get_embedding_cached(query_text)
-        query_emb_reshaped = query_emb.reshape(1, -1)
 
-        # Поиск в FAISS
-        loop = asyncio.get_event_loop()
-        distances, indices = await loop.run_in_executor(
-            db_manager.executor, lambda: index.search(query_emb_reshaped, TOP_K_FAISS)
+        # === ШАГ 2: Поиск в Qdrant (теперь асинхронно!) ===
+        candidates = await db_manager.search_similar(
+            collection_name=collection_name,
+            query_embedding=query_emb,
+            top_k=TOP_K_QDRANT,
+            score_threshold=COSINE_THRESHOLD,
         )
 
-        # === Фильтрация по косинусному сходству ===
-        cosine_scores = distances[0]
-        valid_cosine_indices = np.where(cosine_scores >= COSINE_THRESHOLD)[0]
-
-        if len(valid_cosine_indices) == 0:
-            top3_scores = cosine_scores[:3]
-            max_score = float(np.max(top3_scores))
+        if not candidates:
             raise HTTPException(
                 status_code=404,
-                detail=f"По вашему запросу не найдено релевантных результатов. Максимальное косинусное сходство: {max_score:.4f} (порог: {COSINE_THRESHOLD:.2f})",
+                detail=f"По вашему запросу не найдено релевантных результатов. "
+                f"Порог косинусного сходства: {COSINE_THRESHOLD:.2f}",
             )
 
-        # Берем индексы и соответствующие косинусные сходства только для валидных результатов
-        filtered_indices = indices[0][valid_cosine_indices]
-        filtered_cosine_scores = cosine_scores[valid_cosine_indices]
+        # === ШАГ 3: Ограничиваем для reranking ===
+        candidates_for_rerank = candidates[:MAX_FOR_RERANK]
 
-        # Ограничиваем количество для reranking (для производительности)
-        if len(filtered_indices) > MAX_FOR_RERANK:
-            top_indices = np.argsort(filtered_cosine_scores)[::-1][:MAX_FOR_RERANK]
-            filtered_indices = filtered_indices[top_indices]
-            filtered_cosine_scores = filtered_cosine_scores[top_indices]
-
-        # === Reranking только отфильтрованных результатов ===
-        # ВАЖНО: Для reranker также используем нормализованный запрос
+        # === ШАГ 4: Reranking ===
         normalized_query = query_text.lower().strip()
-        candidate_pairs = [(normalized_query, df.iloc[i][desc_col]) for i in filtered_indices]
+        candidate_pairs = [
+            (normalized_query, c["description"]) for c in candidates_for_rerank
+        ]
 
+        loop = asyncio.get_event_loop()
         rerank_scores = await loop.run_in_executor(
             db_manager.executor, lambda: reranker.predict(candidate_pairs)
         )
 
-        # === Фильтрация по порогу reranker ===
-        valid_rerank_indices = np.where(rerank_scores >= RERANK_THRESHOLD)[0]
+        # === ШАГ 5: Фильтрация по порогу reranker ===
+        valid_results = []
+        for idx, (candidate, rerank_score) in enumerate(
+            zip(candidates_for_rerank, rerank_scores)
+        ):
+            if rerank_score >= RERANK_THRESHOLD:
+                valid_results.append({**candidate, "rerank_score": float(rerank_score)})
 
-        if len(valid_rerank_indices) == 0:
-            top3_indices = np.argsort(rerank_scores)[::-1][:3]
-            top3_scores = rerank_scores[top3_indices]
-            max_score = float(np.max(top3_scores))
+        if not valid_results:
+            max_rerank = float(np.max(rerank_scores)) if len(rerank_scores) > 0 else 0.0
             raise HTTPException(
                 status_code=404,
-                detail=f"Найдены похожие материалы, но ни один не прошел порог релевантности reranker. Максимальный reranker score: {max_score:.4f} (порог: {RERANK_THRESHOLD:.2f})",
+                detail=f"Найдены похожие материалы, но ни один не прошел порог "
+                f"релевантности reranker. Максимальный reranker score: "
+                f"{max_rerank:.4f} (порог: {RERANK_THRESHOLD:.2f})",
             )
 
-        # Берем только валидные результаты после reranking
-        final_indices = filtered_indices[valid_rerank_indices]
-        final_cosine_scores = filtered_cosine_scores[valid_rerank_indices]
-        final_rerank_scores = rerank_scores[valid_rerank_indices]
+        # === ШАГ 6: Сортировка по reranker score ===
+        valid_results.sort(key=lambda x: x["rerank_score"], reverse=True)
 
-        # Сортировка по reranker score (в порядке убывания)
-        sorted_order = np.argsort(final_rerank_scores)[::-1]
-
-        # Ограничиваем максимальное количество результатов
-        if len(sorted_order) > MAX_RESULTS:
-            sorted_order = sorted_order[:MAX_RESULTS]
-
-        # === ФОРМИРОВАНИЕ ФИНАЛЬНЫХ РЕЗУЛЬТАТОВ ===
-        candidates = []
-
-        for rank_idx, sort_idx in enumerate(sorted_order):
-            idx = sort_idx
-            global_idx = final_indices[idx]
-            cosine_val = float(final_cosine_scores[idx])
-            rerank_val = float(final_rerank_scores[idx])
-            code = str(df.iloc[global_idx][code_col])
-            desc = df.iloc[global_idx][desc_col]
-
-            candidates.append(
-                CandidateResult(
-                    rank=rank_idx + 1,
-                    code=code,
-                    description=desc,
-                    reranker_score=rerank_val,
-                    cosine_similarity=cosine_val,
-                )
+        # === ШАГ 7: Формирование финального ответа ===
+        final_candidates = [
+            CandidateResult(
+                rank=idx + 1,
+                code=r["code"],
+                description=r["description"],
+                reranker_score=r["rerank_score"],
+                cosine_similarity=r["score"],
             )
+            for idx, r in enumerate(valid_results[:MAX_RESULTS])
+        ]
 
         processing_time = time.time() - start_time
 
-        # Статистика для логирования
         logger.info(
-            f"Запрос: '{query_text[:50]}...' | "
-            f"Найдено: {len(cosine_scores)} | "
-            f"Прошло косинусный фильтр: {len(valid_cosine_indices)} | "
-            f"Прошло reranker фильтр: {len(valid_rerank_indices)} | "
-            f"Возвращено результатов: {len(candidates)} | "
+            f"✅ Запрос: '{query_text[:50]}...' | "
+            f"Найдено в Qdrant: {len(candidates)} | "
+            f"Прошло reranker: {len(valid_results)} | "
+            f"Возвращено: {len(final_candidates)} | "
             f"Время: {processing_time:.3f}с"
         )
 
         return MatchResponse(
             query=query_text,
-            database=db_manager.current_db,
-            candidates=candidates,
+            database=collection_name,
+            candidates=final_candidates,
             processing_time=processing_time,
             status="success",
         )
+
     finally:
-        # Восстановление исходной базы
-        if original_db and original_db != db_manager.current_db:
-            db_manager.set_active_database(original_db)
+        # Восстановление исходной коллекции
+        if original_collection and original_collection != db_manager.current_collection:
+            db_manager.set_active_collection(original_collection)
 
 
 @app.get("/health")
 async def health_check():
-    """Проверка состояния сервера с метриками"""
+    """
+    Health check endpoint - проверка работоспособности сервера
+
+    Returns:
+        Статус сервера и основная информация о системе
+    """
     return {
         "status": "ok",
-        "embedding_model": QWEN_MODEL_PATH,
-        "reranker": RERANKER_PATH,
-        "available_databases": list(db_manager.databases.keys()),
-        "active_database": db_manager.current_db,
-        "cache_size": len(db_manager.embedding_cache.cache),
         "device": db_manager.device,
-        "uptime": time.time(),
+        "current_database": db_manager.current_collection,
+        "available_databases": len(db_manager.collections_metadata),
+        "databases_list": list(db_manager.collections_metadata.keys()),
+        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
     }
 
 
 @app.get("/stats")
 async def get_stats():
     """Детальная статистика производительности"""
+    collections_info = []
+    for name in db_manager.collections_metadata.keys():
+        try:
+            info = db_manager.get_collection_info(name)
+            collections_info.append(info)
+        except Exception as e:
+            logger.error(f"Ошибка получения информации о '{name}': {e}")
+
     return {
         "cache_entries": len(db_manager.embedding_cache.cache),
         "max_cache_size": db_manager.embedding_cache.max_size,
-        "databases": db_manager.get_available_databases(),
+        "collections": collections_info,
         "device": db_manager.device,
         "executor_workers": db_manager.executor._max_workers,
     }
 
 
-# === СБОР АНАЛИТИКИ: Конфигурация ===
+# === ENDPOINTS ДЛЯ ПОЛУЧЕНИЯ ВСЕХ КОДОВ КСР ИЗ БАЗЫ QDRANT ===
+@app.get("/get_all_codes")
+async def get_all_codes(database: Optional[str] = None):
+    """
+    Получение списка ВСЕХ кодов и описаний из коллекции (без пагинации)
+
+    Возвращает словарь {код: описание} для сравнения изменений при обновлении базы.
+
+    Маппинг полей:
+    - Qdrant поле "code" → ключ словаря
+    - Qdrant поле "description" → значение словаря
+
+    Args:
+        database: Название коллекции (если не указано - используется текущая активная)
+
+    Returns:
+        {
+            "status": "success",
+            "collection": "ksr_main",
+            "records": {"код1": "описание1", "код2": "описание2", ...},
+            "total": 121904,
+            "elapsed_seconds": 3.24
+        }
+    """
+    try:
+        collection_name = database or db_manager.current_collection
+
+        if not collection_name:
+            raise HTTPException(status_code=400, detail="Коллекция не указана")
+
+        logger.info(f"📥 Запрос ВСЕХ кодов и описаний из '{collection_name}'...")
+        start_time = time.time()
+
+        loop = asyncio.get_event_loop()
+
+        # Собираем все записи в словарь {код: описание}
+        all_records = {}
+        offset = None
+        batch_count = 0
+
+        # Цикл по всей коллекции батчами
+        while True:
+            batch_count += 1
+
+            # Запрашиваем батч записей из Qdrant
+            scroll_result = await loop.run_in_executor(
+                db_manager.executor,
+                lambda: db_manager.client.scroll(
+                    collection_name=collection_name,
+                    limit=10000,  # Внутренний батч для производительности
+                    offset=offset,
+                    with_payload=[
+                        "code",
+                        "description",
+                    ],  # Только нужные поля из Qdrant
+                    with_vectors=False,  # Векторы не нужны (экономия памяти)
+                ),
+            )
+
+            points, offset = scroll_result
+
+            # Извлекаем код и описание из каждой точки
+            for point in points:
+                code = point.payload.get("code")
+                description = point.payload.get("description")
+
+                if code and description:
+                    all_records[code] = description
+
+            # Если offset None - достигли конца коллекции
+            if offset is None:
+                break
+
+        elapsed = time.time() - start_time
+
+        logger.info(
+            f"✅ Собрано {len(all_records)} записей за {elapsed:.2f}с "
+            f"({batch_count} батчей)"
+        )
+
+        return {
+            "status": "success",
+            "collection": collection_name,
+            "records": all_records,  # Словарь {код: описание}
+            "total": len(all_records),
+            "elapsed_seconds": round(elapsed, 2),
+        }
+
+    except Exception as e:
+        logger.error(f"❌ Ошибка получения записей: {str(e)}")
+        import traceback
+
+        logger.error(traceback.format_exc())
+        raise HTTPException(
+            status_code=500, detail=f"Ошибка получения записей: {str(e)}"
+        )
+
+
+# === ENDPOINTS ДЛЯ ОБНОВЛЕНИЯ ДАННЫХ ===
+@app.post("/update_record")
+async def update_ksr_record(request: UpdateRequest):
+    """
+    Обновление существующей записи в векторной базе
+
+    Автоматически генерирует новый эмбеддинг для описания
+    и обновляет запись в Qdrant без перестроения индекса
+    """
+    try:
+        collection_name = request.database or db_manager.current_collection
+
+        # Генерация эмбеддинга для нового описания
+        new_embedding = await db_manager.get_embedding_cached(request.description)
+
+        # Поиск существующей записи по коду
+        search_result = db_manager.client.scroll(
+            collection_name=collection_name,
+            scroll_filter=Filter(
+                must=[FieldCondition(key="code", match=MatchValue(value=request.code))]
+            ),
+            limit=1,
+        )
+
+        # Подготовка метаданных
+        new_metadata = {
+            "code": request.code,
+            "description": request.description,
+            "timestamp": time.time(),
+            "source": "manual_update",
+        }
+
+        if search_result[0]:
+            # Обновление существующей записи
+            point_id = search_result[0][0].id
+            db_manager.update_record(
+                collection_name=collection_name,
+                point_id=point_id,
+                new_embedding=new_embedding,
+                new_metadata=new_metadata,
+            )
+            message = f"Запись с кодом '{request.code}' обновлена"
+        else:
+            # Создание новой записи если не найдена
+            import uuid
+
+            point_id = str(uuid.uuid4())
+            db_manager.client.upsert(
+                collection_name=collection_name,
+                points=[
+                    PointStruct(
+                        id=point_id, vector=new_embedding.tolist(), payload=new_metadata
+                    )
+                ],
+            )
+            message = f"Создана новая запись с кодом '{request.code}'"
+
+        return {"status": "success", "message": message, "database": collection_name}
+
+    except Exception as e:
+        logger.error(f"❌ Ошибка обновления записи: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/delete_record/{code}")
+async def delete_ksr_record(code: str, database: Optional[str] = None):
+    """Удаление записи из векторной базы по коду КСР"""
+    try:
+        collection_name = database or db_manager.current_collection
+
+        db_manager.delete_by_code(collection_name=collection_name, code=code)
+
+        return {
+            "status": "success",
+            "message": f"Записи с кодом '{code}' удалены из '{collection_name}'",
+        }
+
+    except Exception as e:
+        logger.error(f"❌ Ошибка удаления записи: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# === СБОР АНАЛИТИКИ ===
 FEEDBACK_DIR = os.path.join(PROJECT_ROOT, "data", "04_feedback")
 FEEDBACK_FILE = os.path.join(FEEDBACK_DIR, "positive.jsonl")
-os.makedirs(FEEDBACK_DIR, exist_ok=True)
-
-if not os.path.exists(FEEDBACK_FILE):
-    open(FEEDBACK_FILE, "w", encoding="utf-8").close()
-    print(f"✅ Создан файл для сбора позитивов: {FEEDBACK_FILE}")
-
 DISLIKE_FILE = os.path.join(FEEDBACK_DIR, "negative.jsonl")
-if not os.path.exists(DISLIKE_FILE):
-    open(DISLIKE_FILE, "w", encoding="utf-8").close()
-    print(f"✅ Создан файл для сбора негативов: {DISLIKE_FILE}")
 
-
-class DislikeEvent(BaseModel):
-    timestamp: str
-    query: str
-    selected_code: str
-    position: int
-    description: str
-    database: str
-    reranker_score: Optional[float] = None
-    cosine_similarity: Optional[float] = None
-    action: str = "dislike"
-
-
-class CopyEvent(BaseModel):
-    query: str
-    selected_code: str
-    position: int
-    description: str
-    database: str
-    reranker_score: Optional[float] = None
-    cosine_similarity: Optional[float] = None
+# Создание директории и файлов для фидбека
+os.makedirs(FEEDBACK_DIR, exist_ok=True)
+for filepath in [FEEDBACK_FILE, DISLIKE_FILE]:
+    if not os.path.exists(filepath):
+        open(filepath, "w", encoding="utf-8").close()
+        logger.info(f"✅ Создан файл для аналитики: {filepath}")
 
 
 def clean_text_for_json(text):
-    """Очистка текста для безопасного сохранения в JSON"""
+    """
+    Очистка текста для безопасного сохранения в JSON
+
+    Удаляет управляющие символы и нормализует текст
+    """
     if not isinstance(text, str):
         return text
+
     # Удаляем опасные управляющие символы
     text = re.sub(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]", " ", text)
+
     # Нормализуем стрелки и разделители
     text = re.sub(r"[→⟶➡➤→>]", " → ", text)
     text = re.sub(r"[\/|\\]", "/", text)
+
     # Сжимаем пробелы
     text = re.sub(r"\s+", " ", text).strip()
-    # Убираем опасные символы
+
+    # Убираем опасные символы (оставляем буквы, цифры, пунктуацию)
     text = re.sub(
         r"[^\w\s\d.,;:!?()\"'«»\[\]{}\-_+=*%#@&$€₽¥£¢§°±→/\\u0400-\u04FF\\u00C0-\u017F]",
         "",
         text,
     )
+
     return text
 
 
 @app.post("/feedback/copy")
 async def record_copy_event(event: CopyEvent):
-    """Записывает событие копирования в JSONL файл с очисткой данных"""
+    """Записывает событие копирования кода в JSONL файл"""
     try:
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         cleaned_data = {
@@ -701,17 +1201,23 @@ async def record_copy_event(event: CopyEvent):
             "reranker_score": event.reranker_score,
             "cosine_similarity": event.cosine_similarity,
         }
+
         with open(FEEDBACK_FILE, "a", encoding="utf-8") as f:
             json_line = json.dumps(
                 cleaned_data, ensure_ascii=False, separators=(",", ":")
             )
             f.write(json_line + "\n")
+
         logger.info(
-            f"📊 Событие копирования сохранено: {cleaned_data['selected_code']} (позиция {cleaned_data['position']}, rerank: {event.reranker_score:.4f}, cosine: {event.cosine_similarity:.4f})"
+            f"📊 Копирование: {cleaned_data['selected_code']} "
+            f"(позиция {cleaned_data['position']}, "
+            f"rerank: {event.reranker_score:.4f})"
         )
-        return {"status": "success", "message": "Данные сохранены в JSON"}
+
+        return {"status": "success", "message": "Событие сохранено"}
+
     except Exception as e:
-        logger.error(f"❌ Ошибка записи данных в JSON: {str(e)}")
+        logger.error(f"❌ Ошибка записи события копирования: {str(e)}")
         raise HTTPException(
             status_code=500, detail=f"Ошибка сохранения данных: {str(e)}"
         )
@@ -719,7 +1225,7 @@ async def record_copy_event(event: CopyEvent):
 
 @app.post("/feedback/dislike")
 async def record_dislike_event(event: DislikeEvent):
-    """Записывает событие дизлайка в JSONL файл с очисткой данных"""
+    """Записывает событие дизлайка результата в JSONL файл"""
     try:
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         cleaned_data = {
@@ -739,32 +1245,252 @@ async def record_dislike_event(event: DislikeEvent):
                 cleaned_data, ensure_ascii=False, separators=(",", ":")
             )
             f.write(json_line + "\n")
+
         logger.info(
-            f"📊 Событие дизлайка сохранено: {cleaned_data['selected_code']} (позиция {cleaned_data['position']})"
+            f"👎 Дизлайк: {cleaned_data['selected_code']} "
+            f"(позиция {cleaned_data['position']})"
         )
-        return {"status": "success", "message": "Данные дизлайка сохранены"}
+
+        return {"status": "success", "message": "Дизлайк сохранен"}
+
     except Exception as e:
-        logger.error(f"❌ Ошибка записи данных дизлайка: {str(e)}")
+        logger.error(f"❌ Ошибка записи дизлайка: {str(e)}")
         raise HTTPException(
-            status_code=500, detail=f"Ошибка сохранения данных дизлайка: {str(e)}"
+            status_code=500, detail=f"Ошибка сохранения дизлайка: {str(e)}"
         )
 
 
-# === Запуск сервера ===
+# === ENDPOINT ДЛЯ ПЕРЕЗАГРУЗКИ КОНФИГУРАЦИИ ===
+@app.post("/reload_config")
+async def reload_config():
+    """
+    Перезагрузка конфигурации векторных баз без перезапуска сервера
+
+    Использование:
+        curl -X POST http://localhost:8000/reload_config
+
+    Или через браузер/Postman:
+        POST http://localhost:8000/reload_config
+
+    Returns:
+        {
+            "status": "success",
+            "message": "Конфигурация перезагружена",
+            "available_databases": ["ksr_main", "ksr_test"],
+            "current_database": "ksr_main",
+            "total_databases": 2,
+            "changes": {
+                "added": ["ksr_test"],
+                "removed": [],
+                "old_count": 1,
+                "new_count": 2
+            }
+        }
+    """
+    try:
+        logger.info("🔄 Запрос на перезагрузку конфигурации векторных баз...")
+
+        # Запоминаем старое состояние для логирования
+        old_databases = set(db_manager.collections_metadata.keys())
+        old_count = len(old_databases)
+
+        # Перезагружаем конфиг
+        db_manager.load_configuration()
+
+        # Новое состояние
+        new_databases = set(db_manager.collections_metadata.keys())
+        new_count = len(new_databases)
+        current_db = db_manager.current_collection
+
+        # Анализируем изменения
+        added = new_databases - old_databases
+        removed = old_databases - new_databases
+
+        logger.info(f"✅ Конфигурация перезагружена")
+        logger.info(f"📊 Было баз: {old_count}, стало: {new_count}")
+
+        if added:
+            logger.info(f"➕ Добавлено баз: {', '.join(added)}")
+        if removed:
+            logger.info(f"➖ Удалено баз: {', '.join(removed)}")
+
+        return {
+            "status": "success",
+            "message": "Конфигурация векторных баз перезагружена",
+            "available_databases": list(new_databases),
+            "current_database": current_db,
+            "total_databases": new_count,
+            "changes": {
+                "added": list(added),
+                "removed": list(removed),
+                "old_count": old_count,
+                "new_count": new_count,
+            },
+        }
+
+    except Exception as e:
+        logger.error(f"❌ Ошибка перезагрузки конфига: {str(e)}")
+        import traceback
+
+        logger.error(traceback.format_exc())
+        raise HTTPException(
+            status_code=500, detail=f"Ошибка перезагрузки конфигурации: {str(e)}"
+        )
+
+
+from pydantic import BaseModel
+
+
+class CreateCollectionRequest(BaseModel):
+    """Запрос на создание новой коллекции"""
+
+    collection_name: str
+    dimension: int
+    description: str = ""
+    recreate: bool = False
+
+
+@app.post("/create_collection")
+async def create_collection(request: CreateCollectionRequest):
+    """
+    Создание новой коллекции в Qdrant через API
+
+    Args:
+        collection_name: Название новой коллекции
+        dimension: Размерность векторов
+        description: Описание коллекции
+        recreate: Удалить существующую если True
+
+    Returns:
+        Статус операции
+    """
+    try:
+        from qdrant_client.models import Distance, VectorParams
+
+        logger.info(f"📝 Запрос на создание коллекции: {request.collection_name}")
+
+        # Проверяем существование
+        collections = [c.name for c in db_manager.client.get_collections().collections]
+
+        if request.collection_name in collections:
+            if request.recreate:
+                logger.warning(
+                    f"⚠️ Удаление существующей коллекции: {request.collection_name}"
+                )
+                db_manager.client.delete_collection(request.collection_name)
+            else:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Коллекция '{request.collection_name}' уже существует. Используйте recreate=true для перезаписи.",
+                )
+
+        # Создаем коллекцию
+        db_manager.client.create_collection(
+            collection_name=request.collection_name,
+            vectors_config=VectorParams(
+                size=request.dimension, distance=Distance.COSINE
+            ),
+        )
+
+        logger.info(f"✅ Коллекция '{request.collection_name}' создана")
+
+        # Обновляем конфигурацию
+        config_path = os.path.join(BASE_DIR, "vector_databases.json")
+
+        if os.path.exists(config_path):
+            with open(config_path, "r", encoding="utf-8") as f:
+                config = json.load(f)
+        else:
+            config = {}
+
+        # Добавляем новую коллекцию
+        config[request.collection_name] = {
+            "description": request.description
+            or f"Векторная база {request.collection_name}",
+            "columns": {"code": "code", "description": "description"},
+            "thresholds": {"cosine": 0.45, "rerank": 0.6},
+        }
+
+        # Сохраняем конфиг
+        with open(config_path, "w", encoding="utf-8") as f:
+            json.dump(config, f, indent=2, ensure_ascii=False)
+
+        # Перезагружаем конфигурацию
+        db_manager.load_configuration()
+
+        return {
+            "status": "success",
+            "message": f"Коллекция '{request.collection_name}' успешно создана",
+            "collection_name": request.collection_name,
+            "dimension": request.dimension,
+        }
+
+    except Exception as e:
+        logger.error(f"❌ Ошибка создания коллекции: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Ошибка создания коллекции: {str(e)}"
+        )
+
+
+@app.post("/upload_batch")
+async def upload_batch(collection_name: str, points: List[Dict]):
+    """
+    Загрузка батча векторов в коллекцию
+
+    Args:
+        collection_name: Название коллекции
+        points: Список точек с векторами и метаданными
+            Формат: [{"id": "uuid", "vector": [...], "payload": {...}}]
+
+    Returns:
+        Статус операции
+    """
+    try:
+        from qdrant_client.models import PointStruct
+
+        # Конвертируем в PointStruct
+        qdrant_points = [
+            PointStruct(id=p["id"], vector=p["vector"], payload=p["payload"])
+            for p in points
+        ]
+
+        # Загружаем батч
+        db_manager.client.upsert(collection_name=collection_name, points=qdrant_points)
+
+        return {"status": "success", "uploaded": len(points)}
+
+    except Exception as e:
+        logger.error(f"❌ Ошибка загрузки батча: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Ошибка загрузки: {str(e)}")
+
+
+# === ЗАПУСК СЕРВЕРА ===
 if __name__ == "__main__":
     import uvicorn
 
-    print("🚀 Запуск АДАПТИРОВАННОГО сервера на http://localhost:8000")
-    print("⚡ Оптимизации:")
-    print("   🧠 Кэширование эмбеддингов (15000 записей)")
-    print("   🔄 Асинхронная обработка запросов")
-    print("   📊 ThreadPoolExecutor для CPU операций")
-    print("   🎯 FAISS IndexFlatIP (максимальная скорость)")
-    print("   💾 Оптимизированные типы данных (float32)")
-    print("   🚀 Batched обработка для reranker")
-    print("   📦 Локальная модель Qwen3-Embedding-4B вместо LM Studio API")
-    print("   🔤 РЕГИСТРОНЕЗАВИСИМЫЙ поиск (все запросы → lowercase)")
-    print(f"📚 Доступные векторные базы: {list(db_manager.databases.keys())}")
+    logger.info("=" * 80)
+    logger.info("🚀 Запуск сервера KSR Matcher с Qdrant")
+    logger.info("=" * 80)
+    logger.info(f"📍 Адрес: http://localhost:8000")
+    logger.info(f"💾 Хранилище Qdrant: {QDRANT_STORAGE_PATH}")
+    logger.info(f"🧠 Модель эмбеддингов: {QWEN_MODEL_PATH}")
+    logger.info(f"🎯 Reranker: {RERANKER_PATH}")
+    logger.info(f"🖥️ Устройство: {db_manager.device}")
+    logger.info(
+        f"📚 Доступные коллекции: {list(db_manager.collections_metadata.keys())}"
+    )
+    logger.info(f"✅ Активная коллекция: {db_manager.current_collection}")
+    logger.info("=" * 80)
+    logger.info("⚡ Оптимизации:")
+    logger.info("   🧠 Кэширование эмбеддингов запросов (15000 записей)")
+    logger.info("   🔄 Асинхронная обработка запросов")
+    logger.info("   📊 ThreadPoolExecutor для CPU операций")
+    logger.info("   🎯 Qdrant с косинусной метрикой (аналог FAISS IndexFlatIP)")
+    logger.info("   💾 In-memory производительность с персистентным хранилищем")
+    logger.info("   🔤 Регистронезависимый поиск (lowercase нормализация)")
+    logger.info("   📦 Встроенное хранение метаданных (без Parquet)")
+    logger.info("   🔄 Инкрементальные обновления без перестроения индекса")
+    logger.info("=" * 80)
 
     uvicorn.run(
         app,
