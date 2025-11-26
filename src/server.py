@@ -1,35 +1,33 @@
 # server.py - ВЕРСИЯ С QDRANT ВЕКТОРНОЙ БД
+import asyncio
+import json
+import logging
 import os
 import re
-import numpy as np
-import pandas as pd
-import torch
 import time
-import json
-import asyncio
-import logging
+import uuid
 from concurrent.futures import ThreadPoolExecutor
-from sentence_transformers import CrossEncoder
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from datetime import datetime
+from typing import Dict, List, Optional
+
+import numpy as np
+import torch
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
-from fastapi import Request
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from typing import List, Dict, Optional
-from datetime import datetime
-import gc
-
-# === QDRANT ИМПОРТЫ ===
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
     Distance,
-    VectorParams,
-    PointStruct,
-    Filter,
     FieldCondition,
+    Filter,
     MatchValue,
-    SearchParams,
+    PointStruct,
+    VectorParams,
 )
+from sentence_transformers import CrossEncoder
+from transformers import AutoModel, AutoTokenizer
 
 # === НАСТРОЙКА ЛОГИРОВАНИЯ ===
 logging.basicConfig(level=logging.INFO)
@@ -111,6 +109,7 @@ class QdrantVectorDatabaseManager:
     - Кэширование метаданных коллекций
     - Поиск с косинусным сходством
     - Reranking результатов через CrossEncoder
+    - Встроенная генерация эмбеддингов (Qwen)
     """
 
     def __init__(self, storage_path: str):
@@ -149,6 +148,134 @@ class QdrantVectorDatabaseManager:
             logger.info(f"🎯 Активная коллекция: {self.current_collection}")
         else:
             logger.warning("⚠️ Нет доступных коллекций в Qdrant")
+
+        # === ИНИЦИАЛИЗАЦИЯ МОДЕЛИ ЭМБЕДДИНГОВ ===
+        self._init_embedding_model()
+        
+        # Инициализация кэша
+        self.embedding_cache = EmbeddingCache(max_size=15000)
+
+    def _init_embedding_model(self):
+        """Инициализация локальной модели эмбеддингов Qwen3"""
+        logger.info(f"📥 Загрузка модели эмбеддингов: {QWEN_MODEL_PATH}")
+        
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            QWEN_MODEL_PATH, padding_side="left", trust_remote_code=True
+        )
+
+        self.embedding_model = AutoModel.from_pretrained(
+            QWEN_MODEL_PATH,
+            trust_remote_code=True,
+            device_map=self.device,
+            torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
+        )
+        self.embedding_model.eval()
+        if self.device == "cuda":
+            torch.cuda.empty_cache()
+        logger.info("✅ Модель эмбеддингов загружена")
+
+    def _get_embedding_sync(self, text: str) -> np.ndarray:
+        """Синхронное получение эмбеддинга через локальную модель"""
+        try:
+            # Приводим текст к нижнему регистру
+            normalized_text = text.lower().strip()
+            
+            # Токенизация
+            inputs = self.tokenizer(
+                [normalized_text],
+                max_length=1024,
+                padding=True,
+                truncation=True,
+                return_tensors="pt",
+            ).to(self.device)
+
+            # Получение эмбеддингов
+            with torch.no_grad():
+                outputs = self.embedding_model(**inputs)
+
+            # Last token pooling
+            last_hidden_state = outputs.last_hidden_state
+            attention_mask = inputs["attention_mask"]
+
+            left_padding = attention_mask[:, -1].sum() == attention_mask.shape[0]
+            if left_padding:
+                embeddings = last_hidden_state[:, -1]
+            else:
+                sequence_lengths = attention_mask.sum(dim=1) - 1
+                batch_size = last_hidden_state.shape[0]
+                embeddings = last_hidden_state[
+                    torch.arange(batch_size, device=last_hidden_state.device),
+                    sequence_lengths,
+                ]
+
+            # Нормализация
+            embeddings = torch.nn.functional.normalize(embeddings, p=2, dim=1)
+            
+            # Конвертация в numpy
+            return embeddings.cpu().numpy()[0].astype(np.float32)
+        except Exception as e:
+            logger.error(f"Ошибка генерации эмбеддинга: {e}")
+            raise HTTPException(status_code=500, detail=f"Ошибка эмбеддинга: {str(e)}")
+
+    async def get_embedding_cached(self, text: str) -> np.ndarray:
+        """Получает эмбеддинг с кэшированием (асинхронно)"""
+        # Проверяем кэш
+        cached_emb = await self.embedding_cache.get(text)
+        if cached_emb is not None:
+            return cached_emb
+
+        # Если нет в кэше, генерируем
+        loop = asyncio.get_event_loop()
+        embedding = await loop.run_in_executor(
+            self.executor, self._get_embedding_sync, text
+        )
+
+        # Сохраняем в кэш
+        await self.embedding_cache.set(text, embedding)
+        return embedding
+
+    # === МЕТОДЫ СОВМЕСТИМОСТИ (ADAPTERS) ===
+    
+    def get_thresholds(self):
+        """Возвращает пороги для текущей коллекции"""
+        meta = self.get_current_database_info()
+        thresholds = meta.get("thresholds", {"cosine": 0.45, "rerank": 0.6})
+        return thresholds["cosine"], thresholds["rerank"]
+
+    def get_columns(self):
+        """Возвращает маппинг колонок для текущей коллекции"""
+        meta = self.get_current_database_info()
+        return meta.get("columns", {"code": "code", "description": "description"})
+
+    def set_active_collection(self, name: str):
+        """Алиас для switch_database с валидацией"""
+        if not self.switch_database(name):
+             raise ValueError(f"База '{name}' не найдена")
+
+    async def search_similar(self, collection_name, query_embedding, top_k, score_threshold):
+        """
+        Адаптер для поиска с фильтрацией по score.
+        Возвращает список словарей, совместимый с MatchResponse.
+        """
+        results = await self.search_vectors(
+            query_embedding=query_embedding,
+            top_k=top_k,
+            collection_name=collection_name
+        )
+        
+        # Фильтрация по порогу косинусного сходства
+        filtered_results = [r for r in results if r['score'] >= score_threshold]
+        return filtered_results
+        
+    def delete_by_code(self, code: str, collection_name: Optional[str] = None) -> bool:
+        """Алиас для delete_record"""
+        return self.delete_record(code, collection_name)
+    
+    def clear_cache(self):
+        """Очистка кэша эмбеддингов"""
+        self.embedding_cache.clear()
+
+    # === СТАНДАРТНЫЕ МЕТОДЫ QDRANT ===
 
     def load_configuration(self):
         """
@@ -373,12 +500,20 @@ class QdrantVectorDatabaseManager:
         # Асинхронный поиск через ThreadPoolExecutor
         loop = asyncio.get_event_loop()
 
+        # Если пришел numpy array, конвертируем в список
+        if isinstance(query_embedding, np.ndarray):
+            query_embedding = query_embedding.tolist()
+
         def _search():
-            return self.client.search(
+            # ИСПРАВЛЕНО: search заменен на query_points в новых версиях qdrant-client
+            # logger.info(f"Searching in {collection} with vector dim: {len(query_embedding)}")
+            response = self.client.query_points(
                 collection_name=collection,
-                query_vector=query_embedding,
+                query=query_embedding,
                 limit=top_k,
+                with_payload=True,
             )
+            return response.points
 
         search_results = await loop.run_in_executor(self.executor, _search)
 
@@ -492,6 +627,8 @@ class QdrantVectorDatabaseManager:
         description: str,
         embedding: List[float],
         collection_name: Optional[str] = None,
+        point_id: Optional[str] = None,
+        new_metadata: Optional[Dict] = None,
     ) -> bool:
         """
         Обновление или создание записи
@@ -501,6 +638,8 @@ class QdrantVectorDatabaseManager:
             description: Описание
             embedding: Вектор эмбеддинга
             collection_name: Название коллекции (если None - текущая)
+            point_id: ID записи (опционально)
+            new_metadata: Полные метаданные (опционально)
 
         Returns:
             bool: True если успешно
@@ -512,19 +651,29 @@ class QdrantVectorDatabaseManager:
 
         columns = self.collections_metadata[collection]["columns"]
 
-        # Ищем существующую запись
-        existing = self.get_record_by_code(code, collection)
-
-        # Формируем payload
-        payload = {
-            columns["code"]: code,
-            columns["description"]: description,
-            "timestamp": time.time(),
-            "source": "update" if existing else "create",
-        }
-
-        # Используем существующий ID или генерируем новый
-        point_id = existing["id"] if existing else str(hash(code))
+        # Если метаданные не переданы, формируем базовые
+        is_new_record = False
+        
+        if new_metadata is None:
+            # Ищем существующую запись для проверки
+            existing = self.get_record_by_code(code, collection)
+            is_new_record = existing is None
+            
+            payload = {
+                columns["code"]: code,
+                columns["description"]: description,
+                "timestamp": time.time(),
+                "source": "update" if existing else "create",
+            }
+            # Используем существующий ID или генерируем новый UUID на основе кода
+            if point_id is None:
+                point_id = existing["id"] if existing else str(uuid.uuid5(uuid.NAMESPACE_DNS, code))
+        else:
+            payload = new_metadata
+            if point_id is None:
+                 existing = self.get_record_by_code(code, collection)
+                 is_new_record = existing is None
+                 point_id = existing["id"] if existing else str(uuid.uuid5(uuid.NAMESPACE_DNS, code))
 
         # Upsert точки
         self.client.upsert(
@@ -537,6 +686,10 @@ class QdrantVectorDatabaseManager:
                 )
             ],
         )
+
+        # Обновляем счетчик в метаданных, если это новая запись
+        if is_new_record:
+            self.collections_metadata[collection]["record_count"] += 1
 
         return True
 
@@ -568,6 +721,9 @@ class QdrantVectorDatabaseManager:
             collection_name=collection,
             points_selector=[record["id"]],
         )
+        
+        # Обновляем счетчик в метаданных
+        self.collections_metadata[collection]["record_count"] -= 1
 
         logger.info(f"🗑️ Удалена запись: {code}")
         return True
@@ -623,6 +779,15 @@ app = FastAPI(
     version="2.0.0",
     docs_url=None,
     redoc_url=None,
+)
+
+# Настройка CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Подключение статических файлов (CSS, JS, изображения)
@@ -850,10 +1015,13 @@ async def match_ksr(request: MatchRequest):
         )
 
         if not candidates:
-            raise HTTPException(
-                status_code=404,
-                detail=f"По вашему запросу не найдено релевантных результатов. "
-                f"Порог косинусного сходства: {COSINE_THRESHOLD:.2f}",
+            logger.warning(f"⚠️ No candidates found in Qdrant for query: '{query_text}'")
+            return MatchResponse(
+                query=query_text,
+                database=collection_name,
+                candidates=[],
+                processing_time=time.time() - start_time,
+                status="not_found_in_vector_db",
             )
 
         # === ШАГ 3: Ограничиваем для reranking ===
@@ -880,12 +1048,17 @@ async def match_ksr(request: MatchRequest):
 
         if not valid_results:
             max_rerank = float(np.max(rerank_scores)) if len(rerank_scores) > 0 else 0.0
-            raise HTTPException(
-                status_code=404,
-                detail=f"Найдены похожие материалы, но ни один не прошел порог "
-                f"релевантности reranker. Максимальный reranker score: "
-                f"{max_rerank:.4f} (порог: {RERANK_THRESHOLD:.2f})",
-            )
+            logger.warning(f"⚠️ No results passed reranker threshold. Max score: {max_rerank:.4f} (Threshold: {RERANK_THRESHOLD})")
+            
+            # FALLBACK: Возвращаем топ результатов несмотря на низкий скор
+            logger.info("🔄 Using fallback: returning top results despite low score")
+            
+            all_scored_results = []
+            for idx, (candidate, rerank_score) in enumerate(zip(candidates_for_rerank, rerank_scores)):
+                all_scored_results.append({**candidate, "rerank_score": float(rerank_score)})
+            
+            all_scored_results.sort(key=lambda x: x["rerank_score"], reverse=True)
+            valid_results = all_scored_results[:20]  # Возвращаем 20 лучших
 
         # === ШАГ 6: Сортировка по reranker score ===
         valid_results.sort(key=lambda x: x["rerank_score"], reverse=True)
@@ -1076,6 +1249,10 @@ async def update_ksr_record(request: UpdateRequest):
 
         # Генерация эмбеддинга для нового описания
         new_embedding = await db_manager.get_embedding_cached(request.description)
+        
+        # Конвертируем numpy array в список для Qdrant
+        if isinstance(new_embedding, np.ndarray):
+            new_embedding = new_embedding.tolist()
 
         # Поиск существующей записи по коду
         search_result = db_manager.client.scroll(
@@ -1094,30 +1271,17 @@ async def update_ksr_record(request: UpdateRequest):
             "source": "manual_update",
         }
 
-        if search_result[0]:
-            # Обновление существующей записи
-            point_id = search_result[0][0].id
-            db_manager.update_record(
-                collection_name=collection_name,
-                point_id=point_id,
-                new_embedding=new_embedding,
-                new_metadata=new_metadata,
-            )
-            message = f"Запись с кодом '{request.code}' обновлена"
-        else:
-            # Создание новой записи если не найдена
-            import uuid
-
-            point_id = str(uuid.uuid4())
-            db_manager.client.upsert(
-                collection_name=collection_name,
-                points=[
-                    PointStruct(
-                        id=point_id, vector=new_embedding.tolist(), payload=new_metadata
-                    )
-                ],
-            )
-            message = f"Создана новая запись с кодом '{request.code}'"
+        # Обновление записи через менеджер
+        # (он сам определит, обновление это или создание новой записи)
+        db_manager.update_record(
+            code=request.code,
+            description=request.description,
+            embedding=new_embedding,
+            collection_name=collection_name,
+            new_metadata=new_metadata
+        )
+        
+        message = f"Запись с кодом '{request.code}' успешно сохранена"
 
         return {"status": "success", "message": message, "database": collection_name}
 

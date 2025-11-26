@@ -10,19 +10,13 @@ Pipeline:
 5. Автоматическое обновление vector_databases.json
 6. Автоматическая перезагрузка конфигурации на сервере
 
-Использование:
+Использование (Windows PowerShell):
     # Создание продакшн базы (добавляется в конфиг)
-    python 02_create_qdrant_collection.py \
-        --input data/02_interim/KSR_clean.csv \
-        --collection ksr_main \
-        --recreate
+    # Важно: Используйте кавычки для аргументов
+    python scripts/pipelines/02_create_qdrant_collection.py --input "data/02_interim/KSR_clean_3.csv" --collection "ksr_main_3" --recreate
 
     # Создание тестовой базы (БЕЗ добавления в конфиг)
-    python 02_create_qdrant_collection.py \
-        --input data/02_interim/KSR_clean_2.csv \
-        --collection ksr_test \
-        --recreate \
-        --no-config
+    python scripts/pipelines/02_create_qdrant_collection.py --input "data/02_interim/KSR_clean_2.csv" --collection "ksr_test" --recreate --no-config
 
 Автор: Alexandr
 Дата: 2025-11-25
@@ -489,6 +483,7 @@ def main():
         "--collection",
         type=str,
         required=True,
+        nargs='?',
         help="Название коллекции Qdrant"
     )
     parser.add_argument(
@@ -514,7 +509,26 @@ def main():
         help="URL сервера API"
     )
     
-    args = parser.parse_args()
+    # === АВТОМАТИЧЕСКАЯ НАСТРОЙКА ДЛЯ ЗАПУСКА БЕЗ АРГУМЕНТОВ ===
+    if len(sys.argv) == 1:
+        print("⚠️  ЗАПУСК БЕЗ АРГУМЕНТОВ (режим Play button)")
+        print("ℹ️  Используются настройки по умолчанию для отладки.")
+        
+        # ЗДЕСЬ МОЖНО НАСТРОИТЬ ПАРАМЕТРЫ ПО УМОЛЧАНИЮ
+        default_args = [
+            "--input", str(DEFAULT_INPUT_PATH),
+            "--collection", "ksr_test_db",
+            "--recreate",
+            "--no-config" # Чтобы не засорять основной конфиг
+        ]
+        print(f"ℹ️  Аргументы: {' '.join(default_args)}")
+        args = parser.parse_args(default_args)
+    else:
+        args = parser.parse_args()
+        
+    # Проверка обязательного аргумента collection, если он не был передан
+    if not args.collection:
+        parser.error("the following arguments are required: --collection")
     
     # Начало работы
     start_time = time.time()

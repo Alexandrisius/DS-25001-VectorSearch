@@ -15,6 +15,7 @@ import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Dict, Any, Optional
 import os
+import sys
 from datetime import datetime
 
 # Настройка логирования
@@ -66,7 +67,7 @@ class VectorSearchTester:
         Returns:
             Словарь с результатами поиска
         """
-        payload = {"text": query_text.strip()}
+        payload = {"text": str(query_text).strip()}
         if database:
             payload["database"] = database
         
@@ -204,11 +205,11 @@ def parse_arguments():
     """Парсит аргументы командной строки"""
     parser = argparse.ArgumentParser(description='Клиент для массового тестирования векторного поиска')
     
-    parser.add_argument('input_file', type=str, help='Путь к входному Excel файлу')
+    parser.add_argument('input_file', type=str, nargs='?', help='Путь к входному Excel файлу')
     parser.add_argument('--output', type=str, default=None, 
                         help='Путь к выходному Excel файлу (по умолчанию: input_filename_results.xlsx)')
-    parser.add_argument('--column', type=str, required=True, 
-                        help='Название колонки с текстами для поиска')
+    parser.add_argument('--column', type=str, default="Текст запроса", 
+                        help='Название колонки с текстами для поиска (по умолчанию: "Текст запроса")')
     parser.add_argument('--top_n', type=int, default=5, 
                         help='Количество результатов для каждого запроса (по умолчанию: 5)')
     parser.add_argument('--database', type=str, default=None,
@@ -223,10 +224,23 @@ def parse_arguments():
     return parser.parse_args()
 
 def main():
+    # Если запущено без аргументов, выводим подсказку
+    if len(sys.argv) == 1:
+        print("⚠️  ЗАПУСК БЕЗ АРГУМЕНТОВ")
+        print("ℹ️  Для использования укажите путь к файлу:")
+        print('   python batch_test_client.py "test_queries.xlsx" --column "Запрос"')
+        print("\nℹ️  Опции:")
+        print("   --list_databases  : Показать список доступных баз")
+        print("   --dry_run         : Проверить чтение файла без запуска поиска")
+        # Не выходим, даем argparse обработать help или ошибки
+        
     args = parse_arguments()
     
     # Инициализация тестера
-    tester = VectorSearchTester(max_workers=args.max_workers)
+    try:
+        tester = VectorSearchTester(max_workers=args.max_workers)
+    except ConnectionError:
+        return
     
     # Если нужно просто показать список баз
     if args.list_databases:
@@ -238,6 +252,13 @@ def main():
             print(f"{status} {db['name']}: {db['description']} ({db['record_count']} записей)")
         print("-" * 50)
         return
+        
+    # Проверка наличия входного файла
+    if not args.input_file:
+        # Если файл не передан и не запрошен список баз - это ошибка пользователя
+        print("❌ Ошибка: Не указан входной файл.")
+        print("Используйте --help для справки.")
+        return
     
     # Проверка существования входного файла
     if not os.path.exists(args.input_file):
@@ -247,7 +268,10 @@ def main():
     # Чтение Excel файла
     try:
         logger.info(f"📖 Чтение Excel файла: {args.input_file}")
-        input_df = pd.read_excel(args.input_file)
+        if args.input_file.endswith('.csv'):
+             input_df = pd.read_csv(args.input_file, sep=';') # Пробуем CSV с ;
+        else:
+             input_df = pd.read_excel(args.input_file)
         
         logger.info(f"📊 Загружено {len(input_df)} строк, {len(input_df.columns)} колонок")
         logger.info(f"📋 Колонки: {', '.join(input_df.columns.tolist())}")
@@ -262,7 +286,7 @@ def main():
         logger.info(f"   Примеры: {sample_values}")
         
     except Exception as e:
-        logger.error(f"❌ Ошибка чтения Excel файла: {str(e)}")
+        logger.error(f"❌ Ошибка чтения файла: {str(e)}")
         return
     
     # Dry run - только проверка конфигурации

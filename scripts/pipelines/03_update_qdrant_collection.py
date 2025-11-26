@@ -9,24 +9,16 @@ Pipeline:
 4. Отправка обновлений через API эндпоинты на работающий сервер
 5. Инкрементальное обновление без остановки сервера (hot update)
 
-Использование:
-    # Реальное обновление (с удалением отсутствующих записей)
-    python 03_update_qdrant_collection.py \
-        --input data/02_interim/KSR_clean.csv \
-        --collection ksr_main \
-        --server http://localhost:8000
+Использование (Windows PowerShell):
+    # Реальное обновление
+    # Важно: Используйте кавычки для путей и URL
+    python scripts/pipelines/03_update_qdrant_collection.py --input "data/02_interim/KSR_clean_2.csv" --collection "ksr_main_2" --server "http://localhost:8000"
 
     # Предпросмотр изменений (без применения)
-    python 03_update_qdrant_collection.py \
-        --input data/02_interim/KSR_clean.csv \
-        --collection ksr_main \
-        --dry-run
+    python scripts/pipelines/03_update_qdrant_collection.py --input "data/02_interim/KSR_clean.csv" --collection "ksr_main" --dry-run
 
     # Обновление БЕЗ удаления отсутствующих записей
-    python 03_update_qdrant_collection.py \
-        --input data/02_interim/KSR_clean.csv \
-        --collection ksr_main \
-        --no-delete
+    python scripts/pipelines/03_update_qdrant_collection.py --input "data/02_interim/KSR_clean.csv" --collection "ksr_main" --no-delete
 
 Автор: Alexandr
 Дата: 2025-11-25
@@ -53,7 +45,7 @@ logger = logging.getLogger(__name__)
 
 # === КОНФИГУРАЦИЯ ПУТЕЙ ===
 PROJECT_ROOT = Path("C:/Users/klim9/Yandex.Disk/02_Work/#Projects/04_DataScience/DS-25001-VectorSearch")
-DEFAULT_INPUT_PATH = PROJECT_ROOT / "data" / "02_interim" / "KSR_clean.csv"
+DEFAULT_INPUT_PATH = PROJECT_ROOT / "data" / "02_interim" / "KSR_clean_2.csv"
 DEFAULT_SERVER_URL = "http://localhost:8000"
 
 
@@ -438,12 +430,30 @@ def main():
         description="Умное обновление коллекции Qdrant через API (hot update)"
     )
     parser.add_argument("--input", type=str, default=str(DEFAULT_INPUT_PATH))
-    parser.add_argument("--collection", type=str, required=True)
+    parser.add_argument("--collection", type=str, required=True, nargs='?', help="Название коллекции")
     parser.add_argument("--server", type=str, default=DEFAULT_SERVER_URL)
     parser.add_argument("--no-delete", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     
-    args = parser.parse_args()
+    # === АВТОМАТИЧЕСКАЯ НАСТРОЙКА ДЛЯ ЗАПУСКА БЕЗ АРГУМЕНТОВ ===
+    if len(sys.argv) == 1:
+        print("⚠️  ЗАПУСК БЕЗ АРГУМЕНТОВ (режим Play button)")
+        print("ℹ️  Используются настройки по умолчанию для отладки.")
+        
+        # ЗДЕСЬ МОЖНО НАСТРОИТЬ ПАРАМЕТРЫ ПО УМОЛЧАНИЮ
+        default_args = [
+            "--input", str(DEFAULT_INPUT_PATH),
+            "--collection", "ksr_main_2"
+        ]
+        print(f"ℹ️  Аргументы: {' '.join(default_args)}")
+        args = parser.parse_args(default_args)
+    else:
+        args = parser.parse_args()
+    
+    # Проверка обязательного аргумента collection, если он не был передан (для случая когда sys.argv > 1 но collection забыли)
+    if not args.collection and len(sys.argv) > 1:
+        parser.error("the following arguments are required: --collection")
+
     
     start_time = time.time()
     logger.info("=" * 80)

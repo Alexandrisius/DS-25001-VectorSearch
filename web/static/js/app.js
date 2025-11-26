@@ -295,6 +295,17 @@ document.addEventListener('DOMContentLoaded', function () {
         const dbName = databases.find(d => d.name === currentDatabase)?.description.split('(')[0] || currentDatabase;
         processingInfo.textContent = `Поиск завершен по базе "${dbName}"`;
 
+        if (data.candidates.length === 0) {
+            resultsBody.innerHTML = `
+                <tr><td colspan="6" style="text-align: center; padding: 40px 20px; color: var(--text-secondary);">
+                    <i class="fas fa-search" style="font-size: 2rem; margin-bottom: 15px; display: block; opacity: 0.5"></i>
+                    Ничего не найдено по вашему запросу.<br>Попробуйте переформулировать или изменить параметры поиска.
+                </td></tr>`;
+            statusInfo.textContent = 'Ничего не найдено';
+            statusInfo.style.color = 'var(--warning)';
+            return;
+        }
+
         let html = '';
         data.candidates.forEach(c => {
             const isTop = c.rank === 1;
