@@ -29,7 +29,9 @@ import sys
 import argparse
 import pandas as pd
 import requests
+import json
 from pathlib import Path
+from datetime import datetime
 from tqdm import tqdm
 import time
 import logging
@@ -162,6 +164,54 @@ class QdrantUpdater:
             logger.error(f"❌ Ошибка обновления {code}: {str(e)}")
             return False
     
+    def batch_update_api(self, records: List[Tuple[str, str]]) -> bool:
+        """
+        Отправка пачки записей на сервер через /update_batch_records
+        """
+        try:
+            # Формируем payload
+            payload = {
+                "database": self.collection_name,
+                "records": [
+                    {"code": code, "description": desc}
+                    for code, desc in records
+                ]
+            }
+            
+            response = requests.post(
+                f"{self.server_url}/update_batch_records",
+                json=payload,
+                timeout=300  # Увеличенный таймаут для обработки батча
+            )
+            response.raise_for_status()
+            return True
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"❌ Ошибка отправки батча: {str(e)}")
+            return False
+            
+    def batch_delete_api(self, codes: List[str]) -> bool:
+        """
+        Отправка пачки кодов на удаление через /delete_batch_records
+        """
+        try:
+            payload = {
+                "database": self.collection_name,
+                "codes": codes
+            }
+            
+            response = requests.post(
+                f"{self.server_url}/delete_batch_records",
+                json=payload,
+                timeout=60
+            )
+            response.raise_for_status()
+            return True
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"❌ Ошибка пакетного удаления: {str(e)}")
+            return False
+    
     def delete_record(self, code: str) -> bool:
         """
         Удаление записи через API
@@ -189,7 +239,8 @@ class QdrantUpdater:
         self, 
         records: List[Tuple[str, str]], 
         operation: str = "update",
-        existing_records: Dict[str, str] = None
+        existing_records: Dict[str, str] = None,
+        batch_size: int = 32
     ) -> Dict:
         """
         Батчевое обновление/удаление записей с детальным логированием
@@ -199,9 +250,7 @@ class QdrantUpdater:
                      или список кодов для удаления
             operation: "update" или "delete"
             existing_records: Словарь существующих записей (для логирования)
-            
-        Returns:
-            Dict: Статистика выполнения
+            batch_size: Размер пачки для отправки на сервер
         """
         stats = {
             "total": len(records),
@@ -210,70 +259,40 @@ class QdrantUpdater:
             "failed_codes": []
         }
         
-        desc = "🔄 Обновление записей" if operation == "update" else "🗑️ Удаление записей"
+        desc = "🔄 Обновление (Batch)" if operation == "update" else "🗑️ Удаление (Single)"
         
         # Заголовок перед началом операций
         logger.info("\n" + "=" * 80)
-        if operation == "update":
-            logger.info(f"🔄 НАЧАЛО ОБНОВЛЕНИЯ/ДОБАВЛЕНИЯ: {len(records)} записей")
-        else:
-            logger.info(f"🗑️ НАЧАЛО УДАЛЕНИЯ: {len(records)} записей")
+        logger.info(f"{desc}: {len(records)} записей, размер батча: {batch_size}")
         logger.info("=" * 80 + "\n")
         
-        for idx, item in enumerate(tqdm(records, desc=desc), 1):
+        # Разбиваем на чанки (батчи)
+        chunks = [records[i:i + batch_size] for i in range(0, len(records), batch_size)]
+        
+        for chunk in tqdm(chunks, desc=desc):
             if operation == "update":
-                code, description = item
-                
-                # Определяем тип операции (новая или обновление)
-                is_new = existing_records is None or code not in existing_records
-                
-                if is_new:
-                    logger.info(f"[{idx}/{len(records)}] ➕ ДОБАВЛЕНИЕ НОВОЙ ЗАПИСИ")
+                # Отправляем весь чанк одним запросом
+                if self.batch_update_api(chunk):
+                    stats["success"] += len(chunk)
                 else:
-                    logger.info(f"[{idx}/{len(records)}] 🔄 ОБНОВЛЕНИЕ СУЩЕСТВУЮЩЕЙ ЗАПИСИ")
-                
-                logger.info(f"   Код КСР: {code}")
-                logger.info(f"   Новое описание: {description}")
-                
-                # Если это обновление - показываем старое значение
-                if not is_new and existing_records:
-                    old_desc = existing_records.get(code, "")
-                    if old_desc != description:
-                        logger.info(f"   Старое описание: {old_desc}")
-                
-                success = self.update_record(code, description)
-                
+                    stats["failed"] += len(chunk)
+                    stats["failed_codes"].extend([r[0] for r in chunk])
             else:  # delete
-                code = item
-                description = existing_records.get(code, "") if existing_records else ""
-                
-                logger.info(f"[{idx}/{len(records)}] 🗑️ УДАЛЕНИЕ ЗАПИСИ")
-                logger.info(f"   Код КСР: {code}")
-                logger.info(f"   Удаляемое описание: {description}")
-                
-                success = self.delete_record(code)
-            
-            if success:
-                stats["success"] += 1
-                logger.info(f"   ✅ Статус: УСПЕШНО\n")
-            else:
-                stats["failed"] += 1
-                stats["failed_codes"].append(code if operation == "delete" else item[0])
-                logger.error(f"   ❌ Статус: ОШИБКА\n")
-            
-            # Небольшая задержка чтобы не перегрузить сервер
-            time.sleep(0.01)
+                # FIX: Используем пакетное удаление
+                if self.batch_delete_api(chunk):
+                    stats["success"] += len(chunk)
+                else:
+                    stats["failed"] += len(chunk)
+                    stats["failed_codes"].extend(chunk)
+            # Убрали time.sleep(0.01) - он не нужен
         
         # Итоговая статистика операций
         logger.info("=" * 80)
-        if operation == "update":
-            logger.info(f"✅ ЗАВЕРШЕНО ОБНОВЛЕНИЕ/ДОБАВЛЕНИЕ")
-        else:
-            logger.info(f"✅ ЗАВЕРШЕНО УДАЛЕНИЕ")
+        logger.info(f"✅ ЗАВЕРШЕНО")
         logger.info(f"   Успешно: {stats['success']}")
         logger.info(f"   Ошибок: {stats['failed']}")
         if stats['failed'] > 0:
-            logger.warning(f"   Коды с ошибками: {', '.join(stats['failed_codes'])}")
+            logger.warning(f"   Коды с ошибками (первые 10): {stats['failed_codes'][:10]}...")
         logger.info("=" * 80 + "\n")
         
         return stats
@@ -423,6 +442,43 @@ def analyze_changes(
     return new_records, updated_records, deleted_codes
 
 
+def update_config_timestamp(collection_name: str, project_root: Path):
+    """Обновление даты в конфигурационном файле"""
+    config_path = project_root / "src" / "vector_databases.json"
+    
+    try:
+        if config_path.exists():
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+            
+            if collection_name in config:
+                # Формат даты DD.MM.YYYY
+                current_date = datetime.now().strftime("%d.%m.%Y")
+                config[collection_name]['last_updated'] = current_date
+                
+                with open(config_path, 'w', encoding='utf-8') as f:
+                    json.dump(config, f, indent=2, ensure_ascii=False)
+                
+                logger.info(f"📅 Дата обновления ({current_date}) записана в конфиг")
+                return True
+            else:
+                logger.warning(f"⚠️ Коллекция {collection_name} не найдена в конфиге для обновления даты")
+    except Exception as e:
+        logger.error(f"❌ Не удалось обновить дату в конфиге: {e}")
+        return False
+
+def reload_server_config(server_url: str):
+    """Команда серверу перечитать конфиг"""
+    try:
+        response = requests.post(f"{server_url}/reload_config", timeout=5)
+        if response.status_code == 200:
+            logger.info("♻️ Конфигурация сервера успешно перезагружена")
+        else:
+            logger.warning(f"⚠️ Сервер не перезагрузил конфиг: {response.status_code}")
+    except Exception as e:
+        logger.warning(f"⚠️ Не удалось перезагрузить конфиг сервера: {e}")
+
+
 def main():
     """Основная функция скрипта"""
     
@@ -495,6 +551,12 @@ def main():
             logger.info("=" * 80)
             logger.info("📊 Коллекция полностью актуальна!")
             logger.info(f"⏱️ Время выполнения: {time.time() - start_time:.2f} сек")
+            
+            # === ОБНОВЛЕНИЕ ДАТЫ И ПЕРЕЗАГРУЗКА КОНФИГА ===
+            if not args.dry_run:
+                update_config_timestamp(args.collection, PROJECT_ROOT)
+                reload_server_config(args.server)
+                
             logger.info("=" * 80)
             return
         
@@ -544,6 +606,24 @@ def main():
             )
         
         if updated_records:
+            # === ДОКУМЕНТАЦИЯ ПРОБЛЕМЫ "ФАНТОМНЫХ ОБНОВЛЕНИЙ" ===
+            # Почему мы делаем delete перед update?
+            # Проблема: Если ID существующей записи в Qdrant (например, исторической)
+            # отличается от того, который генерирует скрипт (uuid5 от кода),
+            # то обычный upsert создаст дубликат, а старая запись останется.
+            # Скрипт будет видеть старую запись вечно и пытаться её обновить.
+            # Решение: Принудительное удаление по коду (delete_batch) гарантирует,
+            # что мы убираем старую версию с любым ID перед записью новой.
+            # ======================================================
+            logger.info(f"🧹 Предварительная очистка {len(updated_records)} записей для корректного обновления ID...")
+            codes_to_refresh = [r[0] for r in updated_records]
+            updater.batch_update(
+                codes_to_refresh, 
+                operation="delete",
+                existing_records=existing_records,
+                batch_size=50 # Можно чуть быстрее удалять
+            )
+
             stats_updated = updater.batch_update(
                 updated_records, 
                 operation="update",
@@ -596,6 +676,12 @@ def main():
         
         logger.info(f"⏱️ Время: {time.time() - start_time:.2f} сек")
         logger.info(f"📚 Коллекция '{args.collection}' обновлена")
+        
+        # === ОБНОВЛЕНИЕ ДАТЫ И ПЕРЕЗАГРУЗКА КОНФИГА ===
+        if not args.dry_run:
+            update_config_timestamp(args.collection, PROJECT_ROOT)
+            reload_server_config(args.server)
+            
         logger.info("=" * 80)
         
     except Exception as e:

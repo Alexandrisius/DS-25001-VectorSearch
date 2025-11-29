@@ -1,4 +1,24 @@
 # server.py - ВЕРСИЯ С QDRANT ВЕКТОРНОЙ БД
+"""
+Backend-сервер для семантического поиска по КСР (Классификатор Строительных Ресурсов).
+
+Основные функции:
+1.  **Векторный поиск (Stage 1)**: Использует Qdrant для быстрого поиска кандидатов по косинусному сходству.
+2.  **Переранжирование (Stage 2)**: Использует Cross-Encoder (BGE-M3) для точного ранжирования топ-кандидатов.
+3.  **Генерация эмбеддингов**: Использует локальную модель Qwen3-Embedding-4B.
+4.  **Управление данными**: API для обновления, удаления и добавления записей.
+5.  **Аналитика**: Сбор статистики использования (копирование, дизлайки).
+
+Архитектура:
+-   **FastAPI**: Асинхронный веб-фреймворк.
+-   **Qdrant**: Векторная база данных (Local mode).
+-   **Transformers/Sentence-Transformers**: ML-модели.
+-   **ThreadPoolExecutor**: Для выполнения тяжелых CPU-задач без блокировки Event Loop.
+
+Автор: Alexandr
+Дата обновления: 29.11.2025
+"""
+
 import asyncio
 import json
 import logging
@@ -23,6 +43,7 @@ from qdrant_client.models import (
     FieldCondition,
     Filter,
     MatchValue,
+    MatchAny,
     PointStruct,
     VectorParams,
 )
@@ -54,22 +75,43 @@ RERANKER_PATH = r"D:\hf_cache\bge-reranker-v2-m3"
 # === ОПТИМИЗАЦИЯ: Кэш для эмбеддингов ===
 class EmbeddingCache:
     """
-    Кэш для хранения сгенерированных эмбеддингов запросов
-
-    Особенности:
-    - Ключи нормализуются (приводятся к lowercase)
-    - LRU политика вытеснения при переполнении
-    - Потокобезопасность через asyncio.Lock
+    LRU-кэш (Least Recently Used) для хранения сгенерированных эмбеддингов запросов.
+    
+    Позволяет существенно ускорить обработку повторяющихся запросов, избегая 
+    повторного инференса тяжелой нейросети.
+    
+    Attributes:
+        cache (dict): Словарь хранения {текст: вектор}.
+        max_size (int): Максимальное количество элементов в кэше.
+        access_times (dict): Словарь времени последнего доступа для LRU-логики.
+        lock (asyncio.Lock): Асинхронный мьютекс для потокобезопасности.
     """
 
     def __init__(self, max_size=10000):
+        """
+        Инициализация кэша.
+
+        Args:
+            max_size (int): Лимит записей. По умолчанию 10000.
+        """
         self.cache = {}
         self.max_size = max_size
         self.access_times = {}
         self.lock = asyncio.Lock()
 
     async def get(self, text: str) -> Optional[np.ndarray]:
-        """Получение эмбеддинга из кэша (ключ всегда в нижнем регистре)"""
+        """
+        Получение эмбеддинга из кэша.
+        
+        Ключ автоматически нормализуется (lowercase + strip).
+        Обновляет время последнего доступа (LRU).
+
+        Args:
+            text (str): Текст запроса.
+
+        Returns:
+            Optional[np.ndarray]: Вектор эмбеддинга или None, если не найден.
+        """
         async with self.lock:
             key = text.lower().strip()  # Нормализация ключа
             if key in self.cache:
@@ -78,7 +120,15 @@ class EmbeddingCache:
             return None
 
     async def set(self, text: str, embedding: np.ndarray):
-        """Сохранение эмбеддинга в кэш (ключ всегда в нижнем регистре)"""
+        """
+        Сохранение эмбеддинга в кэш.
+        
+        Если кэш переполнен, удаляет наименее используемый элемент (LRU).
+
+        Args:
+            text (str): Текст запроса.
+            embedding (np.ndarray): Вектор эмбеддинга.
+        """
         async with self.lock:
             key = text.lower().strip()  # Нормализация ключа
             if len(self.cache) >= self.max_size:
@@ -99,25 +149,33 @@ class EmbeddingCache:
 # === МЕНЕДЖЕР ВЕКТОРНЫХ БАЗ НА ОСНОВЕ QDRANT ===
 class QdrantVectorDatabaseManager:
     """
-    Менеджер для работы с Qdrant векторными базами данных
+    Менеджер для управления векторными базами данных Qdrant и моделями ML.
 
-    Особенности:
-    - Поддержка нескольких коллекций одновременно
-    - Горячее переключение между коллекциями
-    - Горячая перезагрузка конфигурации без перезапуска
-    - Асинхронная работа с пулом потоков
-    - Кэширование метаданных коллекций
-    - Поиск с косинусным сходством
-    - Reranking результатов через CrossEncoder
-    - Встроенная генерация эмбеддингов (Qwen)
+    Этот класс инкапсулирует всю логику работы с данными:
+    1.  Инициализация и хранение подключения к Qdrant.
+    2.  Загрузка и инференс моделей (Embedding & Reranker).
+    3.  Управление конфигурациями коллекций (Hot Reload).
+    4.  Выполнение поисковых запросов и CRUD операций.
+
+    Attributes:
+        storage_path (str): Путь к локальному хранилищу Qdrant.
+        executor (ThreadPoolExecutor): Пул потоков для выполнения блокирующих операций.
+        device (str): Устройство вычислений ('cuda' или 'cpu').
+        client (QdrantClient): Клиент для взаимодействия с БД.
+        embedding_model (AutoModel): Загруженная модель трансформера.
+        tokenizer (AutoTokenizer): Токенизатор для модели.
+        collections_metadata (dict): Кэш метаданных активных коллекций.
     """
 
     def __init__(self, storage_path: str):
         """
-        Инициализация менеджера Qdrant баз данных
+        Инициализация менеджера.
+
+        Запускает пул потоков, определяет устройство (GPU/CPU),
+        подключается к Qdrant и загружает конфигурацию.
 
         Args:
-            storage_path: Путь к хранилищу Qdrant
+            storage_path (str): Абсолютный путь к директории с данными Qdrant.
         """
         self.storage_path = storage_path
         self.executor = ThreadPoolExecutor(max_workers=4)
@@ -156,7 +214,12 @@ class QdrantVectorDatabaseManager:
         self.embedding_cache = EmbeddingCache(max_size=15000)
 
     def _init_embedding_model(self):
-        """Инициализация локальной модели эмбеддингов Qwen3"""
+        """
+        Загрузка модели эмбеддингов (Qwen) в память.
+        
+        Использует библиотеку `transformers`. Модель загружается в режиме `eval` (inference only).
+        Если доступна CUDA, используется FP16 для экономии видеопамяти и ускорения.
+        """
         logger.info(f"📥 Загрузка модели эмбеддингов: {QWEN_MODEL_PATH}")
         
         self.tokenizer = AutoTokenizer.from_pretrained(
@@ -173,6 +236,65 @@ class QdrantVectorDatabaseManager:
         if self.device == "cuda":
             torch.cuda.empty_cache()
         logger.info("✅ Модель эмбеддингов загружена")
+
+    def get_embeddings_batch(self, texts: List[str], batch_size: int = 8) -> np.ndarray:
+        """
+        Генерация эмбеддингов для списка текстов (Batch Inference).
+
+        Оптимизирована для GPU: обрабатывает данные пакетами (batch_size),
+        чтобы эффективно использовать параллелизм CUDA ядер.
+        
+        Args:
+            texts (List[str]): Список исходных текстов.
+            batch_size (int): Размер пакета (default: 8).
+            
+        Returns:
+            np.ndarray: Массив векторов размерности (N, D), где N - кол-во текстов, D - размерность модели.
+        """
+        all_embeddings = []
+        
+        # Разбиваем на мини-батчи
+        for i in range(0, len(texts), batch_size):
+            batch_texts = texts[i : i + batch_size]
+            # Нормализация
+            batch_texts = [t.lower().strip() for t in batch_texts]
+            
+            try:
+                inputs = self.tokenizer(
+                    batch_texts,
+                    max_length=1024,
+                    padding=True,
+                    truncation=True,
+                    return_tensors="pt",
+                ).to(self.device)
+                
+                with torch.no_grad():
+                    outputs = self.embedding_model(**inputs)
+                    
+                last_hidden_state = outputs.last_hidden_state
+                attention_mask = inputs["attention_mask"]
+                
+                # Last token pooling logic
+                left_padding = attention_mask[:, -1].sum() == attention_mask.shape[0]
+                if left_padding:
+                    embeddings = last_hidden_state[:, -1]
+                else:
+                    sequence_lengths = attention_mask.sum(dim=1) - 1
+                    batch_indices = torch.arange(last_hidden_state.shape[0], device=last_hidden_state.device)
+                    embeddings = last_hidden_state[batch_indices, sequence_lengths]
+                    
+                embeddings = torch.nn.functional.normalize(embeddings, p=2, dim=1)
+                all_embeddings.append(embeddings.cpu().numpy().astype(np.float32))
+                
+            except Exception as e:
+                logger.error(f"Ошибка в батче эмбеддингов: {e}")
+                # Fallback: пустые векторы или повторная попытка по одному
+                raise e
+                
+        if not all_embeddings:
+            return np.array([])
+            
+        return np.vstack(all_embeddings)
 
     def _get_embedding_sync(self, text: str) -> np.ndarray:
         """Синхронное получение эмбеддинга через локальную модель"""
@@ -330,7 +452,8 @@ class QdrantVectorDatabaseManager:
                         ),
                         "record_count": collection_info.points_count,
                         "dimension": collection_info.config.params.vectors.size,
-                        "last_updated": time.strftime("%Y-%m-%d %H:%M:%S"),
+                        # ИЗМЕНЕНО: Читаем дату из конфига, если её нет - пустая строка
+                        "last_updated": db_config.get("last_updated", ""),
                     }
 
                     logger.info(
@@ -479,15 +602,21 @@ class QdrantVectorDatabaseManager:
         collection_name: Optional[str] = None,
     ) -> List[Dict]:
         """
-        Поиск похожих векторов в указанной коллекции
+        Выполнение поиска ближайших соседей (ANN) в Qdrant.
+
+        Этот метод выполняется асинхронно, делегируя блокирующий вызов клиента Qdrant
+        в пул потоков (`executor`), чтобы не блокировать Event Loop FastAPI.
 
         Args:
-            query_embedding: Вектор запроса
-            top_k: Количество результатов
-            collection_name: Название коллекции (если None - текущая)
+            query_embedding (List[float]): Вектор запроса.
+            top_k (int): Максимальное количество кандидатов.
+            collection_name (Optional[str]): Имя коллекции (если None, используется активная).
 
         Returns:
-            List[Dict]: Список найденных результатов с метаданными
+            List[Dict]: Список найденных записей с метаданными и оценкой сходства (score).
+        
+        Raises:
+            ValueError: Если коллекция не найдена или не выбрана.
         """
         collection = collection_name or self.current_collection
 
@@ -693,6 +822,65 @@ class QdrantVectorDatabaseManager:
 
         return True
 
+    def update_records_batch(
+        self,
+        records: List[Dict[str, str]], # List of {code, description}
+        collection_name: Optional[str] = None
+    ) -> int:
+        """
+        Массовое обновление записей с генерацией векторов
+        """
+        collection = collection_name or self.current_collection
+        if not collection or collection not in self.collections_metadata:
+            return 0
+            
+        if not records:
+            return 0
+            
+        columns = self.collections_metadata[collection]["columns"]
+        
+        # 1. Подготовка текстов
+        texts = [r["description"] for r in records]
+        codes = [r["code"] for r in records]
+        
+        # 2. Генерация векторов (батчевая)
+        embeddings = self.get_embeddings_batch(texts, batch_size=8)
+        
+        # 3. Подготовка точек для Qdrant
+        points = []
+        timestamp = time.time()
+        
+        for code, desc, emb in zip(codes, texts, embeddings):
+            # Генерируем ID (UUID5 от кода) для детерминизма
+            point_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, code))
+            
+            payload = {
+                columns["code"]: code,
+                columns["description"]: desc,
+                "timestamp": timestamp,
+                "source": "batch_update"
+            }
+            
+            points.append(PointStruct(
+                id=point_id,
+                vector=emb.tolist(),
+                payload=payload
+            ))
+            
+        # 4. Upsert в Qdrant (одним запросом)
+        self.client.upsert(
+            collection_name=collection,
+            points=points
+        )
+        
+        # Обновляем счетчик
+        try:
+             self.collections_metadata[collection]["record_count"] = self.client.get_collection(collection).points_count
+        except:
+             pass
+        
+        return len(points)
+
     def delete_record(self, code: str, collection_name: Optional[str] = None) -> bool:
         """
         Удаление записи по коду
@@ -727,6 +915,41 @@ class QdrantVectorDatabaseManager:
 
         logger.info(f"🗑️ Удалена запись: {code}")
         return True
+
+    def delete_batch_by_codes(self, codes: List[str], collection_name: Optional[str] = None) -> int:
+        """
+        Пакетное удаление записей по списку кодов
+        """
+        collection = collection_name or self.current_collection
+        if not collection or collection not in self.collections_metadata:
+            return 0
+            
+        if not codes:
+            return 0
+            
+        columns = self.collections_metadata[collection]["columns"]
+        code_field = columns["code"]
+        
+        # Удаляем через фильтр MatchAny
+        self.client.delete(
+            collection_name=collection,
+            points_selector=Filter(
+                must=[
+                    FieldCondition(
+                        key=code_field,
+                        match=MatchAny(any=codes)
+                    )
+                ]
+            )
+        )
+        
+        # Обновляем счетчик
+        try:
+             self.collections_metadata[collection]["record_count"] = self.client.get_collection(collection).points_count
+        except:
+             pass
+             
+        return len(codes)
 
     def get_collection_stats(self, collection_name: Optional[str] = None) -> Dict:
         """
@@ -852,6 +1075,18 @@ class UpdateRequest(BaseModel):
     database: Optional[str] = None
 
 
+class BatchUpdateRequest(BaseModel):
+    """Запрос на пакетное обновление записей"""
+    records: List[UpdateRequest]
+    database: Optional[str] = None
+
+
+class BatchDeleteRequest(BaseModel):
+    """Запрос на пакетное удаление записей"""
+    codes: List[str]
+    database: Optional[str] = None
+
+
 class CopyEvent(BaseModel):
     """События копирования кода (для аналитики)"""
 
@@ -936,7 +1171,8 @@ async def get_databases():
                     "thresholds": meta.get(
                         "thresholds", {"cosine": 0.45, "rerank": 0.6}
                     ),
-                }
+                    "last_updated": meta.get("last_updated", ""),
+            }
             )
 
         return {
@@ -973,7 +1209,26 @@ async def clear_cache():
 
 @app.post("/match", response_model=MatchResponse)
 async def match_ksr(request: MatchRequest):
-    """Основной эндпоинт поиска похожих записей"""
+    """
+    Основной эндпоинт поиска (Stage 1 Retrieval + Stage 2 Reranking).
+
+    Алгоритм работы:
+    1.  **Проверка**: Валидация входного текста и выбор коллекции.
+    2.  **Embedding**: Генерация вектора для текста запроса (с кэшированием).
+    3.  **Retrieval**: Поиск топ-1500 кандидатов в Qdrant по косинусному сходству.
+    4.  **Reranking**:
+        *   Отбираются топ-200 кандидатов.
+        *   Cross-Encoder (BGE-M3) оценивает релевантность каждой пары (запрос, кандидат).
+        *   Фильтрация по порогу (`rerank_threshold`).
+    5.  **Fallback**: Если после фильтрации пусто, возвращаются лучшие кандидаты по скору (даже низкому), чтобы не отдавать пустой список.
+    6.  **Ответ**: Возврат списка отсортированных кандидатов и метрик времени.
+
+    Args:
+        request (MatchRequest): JSON с текстом запроса и именем базы.
+
+    Returns:
+        MatchResponse: Структурированный ответ с кандидатами.
+    """
     start_time = time.time()
     query_text = request.text.strip()
 
@@ -1287,6 +1542,64 @@ async def update_ksr_record(request: UpdateRequest):
 
     except Exception as e:
         logger.error(f"❌ Ошибка обновления записи: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/update_batch_records")
+async def update_ksr_batch(request: BatchUpdateRequest):
+    """
+    Пакетное обновление записей (Быстрое)
+    """
+    try:
+        collection_name = request.database or db_manager.current_collection
+        
+        # Преобразуем Pydantic модели в словари
+        records_data = [{"code": r.code, "description": r.description} for r in request.records]
+        
+        logger.info(f"🔄 Получен батч на обновление: {len(records_data)} записей")
+        start_time = time.time()
+        
+        # Выполняем обновление в пуле потоков (т.к. модель блокирующая)
+        loop = asyncio.get_event_loop()
+        count = await loop.run_in_executor(
+            db_manager.executor,
+            lambda: db_manager.update_records_batch(records_data, collection_name)
+        )
+        
+        elapsed = time.time() - start_time
+        logger.info(f"✅ Батч обработан за {elapsed:.2f}с ({count} записей)")
+        
+        return {
+            "status": "success", 
+            "processed": count, 
+            "time": elapsed,
+            "database": collection_name
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Ошибка пакетного обновления: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/delete_batch_records")
+async def delete_ksr_batch(request: BatchDeleteRequest):
+    """Пакетное удаление записей по кодам"""
+    try:
+        collection_name = request.database or db_manager.current_collection
+        
+        deleted_count = db_manager.delete_batch_by_codes(
+            codes=request.codes, 
+            collection_name=collection_name
+        )
+        
+        return {
+            "status": "success",
+            "message": f"Удалено {deleted_count} записей из '{collection_name}'",
+            "deleted_count": deleted_count
+        }
+
+    except Exception as e:
+        logger.error(f"❌ Ошибка пакетного удаления: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

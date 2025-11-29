@@ -1,9 +1,25 @@
+# 01_clean_raw.py
+"""
+Скрипт первичной очистки и нормализации данных из Excel.
+
+Этап 1 в ETL-пайплайне.
+Преобразует исходные "грязные" Excel-файлы в чистый CSV формат, пригодный для векторизации.
+
+Основные задачи:
+1.  Удаление технических префиксов ("Раздел X", "Группа Y").
+2.  Формирование полного иерархического пути (`full_path`) для каждого ресурса.
+3.  Валидация данных (проверка на пустые значения).
+
+Вход: data/01_raw/*.xlsx
+Выход: data/02_interim/KSR_clean.csv
+"""
+
 import pandas as pd
 import re
 from pathlib import Path
 
 # ─── Конфигурация ───────────────────────────────────────────────
-RAW_PATH = Path("data/01_raw/KSR_17.04.2025.xlsx")
+RAW_PATH = Path("data/01_raw/KSR_28.11.2025.xlsx")
 INTERIM_PATH = Path("data/02_interim/KSR_clean.csv")
 
 # ─── Функция очистки (ваша, без изменений) ─────────────────────
@@ -21,6 +37,22 @@ def prepare_texts(
     encoding="utf-8",
     sep=";",
 ) -> pd.DataFrame:
+    """
+    Основная функция процессинга Excel -> CSV.
+
+    Args:
+        raw_excel_path (Path): Путь к исходному Excel файлу.
+        output_csv_path (Path): Путь для сохранения результата.
+        sheet_name (int/str): Индекс или имя листа в Excel.
+        encoding (str): Кодировка выходного файла.
+        sep (str): Разделитель CSV.
+
+    Returns:
+        pd.DataFrame: Очищенный датафрейм.
+    
+    Raises:
+        KeyError: Если в Excel нет обязательных колонок.
+    """
     print("📥 Загрузка Excel...")
     df = pd.read_excel(
         raw_excel_path,

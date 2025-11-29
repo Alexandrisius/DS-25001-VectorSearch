@@ -31,11 +31,20 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // --- THEME TOGGLE LOGIC (ТЁМНАЯ ПО УМОЛЧАНИЮ) ---
 
+    /**
+     * Инициализация темы при загрузке страницы.
+     * Читает сохраненную тему из localStorage или устанавливает 'dark' по умолчанию.
+     */
     function initTheme() {
         const savedTheme = localStorage.getItem('theme') || 'dark'; // ИЗМЕНЕНО: по умолчанию dark
         setTheme(savedTheme);
     }
 
+    /**
+     * Применение темы интерфейса.
+     * Обновляет CSS-переменные через атрибут data-theme и меняет иконку кнопки.
+     * @param {string} theme - 'dark' или 'light'
+     */
     function setTheme(theme) {
         document.documentElement.setAttribute('data-theme', theme);
         localStorage.setItem('theme', theme);
@@ -70,6 +79,10 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     });
 
+    /**
+     * Инициализация кастомного выпадающего списка для выбора базы данных.
+     * Преобразует стандартный <select> в стилизованный div-компонент.
+     */
     function initCustomSelect() {
         customOptionsContainer.innerHTML = '';
 
@@ -197,6 +210,10 @@ document.addEventListener('DOMContentLoaded', function () {
         return `<div class="progress-bg"><div class="progress-fill" style="width:${pct}%"></div></div>`;
     }
 
+    /**
+     * Загрузка списка доступных баз данных с сервера.
+     * Выполняет GET /databases и инициализирует UI компоненты выбора базы.
+     */
     async function loadAvailableDatabases() {
         try {
             const res = await fetch('/databases');
@@ -221,14 +238,23 @@ document.addEventListener('DOMContentLoaded', function () {
         } catch (e) { console.error(e); }
     }
 
+    /**
+     * Отрисовка карточек выбора базы данных под полем ввода.
+     * Отображает название, количество записей и дату последнего обновления.
+     */
     function renderDbCards() {
         let html = '';
         databases.forEach(db => {
             const active = db.name === currentDatabase ? 'active' : '';
+            const dateHtml = db.last_updated 
+                ? `<div class="db-card-date">Обновлено: ${db.last_updated}</div>` 
+                : '';
+
             html += `
                         <div class="db-card ${active}" data-name="${db.name}">
                             <div class="db-card-name">${db.description.split('(')[0]}</div>
                             <div class="db-card-desc">${db.record_count.toLocaleString()} записей</div>
+                            ${dateHtml}
                         </div>`;
         });
         databaseOptions.innerHTML = html;
@@ -257,6 +283,11 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
+    /**
+     * Выполнение поискового запроса.
+     * Отправляет POST /match и обрабатывает результат.
+     * Управляет состоянием загрузки UI (спиннеры, блокировка кнопок).
+     */
     async function performSearch() {
         const q = queryInput.value.trim();
         if (!q) return;
@@ -342,6 +373,12 @@ document.addEventListener('DOMContentLoaded', function () {
         resultsBody.innerHTML = html;
     }
 
+    /**
+     * Отправка аналитических событий на сервер.
+     * Используется для трекинга качества поиска (копирование = успех, дизлайк = неудача).
+     * @param {string} type - Тип события ('copy' или 'dislike').
+     * @param {object} payload - Данные о выбранном результате.
+     */
     function sendAnalytics(type, payload) {
         if (type === 'copy') {
             const copyData = {

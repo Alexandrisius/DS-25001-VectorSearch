@@ -18,6 +18,7 @@
 4. [Компонент: ETL Pipelines (scripts/)](#4-компонент-etl-pipelines-scripts)
     - [01_clean_raw.py](#01_clean_rawpy)
     - [02_create_qdrant_collection.py](#02_create_qdrant_collectionpy)
+    - [03_update_qdrant_collection.py](#03_update_qdrant_collectionpy)
 5. [Компонент: Frontend (web/)](#5-компонент-frontend-web)
     - [Структура UI](#структура-ui)
     - [Логика (app.js)](#логика-appjs)
@@ -148,6 +149,15 @@ In-memory LRU-кэш для эмбеддингов запросов. Позво�
     *   Использует API сервера: `POST /create_collection` -> `POST /upload_batch`.
     *   В конце обновляет локальный `vector_databases.json` и дергает `POST /reload_config`.
 
+### `03_update_qdrant_collection.py`
+Скрипт "умного" инкрементального обновления (Hot Update).
+*   **Назначение**: Обновление данных без простоя сервиса и полной перегенерации базы.
+*   **Логика**:
+    1.  Сравнивает новые данные (CSV) с текущими данными в Qdrant (через API).
+    2.  Выявляет изменения (новые, измененные, удаленные записи).
+    3.  Применяет изменения точечно через API (`upsert`, `delete`).
+    4.  **Timestamp**: После успешного обновления проставляет текущую дату (`last_updated`) в конфиг и перезагружает сервер.
+
 ---
 
 ## 5. Компонент: Frontend (`web/`)
@@ -157,6 +167,7 @@ In-memory LRU-кэш для эмбеддингов запросов. Позво�
 ### Структура UI (`index.html`)
 *   **Header**: Выбор темы (Dark/Light), логотип.
 *   **Search Area**: Крупное поле ввода, кнопка поиска, выбор базы данных (Custom Dropdown).
+    *   Карточки баз данных отображают дату последнего обновления (dd.mm.yyyy).
 *   **Results Table**: Таблица с колонками:
     *   Ранг (Rank)
     *   Код КСР (с кнопкой копирования)
@@ -198,7 +209,8 @@ In-memory LRU-кэш для эмбеддингов запросов. Позво�
       "rerank": 0.6    // Порог для второго этапа (BGE)
     },
     "record_count": 121000,
-    "dimension": 1024
+    "dimension": 1024,
+    "last_updated": "29.11.2025" // Дата последнего обновления (автоматически)
   }
 }
 ```

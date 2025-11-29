@@ -64,21 +64,22 @@ MAX_LENGTH = 1024  # Максимальная длина токенизиров�
 
 class EmbeddingGenerator:
     """
-    Генератор эмбеддингов с использованием модели Qwen3-4B
+    Генератор эмбеддингов с использованием модели Qwen3-4B.
     
-    Особенности:
-    - Батчевая обработка для ускорения
-    - Нормализация текста (lowercase)
-    - L2 нормализация векторов для косинусного сходства
-    - Поддержка CUDA
+    Обертка над HuggingFace Transformers для удобной батчевой генерации.
+    
+    Attributes:
+        device (str): 'cuda' или 'cpu'.
+        tokenizer (AutoTokenizer): Токенизатор модели.
+        model (AutoModel): Сама модель (загружена в FP16 если GPU).
     """
     
     def __init__(self, model_path: str):
         """
-        Инициализация генератора эмбеддингов
+        Инициализация генератора.
         
         Args:
-            model_path: Путь к модели Qwen3-Embedding-4B
+            model_path: Путь к директории с моделью (локальный или HF Hub).
         """
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         logger.info(f"🧠 Устройство для вычислений: {self.device}")
@@ -108,13 +109,19 @@ class EmbeddingGenerator:
     
     def generate_batch(self, texts: List[str]) -> np.ndarray:
         """
-        Генерация эмбеддингов для батча текстов
+        Генерация эмбеддингов для одного батча текстов.
         
+        1. Нормализация (lowercase).
+        2. Токенизация (padding/truncation).
+        3. Инференс модели.
+        4. Last Token Pooling (специфика Qwen).
+        5. L2-нормализация.
+
         Args:
-            texts: Список текстов для обработки
+            texts: Список текстов для обработки.
             
         Returns:
-            np.ndarray: Массив эмбеддингов (N x dimension)
+            np.ndarray: Массив эмбеддингов (N x dimension), float32.
         """
         # Нормализация текстов (приводим к lowercase)
         normalized_texts = [text.lower().strip() for text in texts]
@@ -157,14 +164,17 @@ class EmbeddingGenerator:
     
     def generate_all(self, texts: List[str], batch_size: int = BATCH_SIZE) -> np.ndarray:
         """
-        Генерация эмбеддингов для всех текстов с прогресс-баром
+        Генерация эмбеддингов для полного списка текстов.
+        
+        Использует `tqdm` для отображения прогресса.
+        Автоматически очищает кэш CUDA каждые 10 батчей для предотвращения OOM.
         
         Args:
-            texts: Список текстов
-            batch_size: Размер батча для обработки
+            texts: Полный список текстов.
+            batch_size: Размер батча.
             
         Returns:
-            np.ndarray: Массив всех эмбеддингов
+            np.ndarray: Вертикально объединенный массив всех векторов.
         """
         all_embeddings = []
         
