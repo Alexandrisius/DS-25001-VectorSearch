@@ -67,25 +67,29 @@
             transition: background-color 0.3s ease, color 0.3s ease;
         }
 
-        .container {
-            max-width: 1600px;
-            margin: 0 auto;
-            position: relative;
-        }
+        /* .container перемещен ниже к настройкам layout */
 
         /* --- Header --- */
         header {
             text-align: center;
-            margin-bottom: 30px;
-            padding-top: 10px;
+            /* Возвращаем auto высоту, чтобы контент не обрезался */
+            height: auto;
+            min-height: 100px;
+            margin-bottom: 35px;
+            padding-top: 15px;
+            padding-bottom: 10px;
             position: relative;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
         }
 
         h1 {
             color: var(--text-main);
             font-size: 2.2rem;
             font-weight: 800;
-            margin-bottom: 8px;
+            margin-bottom: 4px;
+            line-height: 1.2;
             background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
@@ -96,60 +100,48 @@
             font-size: 1rem;
             max-width: 500px;
             margin: 0 auto;
+            line-height: 1.4;
         }
-
+        
         /* --- Header Controls --- */
         .header-controls {
             position: absolute;
-            top: 10px;
-            right: 10px;
+            top: 20px; /* Центрируем относительно высоты хедера */
+            right: 20px;
             display: flex;
             gap: 10px;
             z-index: 100;
         }
 
-        /* --- Admin Sidebar Button (Большая боковая кнопка) --- */
-        .admin-sidebar-btn {
-            position: fixed;
-            left: 0;
-            top: 50%;
-            transform: translateY(-50%);
-            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
-            color: white;
-            padding: 20px 16px;
-            border-radius: 0 16px 16px 0;
-            text-decoration: none;
+        /* --- Кнопка админки (компактная шестерёнка в header) --- */
+        .admin-header-btn {
+            background: var(--surface);
+            border: 2px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 8px 12px;
+            cursor: pointer;
             display: flex;
-            flex-direction: column;
             align-items: center;
-            gap: 12px;
-            font-size: 0.85rem;
-            font-weight: 700;
-            box-shadow: 4px 0 20px rgba(99, 102, 241, 0.4);
+            justify-content: center;
+            box-shadow: var(--shadow-card);
             transition: all 0.3s ease;
-            z-index: 1000;
-            writing-mode: vertical-rl;
-            text-orientation: mixed;
+            text-decoration: none;
+            color: var(--text-secondary);
         }
-        .admin-sidebar-btn i {
-            font-size: 1.5rem;
-            writing-mode: horizontal-tb;
-            animation: spin-slow 8s linear infinite;
+        
+        .admin-header-btn:hover {
+            border-color: var(--primary);
+            transform: scale(1.05);
+            color: var(--primary);
         }
-        @keyframes spin-slow {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
+        
+        .admin-header-btn i {
+            font-size: 1.1rem;
+            transition: transform 0.3s ease;
         }
-        .admin-sidebar-btn span {
-            letter-spacing: 2px;
-            text-transform: uppercase;
-        }
-        .admin-sidebar-btn:hover {
-            padding-left: 22px;
-            box-shadow: 8px 0 30px rgba(99, 102, 241, 0.5);
-        }
-        .admin-sidebar-btn:hover i {
-            animation-duration: 2s;
+        
+        .admin-header-btn:hover i {
+            transform: rotate(90deg);
         }
 
         /* --- Переключатель темы --- */
@@ -624,31 +616,43 @@
             .container {
                 width: 100%;
             }
-
-            .admin-sidebar-btn {
-                top: auto;
-                bottom: 20px;
-                left: 20px;
-                transform: none;
-                border-radius: 14px;
-                writing-mode: horizontal-tb;
-                flex-direction: row;
-                padding: 14px 20px;
+            
+            /* Основной layout на мобильной - column, 100% ширины */
+            .app-layout {
+                flex-direction: column;
+                width: 100%;
             }
-            .admin-sidebar-btn i {
-                animation: none;
+            
+            .app-main {
+                width: 100%;
+                flex: none;
             }
-            .admin-sidebar-btn span {
-                writing-mode: horizontal-tb;
-                text-transform: none;
-                letter-spacing: normal;
+            
+            /* Основные карточки на мобильной - 100% ширины */
+            .main-card {
+                width: 100%;
             }
-
-            .theme-toggle {
+            
+            /* Header controls в мобильной версии - только тема справа */
+            .header-controls {
                 position: fixed;
                 top: 15px;
                 right: 15px;
                 z-index: 1000;
+                gap: 0;
+            }
+            
+            /* Кнопка админки в мобильной версии - слева от заголовка */
+            .admin-header-btn {
+                position: fixed !important;
+                top: 15px !important;
+                left: 15px !important;
+                right: auto !important;
+                z-index: 1000;
+                padding: 10px;
+            }
+
+            .theme-toggle {
                 padding: 10px;
             }
 
@@ -766,6 +770,978 @@
 
             .app-status-bar {
                 text-align: center;
+            }
+        }
+
+        /* ============================================
+           ИЕРАРХИЧЕСКИЙ КАТАЛОГ - SIDEBAR & TREE VIEW
+           ============================================ */
+
+        /* --- Main Layout with Sidebar --- */
+        :root {
+            --sidebar-width: 500px;
+            --sidebar-collapsed-width: 70px;
+            --container-max-width: 1600px;
+            --sidebar-gap: 30px;
+            
+            /* Высота шапки сайта: увеличена для гарантированного отступа */
+            --header-height: 155px;
+        }
+        
+        .container {
+            max-width: var(--container-max-width);
+            margin: 0 auto;
+            position: relative;
+        }
+        
+        .app-layout {
+            display: flex;
+            align-items: flex-start;
+            position: relative;
+        }
+
+        .app-main {
+            flex: 1;
+            min-width: 0;
+            transition: margin-left 0.3s ease;
+            
+            /* 
+             * СТРАТЕГИЯ СДВИГА (PUSH):
+             * По умолчанию (на экранах ноутбуков) делаем полный сдвиг,
+             * чтобы Sidebar гарантированно не перекрывал контент.
+             */
+            margin-left: var(--sidebar-width);
+        }
+        
+        /* На широких мониторах включаем "умный сдвиг" (Smart Overlay) */
+        @media (min-width: 1700px) {
+            .app-main {
+                /* 
+                 * Вычисляем, насколько Sidebar реально перекрывает контент.
+                 * Если слева есть пустое место (из-за margin: auto у контейнера),
+                 * то мы вычитаем его из ширины Sidebar.
+                 */
+                margin-left: max(0px, var(--sidebar-width) + var(--sidebar-gap) - (100vw - var(--container-max-width)) / 2);
+            }
+        }
+        
+        /* Когда sidebar свёрнут */
+        .app-layout.sidebar-collapsed .app-main {
+            margin-left: var(--sidebar-collapsed-width);
+        }
+        
+        @media (min-width: 1700px) {
+            .app-layout.sidebar-collapsed .app-main {
+                margin-left: max(0px, var(--sidebar-collapsed-width) + var(--sidebar-gap) - (100vw - var(--container-max-width)) / 2);
+            }
+        }
+
+        /* --- Catalog Sidebar (Fixed Left, Resizable) --- */
+        .catalog-sidebar {
+            width: var(--sidebar-width);
+            min-width: 350px;
+            max-width: 800px;
+            background: var(--surface);
+            border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+            border: 2px solid var(--border);
+            border-left: none;
+            box-shadow: var(--shadow-float);
+            position: fixed;
+            left: 0;
+            /* Используем переменную для точного позиционирования под шапкой */
+            top: var(--header-height);
+            height: calc(100vh - var(--header-height) - 20px);
+            display: flex;
+            flex-direction: column;
+            transition: width 0.2s ease, transform 0.3s ease;
+            z-index: 900;
+            overflow: hidden;
+        }
+
+        /* Резайзер для изменения ширины */
+        .sidebar-resizer {
+            position: absolute;
+            right: 0;
+            top: 0;
+            width: 6px;
+            height: 100%;
+            cursor: ew-resize;
+            background: transparent;
+            transition: background 0.2s;
+            z-index: 10;
+        }
+        
+        .sidebar-resizer:hover,
+        .sidebar-resizer.active {
+            background: var(--primary);
+        }
+
+        /* Свёрнутое состояние */
+        .catalog-sidebar.collapsed {
+            width: 70px !important;
+            min-width: 70px;
+            border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+        }
+
+        .catalog-sidebar.collapsed .sidebar-content,
+        .catalog-sidebar.collapsed .sidebar-footer,
+        .catalog-sidebar.collapsed .breadcrumbs,
+        .catalog-sidebar.collapsed .sidebar-resizer {
+            display: none;
+        }
+        
+        .catalog-sidebar.collapsed .sidebar-header {
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            padding: 16px 10px;
+            gap: 20px;
+            height: auto;
+        }
+        
+        .catalog-sidebar.collapsed .sidebar-title {
+            flex-direction: column;
+            writing-mode: vertical-rl;
+            text-orientation: mixed;
+            gap: 8px;
+        }
+        
+        .catalog-sidebar.collapsed .sidebar-title i {
+            font-size: 1.2rem;
+            writing-mode: horizontal-tb;
+        }
+        
+        .catalog-sidebar.collapsed .sidebar-title span {
+            font-size: 0.75rem;
+            letter-spacing: 1px;
+        }
+        
+        .catalog-sidebar.collapsed .sidebar-toggle-btn {
+            writing-mode: horizontal-tb;
+            margin-top: 0;
+            padding: 8px;
+        }
+        
+        .catalog-sidebar.collapsed .sidebar-toggle-btn .toggle-text {
+            display: none;
+        }
+
+        /* Отступ основного контента зависит от состояния sidebar */
+        /* (переопределяется в media queries для мобильных) */
+
+        /* --- Sidebar Header --- */
+        .sidebar-header {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            background: var(--surface);
+        }
+
+        .sidebar-title {
+            font-weight: 600;
+            font-size: 0.95rem;
+            color: var(--text-main);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .sidebar-title i {
+            color: var(--text-secondary);
+            font-size: 1rem;
+        }
+
+        .sidebar-toggle-btn {
+            background: var(--bg-body);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            cursor: pointer;
+            padding: 6px 10px;
+            border-radius: 6px;
+            transition: all 0.2s;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-weight: 500;
+            font-size: 0.75rem;
+        }
+
+        .sidebar-toggle-btn:hover {
+            background: var(--border);
+            color: var(--text-main);
+        }
+        
+        .sidebar-toggle-btn i {
+            font-size: 0.85rem;
+        }
+
+        /* --- Breadcrumbs - СКРЫТЫ --- */
+        .breadcrumbs {
+            display: none !important;
+        }
+
+        .breadcrumb-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .breadcrumb-link {
+            color: var(--primary);
+            cursor: pointer;
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+
+        .breadcrumb-link:hover {
+            color: var(--primary-dark);
+            text-decoration: underline;
+        }
+
+        .breadcrumb-separator {
+            color: var(--text-secondary);
+            opacity: 0.5;
+        }
+
+        .breadcrumb-current {
+            color: var(--text-main);
+            font-weight: 600;
+        }
+
+        .breadcrumb-clear {
+            margin-left: auto;
+            background: none;
+            border: none;
+            color: var(--danger);
+            cursor: pointer;
+            font-size: 0.75rem;
+            padding: 4px 8px;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+
+        .breadcrumb-clear:hover {
+            background: var(--danger-bg);
+        }
+
+        /* --- Sidebar Content --- */
+        .sidebar-content {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden; /* Скрываем горизонтальный скролл */
+            padding: 0 0 10px 0; /* Убран верхний padding - sticky прижат к поиску */
+            position: relative; /* Для позиционирования sticky элемента */
+        }
+        
+        /* --- Sticky Category Header (закреплённый заголовок категории) --- */
+        .sticky-category-header {
+            position: sticky;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 100; /* Поверх всего контента дерева */
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            color: white;
+            padding: 10px 14px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
+            border-radius: 0; /* Без скругления - прижат к краям */
+            margin: 0; /* Без отступов - прижат к поиску */
+            margin-bottom: 8px; /* Только отступ снизу от контента */
+            /* Анимация появления */
+            animation: sticky-slide-down 0.2s ease-out;
+        }
+        
+        @keyframes sticky-slide-down {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .sticky-category-header i {
+            color: #fbbf24; /* Жёлтая иконка папки */
+            font-size: 0.9rem;
+        }
+        
+        .sticky-category-header span {
+            flex: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        /* Скрытый sticky header */
+        .sticky-category-header.hidden {
+            display: none !important;
+        }
+        
+        /* Тёмная тема - немного другой градиент */
+        [data-theme="dark"] .sticky-category-header {
+            background: linear-gradient(135deg, var(--primary-dark) 0%, #4338ca 100%);
+            box-shadow: 0 3px 15px rgba(0, 0, 0, 0.4);
+        }
+
+        /* --- Tree View --- */
+        .tree-view {
+            padding: 10px 10px 0 10px; /* Верхний отступ для контента */
+        }
+
+        .tree-loading {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--text-secondary);
+        }
+
+        .tree-loading i {
+            font-size: 2rem;
+            margin-bottom: 10px;
+            opacity: 0.5;
+        }
+
+        .tree-empty {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        /* --- Tree Node --- */
+        .tree-node {
+            margin: 2px 0;
+        }
+
+        .tree-node-header {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 10px;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            transition: all 0.15s ease;
+            user-select: none;
+            position: relative;
+        }
+
+        .tree-node-header:hover {
+            background: var(--bg-body);
+        }
+        
+        /* Выбранный узел (через Ctrl+клик) - фильтр */
+        .tree-node-header.multi-selected {
+            background: rgba(99, 102, 241, 0.15);
+            border-left: 3px solid var(--primary);
+        }
+        
+        .tree-node-header.multi-selected .tree-node-name {
+            color: var(--primary);
+        }
+        
+        /* Временная подсветка при переходе к категории из поиска */
+        .tree-node-header.highlight-pulse {
+            animation: highlight-pulse-anim 1.5s ease-out;
+        }
+        
+        @keyframes highlight-pulse-anim {
+            0% {
+                background: var(--success);
+                box-shadow: 0 0 15px var(--success);
+            }
+            100% {
+                background: transparent;
+                box-shadow: none;
+            }
+        }
+
+        .tree-node-expand {
+            width: 18px;
+            height: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-secondary);
+            transition: transform 0.2s;
+            flex-shrink: 0;
+        }
+
+        .tree-node-expand.expanded {
+            transform: rotate(90deg);
+        }
+
+        .tree-node-expand.empty {
+            visibility: hidden;
+        }
+
+        .tree-node-icon {
+            width: 18px;
+            height: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--primary);
+            flex-shrink: 0;
+            font-size: 0.85rem;
+        }
+
+        .tree-node-icon.folder {
+            color: #f59e0b;
+        }
+        
+        .tree-node-icon.leaf {
+            color: var(--text-secondary);
+            font-size: 0.75rem;
+        }
+
+        .tree-node-name {
+            flex: 1;
+            font-size: 0.85rem;
+            color: var(--text-main);
+            white-space: normal;
+            word-wrap: break-word;
+            line-height: 1.4;
+        }
+        
+        /* Код КСР в узле - СКРЫТ */
+        .tree-node-code {
+            display: none;
+        }
+
+        .tree-node-count {
+            font-size: 0.65rem;
+            color: var(--text-secondary);
+            background: var(--bg-body);
+            padding: 2px 8px;
+            border-radius: 10px;
+            flex-shrink: 0;
+        }
+        
+        /* Кнопка копирования кода - всегда видима */
+        .tree-node-copy {
+            opacity: 0.6;
+            background: transparent;
+            color: var(--text-secondary);
+            border: 1px solid var(--border);
+            padding: 3px 6px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.7rem;
+            display: flex;
+            align-items: center;
+            gap: 3px;
+            transition: all 0.2s;
+            flex-shrink: 0;
+        }
+        
+        .tree-node-header:hover .tree-node-copy {
+            opacity: 1;
+        }
+        
+        .tree-node-copy:hover {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+        
+        .tree-node-copy.copied {
+            background: var(--success);
+            color: white;
+            border-color: var(--success);
+            opacity: 1;
+        }
+
+        /* --- Tree Children --- */
+        .tree-children {
+            margin-left: 20px;
+            padding-left: 12px;
+            border-left: 1px dashed var(--border);
+            overflow: hidden;
+            /* Убран transition для max-height - не работает с max-height: none */
+        }
+
+        .tree-children.collapsed {
+            max-height: 0;
+            opacity: 0;
+            /* Мгновенное сворачивание */
+            transition: max-height 0.2s ease, opacity 0.2s ease;
+        }
+
+        .tree-children.expanded {
+            /* Убрано ограничение max-height - позволяет отображать любое количество элементов */
+            max-height: none;
+            opacity: 1;
+            /* Плавное появление без анимации высоты */
+            transition: opacity 0.2s ease;
+        }
+        
+        /* Отступ для корректного скролла при навигации к элементу */
+        .tree-node-header {
+            scroll-margin-top: 80px;
+        }
+
+        /* --- Multi-Select Hint --- */
+        .multi-select-hint {
+            padding: 10px 20px;
+            background: var(--primary-light);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.85rem;
+            color: var(--primary-dark);
+        }
+        
+        .multi-select-hint.hidden {
+            display: none;
+        }
+        
+        .multi-select-hint i {
+            color: var(--primary);
+        }
+        
+        .clear-selection-btn {
+            margin-left: auto;
+            background: var(--danger);
+            color: white;
+            border: none;
+            padding: 4px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            transition: all 0.2s;
+        }
+        
+        .clear-selection-btn:hover {
+            background: #dc2626;
+        }
+
+        /* --- Поиск по каталогу --- */
+        .catalog-search {
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--border);
+            background: var(--bg-body);
+        }
+        
+        .catalog-search-input-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+        
+        .catalog-search-icon {
+            position: absolute;
+            left: 10px;
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+            pointer-events: none;
+        }
+        
+        .catalog-search-input {
+            width: 100%;
+            padding: 8px 30px 8px 32px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: var(--surface);
+            color: var(--text-main);
+            font-size: 0.8rem;
+            outline: none;
+            transition: all 0.2s;
+        }
+        
+        .catalog-search-input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px var(--primary-glow);
+        }
+        
+        .catalog-search-input::placeholder {
+            color: var(--text-secondary);
+            opacity: 0.7;
+        }
+        
+        .catalog-search-clear {
+            position: absolute;
+            right: 6px;
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            padding: 4px;
+            font-size: 0.75rem;
+            transition: color 0.2s;
+        }
+        
+        .catalog-search-clear:hover {
+            color: var(--danger);
+        }
+        
+        .catalog-search-clear.hidden {
+            display: none;
+        }
+        
+        /* Результаты поиска категорий */
+        .catalog-search-results {
+            margin-top: 8px;
+            max-height: 300px;
+            overflow-y: auto;
+            border-radius: 6px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+        }
+        
+        .catalog-search-results.hidden {
+            display: none;
+        }
+        
+        .catalog-search-results.loading {
+            padding: 20px;
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+        }
+        
+        .catalog-search-result {
+            padding: 10px 12px;
+            cursor: pointer;
+            border-bottom: 1px solid var(--border);
+            transition: background 0.15s;
+        }
+        
+        .catalog-search-result:last-child {
+            border-bottom: none;
+        }
+        
+        .catalog-search-result:hover {
+            background: var(--bg-body);
+        }
+        
+        .catalog-search-result-name {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-main);
+            margin-bottom: 2px;
+        }
+        
+        .catalog-search-result-path {
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            /* Перенос на несколько строк вместо обрезки */
+            white-space: normal;
+            word-break: break-word;
+            line-height: 1.4;
+        }
+        
+        .catalog-search-result-score {
+            display: inline-block;
+            font-size: 0.65rem;
+            color: var(--primary);
+            background: var(--primary-light);
+            padding: 2px 6px;
+            border-radius: 4px;
+            margin-left: 6px;
+        }
+        
+        .catalog-search-empty {
+            padding: 20px;
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+        }
+        
+        /* Подсказка о Ctrl+клике в результатах поиска */
+        .catalog-search-hint {
+            padding: 8px 12px;
+            background: var(--primary-light);
+            color: var(--primary-dark);
+            font-size: 0.7rem;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .catalog-search-hint i {
+            color: var(--primary);
+        }
+        
+        /* Выбранный результат поиска */
+        .catalog-search-result.selected {
+            background: rgba(99, 102, 241, 0.1);
+            border-left: 3px solid var(--primary);
+        }
+        
+        .catalog-search-result.selected .catalog-search-result-name {
+            color: var(--primary);
+        }
+        
+        /* Скрываем поиск в collapsed режиме */
+        .catalog-sidebar.collapsed .catalog-search {
+            display: none;
+        }
+        
+        /* Скрываем multi-select-hint текст в collapsed режиме */
+        .catalog-sidebar.collapsed .multi-select-hint {
+            display: none;
+        }
+        
+        /* Индикатор активного фильтра в свёрнутом sidebar */
+        .filter-indicator {
+            display: none;
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            width: 10px;
+            height: 10px;
+            background: var(--primary);
+            border-radius: 50%;
+            border: 2px solid var(--surface);
+            box-shadow: 0 0 6px var(--primary-glow);
+            animation: filter-pulse 2s ease-in-out infinite;
+        }
+        
+        @keyframes filter-pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.7; transform: scale(1.2); }
+        }
+        
+        .catalog-sidebar.collapsed .filter-indicator.active {
+            display: block;
+        }
+
+        /* --- Sidebar Footer --- */
+        .sidebar-footer {
+            padding: 12px 20px;
+            border-top: 1px solid var(--border);
+            background: var(--bg-body);
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            border-radius: 0 0 calc(var(--radius-lg) - 2px) 0;
+        }
+        
+        .sidebar-footer-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+        }
+        
+        .sidebar-hint {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.7rem;
+            opacity: 0.8;
+        }
+        
+        .sidebar-hint i {
+            color: var(--primary);
+        }
+
+        .sidebar-stats {
+            display: flex;
+            gap: 12px;
+        }
+
+        .sidebar-stat {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .sidebar-stat strong {
+            color: var(--primary);
+        }
+        
+        /* Кнопка "Свернуть всё" */
+        .collapse-all-btn {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            padding: 5px 8px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            transition: all 0.2s;
+            flex-shrink: 0;
+        }
+        
+        .collapse-all-btn:hover {
+            background: var(--bg-body);
+            color: var(--primary);
+            border-color: var(--primary);
+        }
+
+        /* --- Filter Badge (показывает активный фильтр в шапке) --- */
+        .filter-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 12px;
+            background: var(--primary-light);
+            color: var(--primary-dark);
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            margin-left: 10px;
+        }
+
+        .filter-badge i {
+            color: var(--primary);
+        }
+
+        .filter-badge-clear {
+            background: none;
+            border: none;
+            color: var(--danger);
+            cursor: pointer;
+            padding: 2px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+
+        .filter-badge-clear:hover {
+            background: var(--danger-bg);
+        }
+
+        /* --- Адаптивность Sidebar для разных экранов --- */
+        
+        /* Большие ноутбуки (1400px - 1600px) - уменьшаем ширину sidebar */
+        @media (max-width: 1600px) {
+            :root {
+                --sidebar-width: 420px;
+            }
+            
+            .catalog-sidebar {
+                width: var(--sidebar-width);
+                min-width: 320px;
+            }
+        }
+        
+        /* Стандартные ноутбуки (1200px - 1400px) - ещё уже */
+        @media (max-width: 1400px) {
+            :root {
+                --sidebar-width: 350px;
+            }
+            
+            .catalog-sidebar {
+                width: var(--sidebar-width);
+                min-width: 280px;
+            }
+        }
+        
+        /* Планшеты и малые ноутбуки (<1200px) - sidebar сверху */
+        @media (max-width: 1200px) {
+            .app-layout {
+                flex-direction: column;
+                width: 100%;
+            }
+            
+            .app-main {
+                width: 100%;
+                flex: none;
+                /* Сбрасываем отступ - sidebar теперь сверху */
+                margin-left: 0 !important;
+            }
+            
+            .app-layout.sidebar-collapsed .app-main {
+                margin-left: 0 !important;
+            }
+
+            .catalog-sidebar {
+                width: 100% !important;
+                min-width: 100%;
+                max-width: 100%;
+                position: relative;
+                top: 0;
+                height: auto;
+                max-height: none;
+                border-radius: var(--radius-lg);
+                border: 2px solid var(--border);
+                margin-bottom: 20px;
+            }
+            
+            .sidebar-resizer {
+                display: none;
+            }
+
+            .sidebar-content {
+                max-height: 350px;
+                overflow-y: auto;
+            }
+
+            .catalog-sidebar.collapsed {
+                width: 100% !important;
+                min-width: 100%;
+                border-radius: var(--radius-lg);
+            }
+
+            .catalog-sidebar.collapsed .sidebar-content,
+            .catalog-sidebar.collapsed .sidebar-footer,
+            .catalog-sidebar.collapsed .breadcrumbs {
+                display: none;
+            }
+            
+            .catalog-sidebar.collapsed .sidebar-title {
+                writing-mode: horizontal-tb;
+                flex-direction: row;
+            }
+            
+            .catalog-sidebar.collapsed .sidebar-title span {
+                display: inline;
+            }
+            
+            .catalog-sidebar.collapsed .sidebar-header {
+                flex-direction: row;
+                justify-content: space-between;
+                padding: 16px 20px;
+                height: auto;
+            }
+            
+            .catalog-sidebar.collapsed .sidebar-toggle-btn {
+                writing-mode: horizontal-tb;
+                margin-top: 0;
+            }
+            
+        }
+
+        @media (max-width: 768px) {
+            .sidebar-content {
+                max-height: 280px;
+            }
+
+            .tree-node-header {
+                padding: 10px 8px;
+            }
+
+            .tree-node-name {
+                font-size: 0.8rem;
+            }
+            
+            .tree-node-copy {
+                opacity: 1;
+                padding: 4px 8px;
             }
         }
     

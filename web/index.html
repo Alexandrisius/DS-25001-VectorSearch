@@ -16,14 +16,13 @@
 
 <body>
     <div class="container">
-        <!-- Sidebar Button for Admin Panel -->
-        <a href="/admin" class="admin-sidebar-btn" title="Настройка коллекций">
-            <i class="fas fa-cog"></i>
-            <span>Настройка коллекций</span>
-        </a>
-
         <header>
             <div class="header-controls">
+                <!-- Кнопка админки (шестерёнка) -->
+                <a href="/admin" class="admin-header-btn" title="Настройка коллекций">
+                    <i class="fas fa-cog"></i>
+                </a>
+                <!-- Переключатель темы -->
                 <div class="theme-toggle" id="themeToggle" title="Переключить тему">
                     <i class="fas fa-sun"></i>
                 </div>
@@ -33,6 +32,96 @@
             <p class="subtitle">Векторный поиск строительных ресурсов</p>
         </header>
 
+        <!-- === ОСНОВНОЙ LAYOUT С SIDEBAR === -->
+        <div class="app-layout sidebar-open" id="appLayout">
+            
+            <!-- === КАТАЛОГ (SIDEBAR) === -->
+            <aside class="catalog-sidebar" id="catalogSidebar">
+                <!-- Resizer для изменения ширины -->
+                <div class="sidebar-resizer" id="sidebarResizer"></div>
+                
+                <!-- Индикатор активного фильтра (виден только в collapsed) -->
+                <div class="filter-indicator" id="filterIndicator" title="Активен фильтр по категориям"></div>
+                
+                <div class="sidebar-header">
+                    <div class="sidebar-title">
+                        <i class="fas fa-folder-tree"></i>
+                        <span>Каталог</span>
+                    </div>
+                    <button class="sidebar-toggle-btn" id="sidebarToggle" title="Свернуть/Развернуть каталог">
+                        <span class="toggle-text">Свернуть</span>
+                        <i class="fas fa-angles-left"></i>
+                    </button>
+                </div>
+                
+                <!-- Поиск по каталогу -->
+                <div class="catalog-search" id="catalogSearch">
+                    <div class="catalog-search-input-wrapper">
+                        <i class="fas fa-search catalog-search-icon"></i>
+                        <input type="text" 
+                               id="catalogSearchInput" 
+                               class="catalog-search-input" 
+                               placeholder="Поиск категорий..."
+                               autocomplete="off">
+                        <button class="catalog-search-clear hidden" id="catalogSearchClear" title="Очистить">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div class="catalog-search-results hidden" id="catalogSearchResults">
+                        <!-- Результаты поиска категорий -->
+                    </div>
+                </div>
+                
+                <!-- Подсказка о множественном выборе -->
+                <div class="multi-select-hint hidden" id="multiSelectHint">
+                    <i class="fas fa-info-circle"></i>
+                    <span>Выбрано категорий: <strong id="selectedCount">0</strong></span>
+                    <button class="clear-selection-btn" id="clearSelectionBtn">
+                        <i class="fas fa-times"></i> Сбросить
+                    </button>
+                </div>
+                
+                <div class="sidebar-content" id="sidebarContent">
+                    <!-- Закреплённый заголовок текущей категории (sticky) -->
+                    <div class="sticky-category-header hidden" id="stickyCategoryHeader">
+                        <i class="fas fa-folder-open"></i>
+                        <span id="stickyCategoryName">Категория</span>
+                    </div>
+                    
+                    <!-- Дерево категорий -->
+                    <div class="tree-view" id="hierarchyTree">
+                        <div class="tree-loading">
+                            <i class="fas fa-spinner fa-spin"></i>
+                            <div>Загрузка каталога...</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="sidebar-footer">
+                    <div class="sidebar-footer-row">
+                        <div class="sidebar-stats">
+                            <span class="sidebar-stat">
+                                <i class="fas fa-folder"></i>
+                                <strong id="totalCategories">0</strong> категорий
+                            </span>
+                            <span class="sidebar-stat">
+                                <i class="fas fa-file-alt"></i>
+                                <strong id="totalItems">0</strong> записей
+                            </span>
+                        </div>
+                        <button class="collapse-all-btn" id="collapseAllBtn" title="Свернуть все категории">
+                            <i class="fas fa-compress-alt"></i>
+                        </button>
+                    </div>
+                    <div class="sidebar-hint">
+                        <i class="fas fa-keyboard"></i> Ctrl+клик для множественного выбора
+                    </div>
+                </div>
+            </aside>
+            
+            <!-- === ОСНОВНОЙ КОНТЕНТ === -->
+            <div class="app-main">
+        
         <div class="main-card">
             <div class="card-header">
                 <div class="header-top-row">
@@ -123,6 +212,9 @@
                 <div id="processingInfo">Ожидание запроса...</div>
             </div>
         </div>
+        
+            </div><!-- /app-main -->
+        </div><!-- /app-layout -->
 
         <footer style="text-align: center; margin-top: 30px; color: var(--text-secondary); font-size: 0.8rem;">
             © 2025 KSR Matcher

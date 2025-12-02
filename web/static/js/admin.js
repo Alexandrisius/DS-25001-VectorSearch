@@ -934,10 +934,16 @@ async function pollJob(jobId) {
             
             els.importStatusText.innerText = `${statusText[job.status] || job.status} (${job.progress}%)`;
             
-            if (job.status === 'completed') {
+                if (job.status === 'completed') {
                 clearInterval(interval);
+                
+                // Инвалидируем кэш иерархии для обновлённой коллекции
+                fetch(`/hierarchy/${state.activeCollection}/invalidate`, { method: 'POST' })
+                    .then(() => console.log('✅ Кэш иерархии очищен'))
+                    .catch(e => console.warn('⚠️ Не удалось очистить кэш иерархии:', e));
+                
                 setTimeout(() => {
-                    alert('Импорт завершён!');
+                    alert('Импорт завершён!\n\nПоля path_level_N автоматически сгенерированы для иерархического каталога.');
                     closeModal('import');
                     loadCollections();
                 }, 500);

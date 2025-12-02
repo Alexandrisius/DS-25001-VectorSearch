@@ -54,6 +54,57 @@ from transformers import AutoModel, AutoTokenizer
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
+# === УТИЛИТЫ ДЛЯ ИЕРАРХИЧЕСКОГО КАТАЛОГА ===
+def generate_path_levels(description: str, separator: str = "→") -> dict:
+    """
+    Генерирует поля path_level_N из иерархического описания.
+    
+    Разбивает description по разделителю и создает набор полей для
+    эффективной фильтрации в Qdrant по уровням вложенности.
+    
+    Пример:
+        Input:  "Арматура → Краны → Кран 15"
+        Output: {
+            "path_level_1": "Арматура",
+            "path_level_2": "Арматура → Краны",
+            "path_level_3": "Арматура → Краны → Кран 15",
+            "path_depth": 3
+        }
+    
+    Args:
+        description (str): Полное описание с иерархией, разделенной separator.
+        separator (str): Разделитель уровней иерархии (по умолчанию "→").
+    
+    Returns:
+        dict: Словарь с полями path_level_1..N и path_depth.
+    """
+    # Если нет разделителя в строке - возвращаем один уровень
+    if separator not in description:
+        return {
+            "path_level_1": description.strip(),
+            "path_depth": 1
+        }
+    
+    # Разбиваем по разделителю и очищаем от лишних пробелов
+    parts = [part.strip() for part in description.split(separator)]
+    # Фильтруем пустые части (на случай двойных разделителей)
+    parts = [p for p in parts if p]
+    
+    if not parts:
+        return {"path_depth": 0}
+    
+    result = {"path_depth": len(parts)}
+    
+    # Генерируем path_level_1, path_level_2, ... path_level_N
+    # Каждый уровень содержит полный путь до этого уровня
+    for i in range(len(parts)):
+        # Собираем путь до текущего уровня включительно
+        level_path = f" {separator} ".join(parts[:i + 1])
+        result[f"path_level_{i + 1}"] = level_path
+    
+    return result
+
 # === Импорт конфигурации ===
 # Все пути и настройки вынесены в отдельный файл config.py
 from config import (
@@ -146,6 +197,504 @@ class EmbeddingCache:
         self.cache.clear()
         self.access_times.clear()
         logger.info("🧹 Кэш эмбеддингов очищен")
+
+
+# === СЕРВИС ИЕРАРХИЧЕСКОГО КАТАЛОГА ===
+class HierarchyService:
+    """
+    Сервис для построения и кэширования дерева иерархии категорий.
+    
+    Использует поля path_level_N из Qdrant для построения навигационного
+    дерева категорий. Результаты кэшируются для производительности.
+    
+    Attributes:
+        cache (dict): Кэш деревьев {collection_name: {tree, timestamp, stats}}.
+        cache_ttl (int): Время жизни кэша в секундах (по умолчанию 300 = 5 минут).
+    """
+    
+    def __init__(self, cache_ttl: int = 300):
+        """
+        Инициализация сервиса.
+        
+        Args:
+            cache_ttl (int): Время жизни кэша в секундах.
+        """
+        self.cache = {}  # Кэш полного дерева {collection_name: {tree, stats, timestamp}}
+        self.children_cache = {}  # Кэш прямых детей {cache_key: {children, timestamp}}
+        self.cache_ttl = cache_ttl
+        self.lock = asyncio.Lock()
+    
+    def _is_cache_valid(self, collection_name: str) -> bool:
+        """
+        Проверка актуальности кэша для коллекции.
+        
+        Args:
+            collection_name: Имя коллекции.
+            
+        Returns:
+            bool: True если кэш актуален.
+        """
+        if collection_name not in self.cache:
+            return False
+        
+        cache_entry = self.cache[collection_name]
+        age = time.time() - cache_entry["timestamp"]
+        return age < self.cache_ttl
+    
+    async def get_hierarchy(
+        self,
+        client: QdrantClient,
+        collection_name: str,
+        separator: str = "→",
+        max_depth: int = 10
+    ) -> dict:
+        """
+        Получение дерева иерархии для коллекции.
+        
+        Если кэш актуален, возвращает кэшированное дерево.
+        Иначе строит новое дерево через scroll API Qdrant.
+        
+        Args:
+            client: Клиент Qdrant.
+            collection_name: Имя коллекции.
+            separator: Разделитель уровней (для отображения).
+            max_depth: Максимальная глубина дерева.
+            
+        Returns:
+            dict: Структура {tree: [...], total_categories: N, cached: bool}.
+        """
+        async with self.lock:
+            # Проверяем кэш
+            if self._is_cache_valid(collection_name):
+                logger.info(f"📦 Hierarchy cache hit: {collection_name}")
+                cached = self.cache[collection_name]
+                return {
+                    "tree": cached["tree"],
+                    "total_categories": cached["stats"]["total_categories"],
+                    "total_items": cached["stats"]["total_items"],
+                    "max_depth": cached["stats"]["max_depth"],
+                    "cached": True,
+                    "cache_age": int(time.time() - cached["timestamp"])
+                }
+            
+            # Строим новое дерево
+            logger.info(f"🌳 Building hierarchy tree for: {collection_name}")
+            start_time = time.time()
+            
+            tree_data = await self._build_tree(
+                client, collection_name, separator, max_depth
+            )
+            
+            # Сохраняем в кэш
+            self.cache[collection_name] = {
+                "tree": tree_data["tree"],
+                "stats": tree_data["stats"],
+                "timestamp": time.time()
+            }
+            
+            elapsed = time.time() - start_time
+            logger.info(
+                f"✅ Hierarchy built in {elapsed:.2f}s: "
+                f"{tree_data['stats']['total_categories']} categories"
+            )
+            
+            return {
+                "tree": tree_data["tree"],
+                "total_categories": tree_data["stats"]["total_categories"],
+                "total_items": tree_data["stats"]["total_items"],
+                "max_depth": tree_data["stats"]["max_depth"],
+                "cached": False,
+                "build_time": elapsed
+            }
+    
+    async def _build_tree(
+        self,
+        client: QdrantClient,
+        collection_name: str,
+        separator: str,
+        max_depth: int
+    ) -> dict:
+        """
+        Построение дерева иерархии из записей коллекции.
+        
+        Алгоритм:
+        1. Scroll по всем записям, собирая path_level_N значения и коды.
+        2. Агрегация уникальных путей, подсчёт количества и сохранение кодов.
+        3. Рекурсивное построение дерева из агрегированных данных.
+        
+        Args:
+            client: Клиент Qdrant.
+            collection_name: Имя коллекции.
+            separator: Разделитель уровней.
+            max_depth: Максимальная глубина.
+            
+        Returns:
+            dict: {tree: [...], stats: {...}}.
+        """
+        # Словарь для агрегации: {(level, path): {"count": N, "codes": [...]}}
+        # Сохраняем коды для листовых элементов
+        path_data = {}
+        total_items = 0
+        max_found_depth = 0
+        
+        # Scroll по всем записям
+        offset = None
+        batch_size = 1000
+        
+        while True:
+            # Запрашиваем path_level_N, path_depth и код
+            payload_fields = [f"path_level_{i}" for i in range(1, max_depth + 1)]
+            payload_fields.extend(["path_depth", "code", "description"])
+            
+            records, next_offset = client.scroll(
+                collection_name=collection_name,
+                limit=batch_size,
+                offset=offset,
+                with_payload=payload_fields,
+                with_vectors=False
+            )
+            
+            if not records:
+                break
+            
+            for point in records:
+                total_items += 1
+                payload = point.payload
+                
+                # Получаем глубину записи и код
+                depth = payload.get("path_depth", 1)
+                code = payload.get("code", "")
+                max_found_depth = max(max_found_depth, depth)
+                
+                # Собираем все уровни пути
+                for level in range(1, min(depth + 1, max_depth + 1)):
+                    path_key = f"path_level_{level}"
+                    path_value = payload.get(path_key)
+                    
+                    if path_value:
+                        # Формируем ключ для агрегации: (level, path)
+                        agg_key = (level, path_value)
+                        
+                        if agg_key not in path_data:
+                            path_data[agg_key] = {"count": 0, "codes": [], "is_leaf": False}
+                        
+                        path_data[agg_key]["count"] += 1
+                        
+                        # Для максимального уровня (листа) сохраняем код
+                        if level == depth and code:
+                            # Ограничиваем количество сохраняемых кодов
+                            if len(path_data[agg_key]["codes"]) < 10:
+                                path_data[agg_key]["codes"].append(code)
+                            path_data[agg_key]["is_leaf"] = True
+            
+            offset = next_offset
+            if offset is None:
+                break
+        
+        # Строим дерево из агрегированных данных
+        tree = self._build_tree_structure(path_data, separator, max_depth)
+        
+        # Подсчёт статистики
+        total_categories = len(set(path for (level, path) in path_data.keys()))
+        
+        return {
+            "tree": tree,
+            "stats": {
+                "total_categories": total_categories,
+                "total_items": total_items,
+                "max_depth": max_found_depth
+            }
+        }
+    
+    def _build_tree_structure(
+        self,
+        path_data: dict,
+        separator: str,
+        max_depth: int
+    ) -> List[dict]:
+        """
+        Построение древовидной структуры из плоского словаря путей.
+        
+        Args:
+            path_data: Словарь {(level, path): {"count": N, "codes": [...], "is_leaf": bool}}.
+            separator: Разделитель уровней.
+            max_depth: Максимальная глубина.
+            
+        Returns:
+            List[dict]: Список корневых узлов дерева.
+        """
+        # Группируем по уровням
+        levels = {}
+        for (level, path), data in path_data.items():
+            if level not in levels:
+                levels[level] = {}
+            levels[level][path] = data
+        
+        if not levels:
+            return []
+        
+        # Строим дерево рекурсивно начиная с уровня 1
+        def build_children(parent_path: str, current_level: int) -> List[dict]:
+            """Рекурсивное построение детей для узла."""
+            if current_level > max_depth:
+                return []
+            
+            next_level = current_level + 1
+            children = []
+            
+            if next_level not in levels:
+                return []
+            
+            # Ищем детей: пути следующего уровня, начинающиеся с parent_path
+            for path, data in levels[next_level].items():
+                # Проверяем, что путь начинается с родительского
+                if path.startswith(parent_path + f" {separator} "):
+                    # Извлекаем имя текущего узла (последний сегмент)
+                    parts = path.split(f" {separator} ")
+                    name = parts[-1] if parts else path
+                    
+                    node = {
+                        "name": name,
+                        "path": path,
+                        "level": next_level,
+                        "count": data["count"],
+                        "children": build_children(path, next_level)
+                    }
+                    
+                    # Добавляем код для листовых элементов (count=1 или is_leaf)
+                    if data["is_leaf"] and data["codes"]:
+                        if data["count"] == 1 and len(data["codes"]) == 1:
+                            # Точно один элемент - показываем код
+                            node["code"] = data["codes"][0]
+                        elif len(data["codes"]) > 0:
+                            # Несколько элементов - показываем первые коды
+                            node["codes"] = data["codes"][:5]
+                    
+                    children.append(node)
+            
+            # Сортируем по имени
+            children.sort(key=lambda x: x["name"])
+            return children
+        
+        # Строим корневые узлы (уровень 1)
+        root_nodes = []
+        
+        if 1 in levels:
+            for path, data in levels[1].items():
+                node = {
+                    "name": path,  # На первом уровне имя = путь
+                    "path": path,
+                    "level": 1,
+                    "count": data["count"],
+                    "children": build_children(path, 1)
+                }
+                
+                # Добавляем код для листовых элементов
+                if data["is_leaf"] and data["codes"]:
+                    if data["count"] == 1 and len(data["codes"]) == 1:
+                        node["code"] = data["codes"][0]
+                    elif len(data["codes"]) > 0:
+                        node["codes"] = data["codes"][:5]
+                
+                root_nodes.append(node)
+        
+        # Сортируем корневые узлы по имени
+        root_nodes.sort(key=lambda x: x["name"])
+        
+        return root_nodes
+    
+    def invalidate_cache(self, collection_name: Optional[str] = None):
+        """
+        Инвалидация кэша иерархии.
+        
+        Args:
+            collection_name: Имя коллекции для инвалидации.
+                            Если None - очищает весь кэш.
+        """
+        if collection_name:
+            if collection_name in self.cache:
+                del self.cache[collection_name]
+                logger.info(f"🗑️ Hierarchy cache invalidated: {collection_name}")
+            # Также очищаем кэш прямых детей для этой коллекции
+            keys_to_delete = [k for k in self.children_cache.keys() if k.startswith(f"{collection_name}_")]
+            for key in keys_to_delete:
+                del self.children_cache[key]
+            if keys_to_delete:
+                logger.info(f"🗑️ Children cache invalidated: {len(keys_to_delete)} entries for {collection_name}")
+        else:
+            self.cache.clear()
+            self.children_cache.clear()
+            logger.info("🗑️ Hierarchy cache cleared (all collections)")
+    
+    async def get_children_direct(
+        self,
+        client: QdrantClient,
+        collection_name: str,
+        parent_path: str = "",
+        parent_level: int = 0,
+        separator: str = "→"
+    ) -> dict:
+        """
+        Прямое получение дочерних категорий без построения полного дерева.
+        
+        Использует scroll API Qdrant с фильтром по родительскому пути.
+        Группирует результаты по следующему уровню для подсчёта.
+        
+        ОПТИМИЗАЦИЯ: Не строит полное дерево! Загружает только нужный уровень.
+        
+        Args:
+            client: Клиент Qdrant.
+            collection_name: Имя коллекции.
+            parent_path: Путь родительской категории (пустой = корень).
+            parent_level: Уровень родителя (0 = корень, дети будут уровня 1).
+            separator: Разделитель уровней.
+            
+        Returns:
+            dict: {children: [...], parent_path: str, total: int, cached: bool}
+        """
+        # Ключ кэша включает путь родителя
+        cache_key = f"{collection_name}_children_{parent_level}_{parent_path}"
+        
+        # Проверяем кэш прямых детей (TTL 5 минут)
+        if cache_key in self.children_cache:
+            cache_entry = self.children_cache[cache_key]
+            age = time.time() - cache_entry["timestamp"]
+            if age < self.cache_ttl:
+                logger.debug(f"📦 Children cache hit: {cache_key[:50]}...")
+                return {
+                    "children": cache_entry["children"],
+                    "parent_path": parent_path,
+                    "total": len(cache_entry["children"]),
+                    "cached": True,
+                    "cache_age": int(age)
+                }
+        
+        # Уровень детей = уровень родителя + 1
+        child_level = parent_level + 1
+        child_level_field = f"path_level_{child_level}"
+        
+        logger.info(f"🔍 Direct children load: parent='{parent_path[:50]}...' level={child_level}")
+        start_time = time.time()
+        
+        # Словарь для агрегации детей: {path: {count, codes, has_children}}
+        children_data = {}
+        
+        # Формируем фильтр
+        scroll_filter = None
+        if parent_path:
+            # Фильтруем по точному значению родительского пути
+            parent_level_field = f"path_level_{parent_level}"
+            scroll_filter = Filter(
+                must=[
+                    FieldCondition(
+                        key=parent_level_field,
+                        match=MatchValue(value=parent_path)
+                    )
+                ]
+            )
+        
+        # Scroll по записям
+        offset = None
+        batch_size = 1000
+        total_scanned = 0
+        
+        while True:
+            # Запрашиваем только нужные поля
+            payload_fields = [child_level_field, f"path_level_{child_level + 1}", "code", "path_depth"]
+            
+            records, next_offset = client.scroll(
+                collection_name=collection_name,
+                limit=batch_size,
+                offset=offset,
+                scroll_filter=scroll_filter,
+                with_payload=payload_fields,
+                with_vectors=False
+            )
+            
+            if not records:
+                break
+            
+            total_scanned += len(records)
+            
+            for point in records:
+                payload = point.payload
+                
+                # Получаем путь на уровне детей
+                child_path = payload.get(child_level_field)
+                if not child_path:
+                    continue
+                
+                # Агрегируем данные
+                if child_path not in children_data:
+                    children_data[child_path] = {
+                        "count": 0,
+                        "codes": [],
+                        "has_children": False
+                    }
+                
+                children_data[child_path]["count"] += 1
+                
+                # Проверяем наличие следующего уровня (есть ли дети)
+                next_level_path = payload.get(f"path_level_{child_level + 1}")
+                if next_level_path:
+                    children_data[child_path]["has_children"] = True
+                
+                # Собираем коды для листовых элементов
+                code = payload.get("code")
+                depth = payload.get("path_depth", 1)
+                if code and depth == child_level and len(children_data[child_path]["codes"]) < 5:
+                    children_data[child_path]["codes"].append(code)
+            
+            offset = next_offset
+            if offset is None:
+                break
+        
+        # Формируем список детей
+        children = []
+        for path, data in children_data.items():
+            # Извлекаем имя (последний сегмент пути)
+            parts = path.split(f" {separator} ")
+            name = parts[-1] if parts else path
+            
+            child = {
+                "name": name,
+                "path": path,
+                "level": child_level,
+                "count": data["count"],
+                "has_children": data["has_children"]
+            }
+            
+            # Добавляем код/коды если есть
+            if data["codes"]:
+                if data["count"] == 1 and len(data["codes"]) == 1:
+                    child["code"] = data["codes"][0]
+                else:
+                    child["codes"] = data["codes"]
+            
+            children.append(child)
+        
+        # Сортируем по имени
+        children.sort(key=lambda x: x["name"])
+        
+        elapsed = time.time() - start_time
+        logger.info(
+            f"✅ Direct children loaded in {elapsed:.2f}s: "
+            f"{len(children)} children, scanned {total_scanned} records"
+        )
+        
+        # Сохраняем в кэш
+        self.children_cache[cache_key] = {
+            "children": children,
+            "timestamp": time.time()
+        }
+        
+        return {
+            "children": children,
+            "parent_path": parent_path,
+            "total": len(children),
+            "cached": False,
+            "load_time": elapsed
+        }
 
 
 # === МЕНЕДЖЕР ВЕКТОРНЫХ БАЗ НА ОСНОВЕ QDRANT ===
@@ -413,19 +962,40 @@ class QdrantVectorDatabaseManager:
         if not self.switch_database(name):
              raise ValueError(f"База '{name}' не найдена")
 
-    async def search_similar(self, collection_name, query_embedding, top_k, score_threshold):
+    async def search_similar(
+        self,
+        collection_name,
+        query_embedding,
+        top_k,
+        score_threshold,
+        filter_path: Optional[str] = None,
+        filter_level: Optional[int] = None,
+        filter_paths: Optional[List[dict]] = None
+    ):
         """
-        Адаптер для поиска с фильтрацией по score.
+        Адаптер для поиска с фильтрацией по score и иерархии.
         Возвращает список словарей, совместимый с MatchResponse.
         
         ОПТИМИЗАЦИЯ: Фильтрация по score_threshold перенесена в search_vectors (на сторону Qdrant).
         Это уменьшает объем передаваемых данных и ускоряет обработку.
+        
+        Args:
+            collection_name: Имя коллекции.
+            query_embedding: Вектор запроса.
+            top_k: Количество результатов.
+            score_threshold: Порог косинусного сходства.
+            filter_path: Путь категории для фильтрации (опционально, одиночный).
+            filter_level: Уровень иерархии для фильтрации (опционально).
+            filter_paths: Список путей для множественной фильтрации (OR логика).
         """
         results = await self.search_vectors(
             query_embedding=query_embedding,
             top_k=top_k,
             collection_name=collection_name,
-            score_threshold=score_threshold
+            score_threshold=score_threshold,
+            filter_path=filter_path,
+            filter_level=filter_level,
+            filter_paths=filter_paths
         )
         
         # Фильтрация по порогу косинусного сходства теперь выполняется в Qdrant
@@ -723,6 +1293,9 @@ class QdrantVectorDatabaseManager:
         top_k: int = 10,
         collection_name: Optional[str] = None,
         score_threshold: Optional[float] = None,
+        filter_path: Optional[str] = None,
+        filter_level: Optional[int] = None,
+        filter_paths: Optional[List[dict]] = None,
     ) -> List[Dict]:
         """
         Выполнение поиска ближайших соседей (ANN) в Qdrant.
@@ -735,6 +1308,10 @@ class QdrantVectorDatabaseManager:
             top_k (int): Максимальное количество кандидатов.
             collection_name (Optional[str]): Имя коллекции (если None, используется активная).
             score_threshold (Optional[float]): Порог косинусного сходства для фильтрации на стороне БД.
+            filter_path (Optional[str]): Путь категории для фильтрации по иерархии (одиночный).
+            filter_level (Optional[int]): Уровень иерархии (1, 2, 3...) для фильтрации.
+            filter_paths (Optional[List[dict]]): Множественный фильтр: [{"path": "...", "level": N}, ...]
+                                                 Используется OR-логика (should).
 
         Returns:
             List[Dict]: Список найденных записей с метаданными и оценкой сходства (score).
@@ -757,16 +1334,54 @@ class QdrantVectorDatabaseManager:
         if isinstance(query_embedding, np.ndarray):
             query_embedding = query_embedding.tolist()
 
+        # Построение фильтра для иерархической фильтрации
+        qdrant_filter = None
+        
+        # Приоритет: множественный фильтр (filter_paths) > одиночный (filter_path)
+        if filter_paths and len(filter_paths) > 0:
+            # Множественный фильтр с OR-логикой (should)
+            # Формат: [{"path": "Арматура → Краны", "level": 2}, ...]
+            conditions = []
+            for fp in filter_paths:
+                path = fp.get("path")
+                level = fp.get("level")
+                if path and level:
+                    conditions.append(
+                        FieldCondition(
+                            key=f"path_level_{level}",
+                            match=MatchValue(value=path)
+                        )
+                    )
+            
+            if conditions:
+                # should = OR логика (хотя бы одно условие должно выполняться)
+                qdrant_filter = Filter(should=conditions)
+                paths_str = ", ".join([f"level{fp.get('level')}='{fp.get('path')}'" for fp in filter_paths])
+                logger.info(f"🔍 Множественный фильтр иерархии (OR): {paths_str}")
+        
+        elif filter_path and filter_level:
+            # Одиночный фильтр (обратная совместимость)
+            # Фильтруем по полю path_level_N, где N = filter_level
+            qdrant_filter = Filter(
+                must=[
+                    FieldCondition(
+                        key=f"path_level_{filter_level}",
+                        match=MatchValue(value=filter_path)
+                    )
+                ]
+            )
+            logger.info(f"🔍 Фильтр иерархии: path_level_{filter_level} = '{filter_path}'")
+
         def _search():
             # ИСПРАВЛЕНО: search заменен на query_points в новых версиях qdrant-client
             # ОПТИМИЗАЦИЯ: score_threshold передается в запрос для фильтрации на стороне Qdrant
-            # logger.info(f"Searching in {collection} with vector dim: {len(query_embedding)}")
             response = self.client.query_points(
                 collection_name=collection,
                 query=query_embedding,
                 limit=top_k,
                 with_payload=True,
                 score_threshold=score_threshold,
+                query_filter=qdrant_filter,  # Фильтр по иерархии
             )
             return response.points
 
@@ -914,9 +1529,13 @@ class QdrantVectorDatabaseManager:
             existing = self.get_record_by_code(code, collection)
             is_new_record = existing is None
             
+            # Генерируем поля path_level_N для иерархической фильтрации
+            path_levels = generate_path_levels(description, separator="→")
+            
             payload = {
                 columns["code"]: code,
                 columns["description"]: description,
+                **path_levels,  # path_level_1, path_level_2, ..., path_depth
                 "timestamp": time.time(),
                 "source": "update" if existing else "create",
             }
@@ -980,9 +1599,13 @@ class QdrantVectorDatabaseManager:
             # Генерируем ID (UUID5 от кода) для детерминизма
             point_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, code))
             
+            # Генерируем поля path_level_N для иерархической фильтрации
+            path_levels = generate_path_levels(desc, separator="→")
+            
             payload = {
                 columns["code"]: code,
                 columns["description"]: desc,
+                **path_levels,  # path_level_1, path_level_2, ..., path_depth
                 "timestamp": timestamp,
                 "source": "batch_update"
             }
@@ -1153,10 +1776,23 @@ else:
 
 # === PYDANTIC МОДЕЛИ ===
 class MatchRequest(BaseModel):
-    """Запрос на поиск похожих записей"""
+    """
+    Запрос на поиск похожих записей.
+    
+    Attributes:
+        text: Текст запроса для поиска.
+        database: Имя коллекции (если None - используется активная).
+        filter_path: Путь категории для фильтрации (например, "Арматура → Краны").
+        filter_level: Уровень иерархии для фильтрации (1, 2, 3...).
+        filter_paths: Список путей для множественной фильтрации (OR логика).
+                      Формат: [{"path": "...", "level": N}, ...]
+    """
 
     text: str
     database: Optional[str] = None
+    filter_path: Optional[str] = None  # Путь для фильтрации по иерархии (одиночный)
+    filter_level: Optional[int] = None  # Уровень иерархии (1, 2, 3...)
+    filter_paths: Optional[List[dict]] = None  # Множественный фильтр: [{"path": "...", "level": N}, ...]
 
 
 class Job(BaseModel):
@@ -1417,9 +2053,14 @@ class BackgroundJobManager:
             for code, desc, emb, meta in zip(codes, texts, embeddings, metas):
                 point_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, str(code)))
                 
+                # Генерируем поля path_level_N для иерархической фильтрации
+                # Это позволяет быстро фильтровать по категориям в Qdrant
+                path_levels = generate_path_levels(desc, separator="→")
+                
                 payload = {
                     columns["code"]: code,
                     columns["description"]: desc,
+                    **path_levels,  # path_level_1, path_level_2, ..., path_depth
                     "timestamp": timestamp,
                     "source": "import_job",
                     **meta
@@ -1456,6 +2097,9 @@ class BackgroundJobManager:
 
 # Инициализация менеджера задач (после определения классов)
 job_manager = BackgroundJobManager()
+
+# Инициализация сервиса иерархии (кэш на 5 минут)
+hierarchy_service = HierarchyService(cache_ttl=300)
 
 # === MIDDLEWARE ===
 @app.middleware("http")
@@ -1613,11 +2257,16 @@ async def match_ksr(request: MatchRequest):
         query_emb = await db_manager.get_embedding_cached(query_text)
 
         # === ШАГ 2: Поиск в Qdrant (теперь асинхронно!) ===
+        # Если указан фильтр по иерархии - применяем его
+        # Приоритет: filter_paths (множественный) > filter_path (одиночный)
         candidates = await db_manager.search_similar(
             collection_name=collection_name,
             query_embedding=query_emb,
             top_k=TOP_K_QDRANT,
             score_threshold=COSINE_THRESHOLD,
+            filter_path=request.filter_path,
+            filter_level=request.filter_level,
+            filter_paths=request.filter_paths,  # Множественный фильтр категорий
         )
 
         if not candidates:
@@ -1644,7 +2293,8 @@ async def match_ksr(request: MatchRequest):
             db_manager.executor, lambda: reranker.predict(candidate_pairs)
         )
 
-        # === ШАГ 5: Фильтрация по порогу reranker ===
+        # === ШАГ 5: Строгая фильтрация по порогу reranker ===
+        # Результаты с rerank_score ниже порога НЕ попадают в выдачу
         valid_results = []
         for idx, (candidate, rerank_score) in enumerate(
             zip(candidates_for_rerank, rerank_scores)
@@ -1652,19 +2302,14 @@ async def match_ksr(request: MatchRequest):
             if rerank_score >= RERANK_THRESHOLD:
                 valid_results.append({**candidate, "rerank_score": float(rerank_score)})
 
+        # Логируем если ничего не прошло порог (но НЕ используем fallback)
         if not valid_results:
             max_rerank = float(np.max(rerank_scores)) if len(rerank_scores) > 0 else 0.0
-            logger.warning(f"⚠️ No results passed reranker threshold. Max score: {max_rerank:.4f} (Threshold: {RERANK_THRESHOLD})")
-            
-            # FALLBACK: Возвращаем топ результатов несмотря на низкий скор
-            logger.info("🔄 Using fallback: returning top results despite low score")
-            
-            all_scored_results = []
-            for idx, (candidate, rerank_score) in enumerate(zip(candidates_for_rerank, rerank_scores)):
-                all_scored_results.append({**candidate, "rerank_score": float(rerank_score)})
-            
-            all_scored_results.sort(key=lambda x: x["rerank_score"], reverse=True)
-            valid_results = all_scored_results[:20]  # Возвращаем 20 лучших
+            logger.warning(
+                f"⚠️ Ничего не прошло порог reranker. "
+                f"Макс. score: {max_rerank:.4f}, Порог: {RERANK_THRESHOLD}"
+            )
+            # Возвращаем пустой список - строгая фильтрация
 
         # === ШАГ 6: Сортировка по reranker score ===
         valid_results.sort(key=lambda x: x["rerank_score"], reverse=True)
@@ -1704,7 +2349,6 @@ async def match_ksr(request: MatchRequest):
         if original_collection and original_collection != db_manager.current_collection:
             db_manager.set_active_collection(original_collection)
 
-
 @app.get("/health")
 async def health_check():
     """
@@ -1721,6 +2365,366 @@ async def health_check():
         "databases_list": list(db_manager.collections_metadata.keys()),
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
     }
+
+
+# === ENDPOINTS ИЕРАРХИЧЕСКОГО КАТАЛОГА ===
+@app.get("/hierarchy/{database_name}")
+async def get_hierarchy(database_name: str, max_depth: int = 10):
+    """
+    Получение дерева иерархии категорий для коллекции.
+    
+    Строит навигационное дерево из полей path_level_N.
+    Результаты кэшируются на 5 минут для производительности.
+    
+    Args:
+        database_name: Имя коллекции в Qdrant.
+        max_depth: Максимальная глубина дерева (по умолчанию 10).
+    
+    Returns:
+        {
+            "tree": [
+                {
+                    "name": "Арматура",
+                    "path": "Арматура",
+                    "level": 1,
+                    "count": 500,
+                    "children": [
+                        {"name": "Краны", "path": "Арматура → Краны", "level": 2, ...}
+                    ]
+                }
+            ],
+            "total_categories": 15,
+            "total_items": 12000,
+            "max_depth": 4,
+            "cached": true,
+            "cache_age": 120
+        }
+    
+    Raises:
+        404: Коллекция не найдена.
+        500: Ошибка построения иерархии.
+    """
+    # Проверяем существование коллекции
+    if database_name not in db_manager.collections_metadata:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Коллекция '{database_name}' не найдена"
+        )
+    
+    try:
+        # Получаем дерево через сервис (с кэшированием)
+        result = await hierarchy_service.get_hierarchy(
+            client=db_manager.client,
+            collection_name=database_name,
+            separator="→",
+            max_depth=max_depth
+        )
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"❌ Ошибка построения иерархии для '{database_name}': {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        raise HTTPException(
+            status_code=500,
+            detail=f"Ошибка построения иерархии: {str(e)}"
+        )
+
+
+@app.get("/hierarchy/{database_name}/children")
+async def get_hierarchy_children(
+    database_name: str, 
+    parent_path: str = "",
+    level: int = 1
+):
+    """
+    Получение дочерних категорий для ленивой загрузки.
+    
+    ОПТИМИЗИРОВАНО: Использует прямой запрос к Qdrant без построения полного дерева!
+    Загружает только непосредственных потомков указанной категории.
+    Результаты кэшируются отдельно для каждого пути (TTL 5 минут).
+    
+    Args:
+        database_name: Имя коллекции в Qdrant.
+        parent_path: Путь родительской категории (пустой = корень).
+        level: Уровень запрашиваемых детей (1 = верхний уровень, игнорируется при parent_path).
+    
+    Returns:
+        {
+            "children": [
+                {
+                    "name": "Арматура",
+                    "path": "Арматура",
+                    "level": 1,
+                    "count": 500,
+                    "has_children": true
+                }
+            ],
+            "parent_path": "",
+            "total": 15,
+            "cached": true
+        }
+    """
+    if database_name not in db_manager.collections_metadata:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Коллекция '{database_name}' не найдена"
+        )
+    
+    try:
+        # Определяем уровень родителя на основе пути
+        # Пустой parent_path = корень (level 0), дети будут level 1
+        # Если parent_path задан - вычисляем уровень по количеству разделителей
+        if parent_path:
+            # Подсчитываем уровень по количеству " → " в пути
+            separator_count = parent_path.count(" → ")
+            parent_level = separator_count + 1  # "A" = level 1, "A → B" = level 2
+        else:
+            parent_level = 0  # Корень
+        
+        # Используем оптимизированный прямой метод (без построения полного дерева!)
+        result = await hierarchy_service.get_children_direct(
+            client=db_manager.client,
+            collection_name=database_name,
+            parent_path=parent_path,
+            parent_level=parent_level,
+            separator="→"
+        )
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"❌ Ошибка получения дочерних категорий: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        raise HTTPException(
+            status_code=500,
+            detail=f"Ошибка получения дочерних категорий: {str(e)}"
+        )
+
+
+@app.post("/hierarchy/{database_name}/invalidate")
+async def invalidate_hierarchy_cache(database_name: str):
+    """
+    Инвалидация кэша иерархии для коллекции.
+    
+    Вызывается после массового обновления данных,
+    чтобы дерево перестроилось при следующем запросе.
+    
+    Args:
+        database_name: Имя коллекции.
+    
+    Returns:
+        {"status": "success", "message": "..."}
+    """
+    hierarchy_service.invalidate_cache(database_name)
+    return {
+        "status": "success",
+        "message": f"Кэш иерархии для '{database_name}' очищен"
+    }
+
+
+class HierarchySearchRequest(BaseModel):
+    """
+    Запрос на семантический поиск по каталогу категорий.
+    
+    Attributes:
+        text: Текст запроса для поиска категорий.
+        top_k: Количество категорий в результате (по умолчанию 10).
+    """
+    text: str
+    top_k: int = 10
+
+
+@app.post("/hierarchy/{database_name}/search")
+async def search_hierarchy_categories(database_name: str, request: HierarchySearchRequest):
+    """
+    Семантический поиск по каталогу категорий.
+    
+    Использует векторный поиск для нахождения релевантных категорий.
+    Алгоритм:
+    1. Выполняет поиск по коллекции через embedding + Qdrant
+    2. Группирует результаты по категориям (path_level_N)
+    3. Ранжирует категории по среднему score и количеству попаданий
+    4. Применяет rerank для финального ранжирования
+    5. Возвращает топ-N категорий с путями для навигации
+    
+    Args:
+        database_name: Имя коллекции в Qdrant.
+        request: HierarchySearchRequest с текстом запроса.
+    
+    Returns:
+        {
+            "categories": [
+                {
+                    "path": "Арматура → Краны",
+                    "level": 2,
+                    "name": "Краны",
+                    "hits": 15,
+                    "avg_score": 0.78,
+                    "best_score": 0.92
+                }
+            ],
+            "query": "...",
+            "total_found": 10
+        }
+    """
+    # Проверяем существование коллекции
+    if database_name not in db_manager.collections_metadata:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Коллекция '{database_name}' не найдена"
+        )
+    
+    query_text = request.text.strip()
+    if not query_text:
+        raise HTTPException(status_code=400, detail="Текст запроса не может быть пустым")
+    
+    try:
+        # Получаем пороги из конфигурации коллекции
+        meta = db_manager.collections_metadata.get(database_name, {})
+        thresholds = meta.get("thresholds", {})
+        cosine_threshold = thresholds.get("cosine", 0.3)  # Для категорий - чуть ниже порог
+        
+        # === ШАГ 1: Генерация эмбеддинга (используем кэшированный метод) ===
+        query_embedding = await db_manager.get_embedding_cached(query_text)
+        
+        # === ШАГ 2: Поиск в Qdrant (больше кандидатов для группировки) ===
+        original_collection = db_manager.current_collection
+        db_manager.set_active_collection(database_name)
+        
+        # Используем search_similar - правильный метод для поиска
+        candidates = await db_manager.search_similar(
+            collection_name=database_name,
+            query_embedding=query_embedding,
+            top_k=500,  # Много кандидатов для группировки по категориям
+            score_threshold=cosine_threshold
+        )
+        
+        # Восстанавливаем коллекцию
+        if original_collection:
+            db_manager.set_active_collection(original_collection)
+        
+        if not candidates:
+            return {
+                "categories": [],
+                "query": query_text,
+                "total_found": 0
+            }
+        
+        # === ШАГ 3: Группировка по КАТЕГОРИЯМ (исключаем последний уровень - материалы) ===
+        # Собираем статистику по всем уровням path_level_N кроме самого глубокого
+        # ВАЖНО: search_similar возвращает metadata вместо payload!
+        category_stats = {}  # {path: {level, hits, scores, name}}
+        
+        logger.info(f"📊 Обработка {len(candidates)} кандидатов для группировки по категориям")
+        
+        for candidate in candidates:
+            # metadata содержит все поля из payload Qdrant
+            metadata = candidate.get("metadata", {})
+            score = candidate.get("score", 0)
+            
+            # Определяем максимальный уровень для этого кандидата (это материал)
+            max_level = 0
+            for level in range(1, 11):
+                if f"path_level_{level}" in metadata and metadata[f"path_level_{level}"]:
+                    max_level = level
+            
+            # Собираем статистику только по уровням 1...(max_level-1) - это категории
+            # Последний уровень (max_level) - это материал, его пропускаем
+            for level in range(1, max_level):  # До предпоследнего уровня
+                path_key = f"path_level_{level}"
+                if path_key in metadata and metadata[path_key]:
+                    path = metadata[path_key]
+                    
+                    if path not in category_stats:
+                        # Извлекаем название (последний сегмент пути)
+                        name = path.split(" → ")[-1] if " → " in path else path
+                        category_stats[path] = {
+                            "path": path,
+                            "level": level,
+                            "name": name,
+                            "hits": 0,
+                            "scores": []
+                        }
+                    
+                    category_stats[path]["hits"] += 1
+                    category_stats[path]["scores"].append(score)
+        
+        logger.info(f"📊 Найдено {len(category_stats)} уникальных категорий")
+        
+        # === ШАГ 4: Ранжирование категорий ===
+        # Вычисляем метрики для каждой категории
+        ranked_categories = []
+        for path, stats in category_stats.items():
+            scores = stats["scores"]
+            avg_score = sum(scores) / len(scores) if scores else 0
+            best_score = max(scores) if scores else 0
+            
+            # Комбинированный score: учитываем и качество, и количество
+            # Формула: avg_score * log(1 + hits) - баланс качества и популярности
+            import math
+            combined_score = avg_score * math.log(1 + stats["hits"])
+            
+            ranked_categories.append({
+                "path": stats["path"],
+                "level": stats["level"],
+                "name": stats["name"],
+                "hits": stats["hits"],
+                "avg_score": round(avg_score, 4),
+                "best_score": round(best_score, 4),
+                "combined_score": round(combined_score, 4)
+            })
+        
+        # Сортируем по комбинированному score
+        ranked_categories.sort(key=lambda x: x["combined_score"], reverse=True)
+        
+        # === ШАГ 5: Rerank топ кандидатов (опционально) ===
+        # Для категорий можно применить rerank по названиям
+        top_categories = ranked_categories[:request.top_k * 2]  # Берём с запасом
+        
+        if reranker and len(top_categories) > 0:
+            # Формируем пары для rerank
+            normalized_query = query_text.lower().strip()
+            rerank_pairs = [
+                (normalized_query, cat["name"]) for cat in top_categories
+            ]
+            
+            loop = asyncio.get_event_loop()
+            rerank_scores = await loop.run_in_executor(
+                db_manager.executor, lambda: reranker.predict(rerank_pairs)
+            )
+            
+            # Добавляем rerank score и пересортировываем
+            for i, cat in enumerate(top_categories):
+                cat["rerank_score"] = round(float(rerank_scores[i]), 4)
+            
+            # Сортируем по rerank score
+            top_categories.sort(key=lambda x: x.get("rerank_score", 0), reverse=True)
+        
+        # Берём финальный топ
+        final_categories = top_categories[:request.top_k]
+        
+        logger.info(
+            f"🔍 Поиск категорий: '{query_text[:30]}...' | "
+            f"Найдено: {len(final_categories)} категорий из {len(category_stats)}"
+        )
+        
+        return {
+            "categories": final_categories,
+            "query": query_text,
+            "total_found": len(final_categories)
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Ошибка поиска категорий: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        raise HTTPException(
+            status_code=500,
+            detail=f"Ошибка поиска категорий: {str(e)}"
+        )
 
 
 @app.get("/stats")
@@ -2016,9 +3020,13 @@ async def admin_update_point(name: str, id: str, req: UpdatePointRequest):
     
     # Обновляем поле
     if req.field == "description":
-        # Если меняется описание, нужно пересчитать вектор!
+        # Если меняется описание, нужно пересчитать вектор и path_levels!
         new_text = req.value
         payload[columns["description"]] = new_text
+        
+        # Пересчитываем поля path_level_N для иерархической фильтрации
+        path_levels = generate_path_levels(new_text, separator="→")
+        payload.update(path_levels)
         
         # Защищенный пересчет вектора
         async with db_manager.gpu_lock:
@@ -2234,10 +3242,14 @@ async def update_ksr_record(request: UpdateRequest):
             limit=1,
         )
 
+        # Генерируем поля path_level_N для иерархической фильтрации
+        path_levels = generate_path_levels(request.description, separator="→")
+        
         # Подготовка метаданных
         new_metadata = {
             "code": request.code,
             "description": request.description,
+            **path_levels,  # path_level_1, path_level_2, ..., path_depth
             "timestamp": time.time(),
             "source": "manual_update",
         }
