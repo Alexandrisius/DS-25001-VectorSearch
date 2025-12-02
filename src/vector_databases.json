@@ -9,6 +9,8 @@
       "cosine": 0.45,
       "rerank": 0.6
     },
-    "last_updated": "29.11.2025"
+    "last_updated": "29.11.2025",
+    "visible": true,
+    "locked": true
   }
 }

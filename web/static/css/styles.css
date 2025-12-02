@@ -69,8 +69,8 @@
 
         .container {
             max-width: 1600px;
-            /* УВЕЛИЧЕНО с 1400px */
             margin: 0 auto;
+            position: relative;
         }
 
         /* --- Header --- */
@@ -98,11 +98,62 @@
             margin: 0 auto;
         }
 
-        /* --- Переключатель темы --- */
-        .theme-toggle {
+        /* --- Header Controls --- */
+        .header-controls {
             position: absolute;
             top: 10px;
             right: 10px;
+            display: flex;
+            gap: 10px;
+            z-index: 100;
+        }
+
+        /* --- Admin Sidebar Button (Большая боковая кнопка) --- */
+        .admin-sidebar-btn {
+            position: fixed;
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            color: white;
+            padding: 20px 16px;
+            border-radius: 0 16px 16px 0;
+            text-decoration: none;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+            font-size: 0.85rem;
+            font-weight: 700;
+            box-shadow: 4px 0 20px rgba(99, 102, 241, 0.4);
+            transition: all 0.3s ease;
+            z-index: 1000;
+            writing-mode: vertical-rl;
+            text-orientation: mixed;
+        }
+        .admin-sidebar-btn i {
+            font-size: 1.5rem;
+            writing-mode: horizontal-tb;
+            animation: spin-slow 8s linear infinite;
+        }
+        @keyframes spin-slow {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .admin-sidebar-btn span {
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+        .admin-sidebar-btn:hover {
+            padding-left: 22px;
+            box-shadow: 8px 0 30px rgba(99, 102, 241, 0.5);
+        }
+        .admin-sidebar-btn:hover i {
+            animation-duration: 2s;
+        }
+
+        /* --- Переключатель темы --- */
+        .theme-toggle {
             background: var(--surface);
             border: 2px solid var(--border);
             border-radius: var(--radius-md);
@@ -144,7 +195,7 @@
         .card-header {
             background: var(--bg-body);
             border-bottom: 1px solid var(--border);
-            padding: 12px 20px; /* УМЕНЬШЕНО с 20px 25px */
+            padding: 12px 20px;
             position: relative;
             z-index: 10;
             transition: background-color 0.3s ease;
@@ -163,13 +214,13 @@
             align-items: center;
             gap: 10px;
             white-space: nowrap;
-            flex: 0 0 auto; /* Ширина по содержимому, не сжимать/не растягивать */
+            flex: 0 0 auto;
         }
 
         .metrics-panel {
             display: inline-flex;
             align-items: center;
-            justify-content: center; /* Центрируем содержимое внутри */
+            justify-content: center;
             gap: 15px;
             font-size: 0.8rem;
             color: var(--text-secondary);
@@ -178,11 +229,10 @@
             border-radius: var(--radius-md);
             border: 1px solid var(--border);
             width: auto;
-            /* Ключевые изменения для центрирования и стабилизации */
-            flex: 1; /* Занимает всё доступное пространство между заголовком и списком */
-            margin: 0 10px; /* Небольшие отступы для страховки */
-            max-width: fit-content; /* Но не растягиваем саму плашку на всю ширину */
-            margin-left: auto; /* Центрирование блока во flex-контейнере */
+            flex: 1;
+            margin: 0 10px;
+            max-width: fit-content;
+            margin-left: auto;
             margin-right: auto;
         }
 
@@ -202,8 +252,8 @@
         .custom-select-wrapper {
             position: relative;
             width: 320px;
-            min-width: 320px; /* Жестко фиксируем минимальную ширину */
-            flex: 0 0 320px; /* Жестко фиксируем размер во flex-контейнере */
+            min-width: 320px;
+            flex: 0 0 320px;
             user-select: none;
         }
 
@@ -212,7 +262,7 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 10px 16px; /* Чуть компактнее: было 12px 20px */
+            padding: 10px 16px;
             font-size: 0.9rem;
             font-weight: 600;
             color: var(--text-main);
@@ -429,7 +479,6 @@
         .ksr-table th {
             text-align: left;
             padding: 12px 20px;
-            /* УМЕНЬШЕНО с 15px 25px */
             background: var(--bg-body);
             color: var(--text-secondary);
             font-size: 0.75rem;
@@ -439,41 +488,33 @@
 
         .ksr-table td {
             padding: 16px 20px;
-            /* УМЕНЬШЕНО с 20px 25px */
             border-bottom: 1px solid var(--border);
             vertical-align: middle;
         }
 
-        /* ИСПРАВЛЕНИЕ: Ячейка с кодом - запрет переноса */
         .ksr-table td:nth-child(2) {
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
             max-width: 250px;
-            /* Ограничение для очень длинных кодов */
         }
 
-        /* Ячейка для кнопок */
         .copy-cell {
             padding: 16px 8px !important;
-            /* УМЕНЬШЕНО с 20px 10px */
             text-align: center;
             width: 45px;
-            /* УМЕНЬШЕНО с 50px */
         }
 
         .code-text {
             font-family: 'Courier New', monospace;
             font-weight: 700;
             font-size: 0.9rem;
-            /* УМЕНЬШЕНО с 0.95rem */
             color: var(--primary-dark);
             background: var(--primary-light);
             padding: 4px 8px;
             border-radius: 6px;
             display: inline-block;
             white-space: nowrap;
-            /* ДОБАВЛЕНО: гарантия одной строки */
         }
 
         .copy-btn {
@@ -584,6 +625,25 @@
                 width: 100%;
             }
 
+            .admin-sidebar-btn {
+                top: auto;
+                bottom: 20px;
+                left: 20px;
+                transform: none;
+                border-radius: 14px;
+                writing-mode: horizontal-tb;
+                flex-direction: row;
+                padding: 14px 20px;
+            }
+            .admin-sidebar-btn i {
+                animation: none;
+            }
+            .admin-sidebar-btn span {
+                writing-mode: horizontal-tb;
+                text-transform: none;
+                letter-spacing: normal;
+            }
+
             .theme-toggle {
                 position: fixed;
                 top: 15px;
@@ -598,28 +658,26 @@
 
             .header-top-row {
                 flex-direction: column;
-                align-items: stretch; /* Растянуть элементы на всю ширину */
+                align-items: stretch;
                 gap: 15px;
             }
 
             .metrics-panel {
-                display: flex; /* Вернуть flex для мобильных */
-                flex-direction: column; /* Элементы метрик друг под другом, если не влезают, или в ряд */
-                /* Или лучше оставить в ряд, но позволить перенос? В исходном коде было flex-direction: column */
-                flex-direction: row; /* На мобильных метрики лучше в строку, если влезают, или с переносом */
+                display: flex;
+                flex-direction: row;
                 flex-wrap: wrap;
-                justify-content: flex-start; /* Выравнивание по левому краю */
+                justify-content: flex-start;
                 align-items: center;
                 gap: 10px;
                 width: 100%;
-                max-width: 100%; /* Сбросить ограничение ширины */
-                margin: 0; /* Сбросить auto margin */
-                flex: 0 0 auto; /* Сбросить flex-grow */
+                max-width: 100%;
+                margin: 0;
+                flex: 0 0 auto;
             }
 
             .custom-select-wrapper {
                 width: 100%;
-                min-width: 0; /* Сбросить минимальную ширину для мобильных */
+                min-width: 0;
                 flex: 0 0 auto;
             }
 
@@ -666,7 +724,6 @@
                 vertical-align: middle;
                 border: none;
                 max-width: calc(100% - 120px);
-                /* ИСПРАВЛЕНО для мобильных */
             }
 
             .ksr-table td:nth-child(3) {

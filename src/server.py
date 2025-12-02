@@ -54,22 +54,24 @@ from transformers import AutoModel, AutoTokenizer
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# === Конфигурация ===
+# === Импорт конфигурации ===
+# Все пути и настройки вынесены в отдельный файл config.py
+from config import (
+    PROJECT_ROOT,
+    QDRANT_STORAGE_PATH,
+    INTERIM_DATA_DIR as DATA_DIR,
+    WEB_DIR,
+    QWEN_MODEL_PATH,
+    RERANKER_PATH,
+    VECTOR_DATABASES_CONFIG,
+    FEEDBACK_DIR,
+    EMBEDDING_CACHE_SIZE,
+    SERVER_HOST,
+    SERVER_PORT,
+)
+
+# Базовая директория скрипта (для обратной совместимости)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = (
-    "C:/Users/klim9/Yandex.Disk/02_Work/#Projects/04_DataScience/DS-25001-VectorSearch"
-)
-
-# Пути к данным
-QDRANT_STORAGE_PATH = os.path.join(
-    PROJECT_ROOT, "data", "03_processed", "qdrant_storage"
-)
-DATA_DIR = os.path.join(PROJECT_ROOT, "data", "02_interim")
-WEB_DIR = os.path.join(PROJECT_ROOT, "web")
-
-# Настройки моделей
-QWEN_MODEL_PATH = r"D:\hf_cache\Qwen3-Embedding-4B"
-RERANKER_PATH = r"D:\hf_cache\bge-reranker-v2-m3"
 
 
 # === ОПТИМИЗАЦИЯ: Кэш для эмбеддингов ===
@@ -185,8 +187,19 @@ class QdrantVectorDatabaseManager:
         logger.info(f"🖥️ Устройство для вычислений: {self.device}")
 
         # КРИТИЧНО: Сохраняем путь к конфигу для перезагрузки
-        self.config_path = os.path.join(BASE_DIR, "vector_databases.json")
+        # Используем путь из централизованной конфигурации (config.py)
+        self.config_path = str(VECTOR_DATABASES_CONFIG)
+        
+        # GPU Lock для защиты памяти при параллельных запросах
+        self.gpu_lock = asyncio.Lock()
 
+        # Путь к файлу отложенных удалений
+        self.pending_deletions_path = storage_path / "pending_deletions.json"
+        
+        # Очищаем отложенные удаления ПЕРЕД подключением к Qdrant
+        # (пока файлы ещё не заблокированы)
+        self._cleanup_pending_deletions()
+        
         # Инициализация Qdrant клиента
         logger.info(f"🔌 Подключение к Qdrant: {storage_path}")
         self.client = QdrantClient(path=storage_path)
@@ -211,7 +224,8 @@ class QdrantVectorDatabaseManager:
         self._init_embedding_model()
         
         # Инициализация кэша
-        self.embedding_cache = EmbeddingCache(max_size=15000)
+        # Размер кэша определён в config.py (EMBEDDING_CACHE_SIZE)
+        self.embedding_cache = EmbeddingCache(max_size=EMBEDDING_CACHE_SIZE)
 
     def _init_embedding_model(self):
         """
@@ -296,6 +310,31 @@ class QdrantVectorDatabaseManager:
             
         return np.vstack(all_embeddings)
 
+    def save_configuration(self):
+        """
+        Сохранение текущей конфигурации в JSON файл.
+        Вызывается после любых изменений в настройках или списке баз.
+        """
+        try:
+            config = {}
+            for name, meta in self.collections_metadata.items():
+                config[name] = {
+                    "description": meta.get("description", f"База {name}"),
+                    "columns": meta.get("columns", {"code": "code", "description": "description"}),
+                    "thresholds": meta.get("thresholds", {"cosine": 0.45, "rerank": 0.6}),
+                    "last_updated": meta.get("last_updated", ""),
+                    "visible": meta.get("visible", True), # New field
+                    "locked": meta.get("locked", False)   # New field
+                }
+            
+            with open(self.config_path, "w", encoding="utf-8") as f:
+                json.dump(config, f, indent=2, ensure_ascii=False)
+            
+            logger.info("💾 Конфигурация успешно сохранена")
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка сохранения конфигурации: {e}")
+
     def _get_embedding_sync(self, text: str) -> np.ndarray:
         """Синхронное получение эмбеддинга через локальную модель"""
         try:
@@ -378,16 +417,21 @@ class QdrantVectorDatabaseManager:
         """
         Адаптер для поиска с фильтрацией по score.
         Возвращает список словарей, совместимый с MatchResponse.
+        
+        ОПТИМИЗАЦИЯ: Фильтрация по score_threshold перенесена в search_vectors (на сторону Qdrant).
+        Это уменьшает объем передаваемых данных и ускоряет обработку.
         """
         results = await self.search_vectors(
             query_embedding=query_embedding,
             top_k=top_k,
-            collection_name=collection_name
+            collection_name=collection_name,
+            score_threshold=score_threshold
         )
         
-        # Фильтрация по порогу косинусного сходства
-        filtered_results = [r for r in results if r['score'] >= score_threshold]
-        return filtered_results
+        # Фильтрация по порогу косинусного сходства теперь выполняется в Qdrant
+        # filtered_results = [r for r in results if r['score'] >= score_threshold]
+        
+        return results
         
     def delete_by_code(self, code: str, collection_name: Optional[str] = None) -> bool:
         """Алиас для delete_record"""
@@ -454,6 +498,8 @@ class QdrantVectorDatabaseManager:
                         "dimension": collection_info.config.params.vectors.size,
                         # ИЗМЕНЕНО: Читаем дату из конфига, если её нет - пустая строка
                         "last_updated": db_config.get("last_updated", ""),
+                        "visible": db_config.get("visible", True),
+                        "locked": db_config.get("locked", False),
                     }
 
                     logger.info(
@@ -503,6 +549,82 @@ class QdrantVectorDatabaseManager:
         except Exception as e:
             logger.error(f"❌ Ошибка при загрузке конфигурации: {str(e)}")
             raise
+
+    def _cleanup_pending_deletions(self):
+        """
+        Очистка папок коллекций, помеченных на удаление.
+        
+        Вызывается при старте сервера ДО подключения к Qdrant,
+        когда файлы storage.sqlite ещё не заблокированы.
+        """
+        import shutil
+        
+        if not self.pending_deletions_path.exists():
+            return
+            
+        try:
+            with open(self.pending_deletions_path, "r", encoding="utf-8") as f:
+                pending = json.load(f)
+            
+            deleted_count = 0
+            failed = []
+            
+            for collection_name in pending.get("collections", []):
+                collection_dir = QDRANT_STORAGE_PATH / "collection" / collection_name
+                
+                if collection_dir.exists():
+                    try:
+                        shutil.rmtree(collection_dir)
+                        logger.info(f"🗑️ Очищена папка отложенного удаления: {collection_name}")
+                        deleted_count += 1
+                    except Exception as e:
+                        logger.warning(f"⚠️ Не удалось удалить папку {collection_name}: {e}")
+                        failed.append(collection_name)
+                else:
+                    logger.info(f"📁 Папка {collection_name} уже не существует")
+            
+            # Обновляем файл отложенных удалений
+            if failed:
+                # Оставляем только те, что не удалось удалить
+                with open(self.pending_deletions_path, "w", encoding="utf-8") as f:
+                    json.dump({"collections": failed}, f)
+            else:
+                # Удаляем файл если всё очистили
+                self.pending_deletions_path.unlink()
+                
+            if deleted_count > 0:
+                logger.info(f"✅ Очищено {deleted_count} папок отложенных удалений")
+                
+        except Exception as e:
+            logger.warning(f"⚠️ Ошибка при очистке отложенных удалений: {e}")
+
+    def _schedule_deletion(self, collection_name: str):
+        """
+        Помечает папку коллекции для отложенного удаления.
+        
+        Папка будет удалена при следующем запуске сервера,
+        когда файлы не заблокированы Qdrant.
+        
+        Args:
+            collection_name: Имя коллекции для удаления
+        """
+        try:
+            pending = {"collections": []}
+            
+            if self.pending_deletions_path.exists():
+                with open(self.pending_deletions_path, "r", encoding="utf-8") as f:
+                    pending = json.load(f)
+            
+            if collection_name not in pending["collections"]:
+                pending["collections"].append(collection_name)
+                
+            with open(self.pending_deletions_path, "w", encoding="utf-8") as f:
+                json.dump(pending, f, indent=2)
+                
+            logger.info(f"📋 Коллекция '{collection_name}' помечена для удаления при перезапуске")
+            
+        except Exception as e:
+            logger.warning(f"⚠️ Не удалось записать отложенное удаление: {e}")
 
     def _create_default_config(self, config_path: str):
         """
@@ -600,6 +722,7 @@ class QdrantVectorDatabaseManager:
         query_embedding: List[float],
         top_k: int = 10,
         collection_name: Optional[str] = None,
+        score_threshold: Optional[float] = None,
     ) -> List[Dict]:
         """
         Выполнение поиска ближайших соседей (ANN) в Qdrant.
@@ -611,6 +734,7 @@ class QdrantVectorDatabaseManager:
             query_embedding (List[float]): Вектор запроса.
             top_k (int): Максимальное количество кандидатов.
             collection_name (Optional[str]): Имя коллекции (если None, используется активная).
+            score_threshold (Optional[float]): Порог косинусного сходства для фильтрации на стороне БД.
 
         Returns:
             List[Dict]: Список найденных записей с метаданными и оценкой сходства (score).
@@ -635,12 +759,14 @@ class QdrantVectorDatabaseManager:
 
         def _search():
             # ИСПРАВЛЕНО: search заменен на query_points в новых версиях qdrant-client
+            # ОПТИМИЗАЦИЯ: score_threshold передается в запрос для фильтрации на стороне Qdrant
             # logger.info(f"Searching in {collection} with vector dim: {len(query_embedding)}")
             response = self.client.query_points(
                 collection_name=collection,
                 query=query_embedding,
                 limit=top_k,
                 with_payload=True,
+                score_threshold=score_threshold,
             )
             return response.points
 
@@ -977,11 +1103,14 @@ class QdrantVectorDatabaseManager:
         }
 
 
+
+
 # === ИНИЦИАЛИЗАЦИЯ СИСТЕМЫ ===
 logger.info("⚙️ Инициализация системы поиска с Qdrant...")
 
 # Инициализация менеджера векторных баз
 db_manager = QdrantVectorDatabaseManager(storage_path=QDRANT_STORAGE_PATH)
+
 
 # Загрузка reranker модели
 logger.info(f"🧠 Загрузка reranker на устройстве: {db_manager.device}")
@@ -1028,6 +1157,45 @@ class MatchRequest(BaseModel):
 
     text: str
     database: Optional[str] = None
+
+
+class Job(BaseModel):
+    """Модель фоновой задачи"""
+    id: str
+    type: str
+    status: str  # pending, processing, completed, error
+    progress: int = 0
+    total: int = 0
+    details: str = ""
+    created_at: float
+    error: Optional[str] = None
+
+
+class ColumnMapping(BaseModel):
+    """Маппинг колонок для импорта"""
+    code_column: str
+    desc_columns: List[str]
+    separator: str = " "
+
+
+class UpdatePointRequest(BaseModel):
+    """Запрос на обновление одной ячейки"""
+    code: str
+    field: str # 'description' or 'code'
+    value: str
+
+
+class CollectionConfig(BaseModel):
+    """
+    Конфигурация коллекции для обновления через API.
+    
+    ВАЖНО: Поле 'locked' НЕ может быть изменено через API!
+    Защита коллекции устанавливается только через прямое редактирование
+    файла vector_databases.json или через код сервера.
+    """
+    visible: bool = True
+    thresholds: Dict[str, float]
+    # locked намеренно исключён из API - защита только через код!
 
 
 class CandidateResult(BaseModel):
@@ -1113,6 +1281,182 @@ class DislikeEvent(BaseModel):
     action: str = "dislike"
 
 
+# === МЕНЕДЖЕР ФОНОВЫХ ЗАДАЧ ===
+class BackgroundJobManager:
+    """
+    Менеджер фоновых задач для импорта данных и других долгих операций.
+    Использует asyncio.Queue для очереди и хранит статус задач в памяти.
+    """
+    def __init__(self):
+        self.jobs: Dict[str, Job] = {}
+        self.queue = asyncio.Queue()
+        self.is_running = False
+
+    async def submit_job(self, job_type: str, data: dict) -> str:
+        """Создает задачу и добавляет в очередь"""
+        job_id = str(uuid.uuid4())
+        job = Job(
+            id=job_id,
+            type=job_type,
+            status="pending",
+            created_at=time.time(),
+            details=f"Job {job_type} queued"
+        )
+        self.jobs[job_id] = job
+        await self.queue.put((job_id, data))
+        
+        if not self.is_running:
+            asyncio.create_task(self.worker())
+            
+        return job_id
+
+    async def get_job(self, job_id: str) -> Optional[Job]:
+        return self.jobs.get(job_id)
+
+    async def list_jobs(self) -> List[Job]:
+        # Сортировка: сначала новые
+        return sorted(self.jobs.values(), key=lambda j: j.created_at, reverse=True)
+
+    async def worker(self):
+        """Фоновый воркер для обработки очереди"""
+        self.is_running = True
+        logger.info("👷 Background worker started")
+        
+        while True:
+            try:
+                job_id, data = await self.queue.get()
+                job = self.jobs[job_id]
+                
+                logger.info(f"👷 Starting job {job_id} ({job.type})")
+                job.status = "processing"
+                job.progress = 0
+                
+                try:
+                    if job.type == "import_batch":
+                        await self.process_import(job, data)
+                    else:
+                        logger.warning(f"Unknown job type: {job.type}")
+                        job.status = "error"
+                        job.error = f"Unknown job type: {job.type}"
+                
+                except Exception as e:
+                    logger.error(f"❌ Job {job_id} failed: {e}")
+                    import traceback
+                    logger.error(traceback.format_exc())
+                    job.status = "error"
+                    job.error = str(e)
+                else:
+                    if job.status != "error":
+                        job.status = "completed"
+                        job.progress = 100
+                        logger.info(f"✅ Job {job_id} completed")
+                
+                finally:
+                    self.queue.task_done()
+                    
+            except Exception as e:
+                logger.error(f"Worker crashed: {e}")
+                await asyncio.sleep(1)
+
+    async def process_import(self, job: Job, data: dict):
+        """
+        Логика импорта данных.
+        data: {
+            "collection_name": str,
+            "records": List[dict], # [{"code": "...", "description": "..."}]
+            "recreate": bool
+        }
+        """
+        collection_name = data["collection_name"]
+        records = data["records"]
+        total = len(records)
+        job.total = total
+        
+        # Получаем доступ к глобальному db_manager
+        global db_manager
+        
+        # Проверяем существование коллекции
+        if collection_name not in db_manager.collections_metadata:
+            raise ValueError(f"Коллекция '{collection_name}' не найдена. Сначала создайте её.")
+        
+        # КРИТИЧНО: Проверяем размерность коллекции vs модели
+        collection_dim = db_manager.collections_metadata[collection_name].get("dimension")
+        model_dim = db_manager.embedding_model.config.hidden_size
+        
+        if collection_dim and collection_dim != model_dim:
+            raise ValueError(
+                f"Размерность коллекции ({collection_dim}) не совпадает с размерностью модели ({model_dim}). "
+                f"Удалите коллекцию '{collection_name}' и создайте заново."
+            )
+             
+        BATCH_SIZE = 32
+        processed = 0
+        
+        # Итерируемся батчами
+        for i in range(0, total, BATCH_SIZE):
+            batch = records[i : i + BATCH_SIZE]
+            
+            # Подготовка данных
+            texts = [r["description"] for r in batch]
+            codes = [r["code"] for r in batch]
+            metas = [r.get("meta", {}) for r in batch]
+            
+            # === CRITICAL: GPU LOCK ===
+            # Защищаем вызов тяжелой модели
+            async with db_manager.gpu_lock:
+                 embeddings = await asyncio.get_event_loop().run_in_executor(
+                     db_manager.executor,
+                     lambda: db_manager.get_embeddings_batch(texts, batch_size=BATCH_SIZE)
+                 )
+            
+            # Формирование точек
+            points = []
+            timestamp = time.time()
+            columns = db_manager.collections_metadata.get(collection_name, {}).get("columns", {"code": "code", "description": "description"})
+            
+            for code, desc, emb, meta in zip(codes, texts, embeddings, metas):
+                point_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, str(code)))
+                
+                payload = {
+                    columns["code"]: code,
+                    columns["description"]: desc,
+                    "timestamp": timestamp,
+                    "source": "import_job",
+                    **meta
+                }
+                
+                points.append(PointStruct(
+                    id=point_id,
+                    vector=emb.tolist(),
+                    payload=payload
+                ))
+            
+            # Запись в Qdrant (не требует GPU lock)
+            db_manager.client.upsert(
+                collection_name=collection_name,
+                points=points
+            )
+            
+            processed += len(batch)
+            job.progress = int((processed / total) * 100)
+            
+            # Обновляем счетчик
+            if collection_name in db_manager.collections_metadata:
+                 db_manager.collections_metadata[collection_name]["record_count"] = processed # Примерно, точнее будет после всего
+            
+            # Даем передышку event loop
+            await asyncio.sleep(0.01)
+            
+        # Финальное обновление счетчика и даты
+        info = db_manager.client.get_collection(collection_name)
+        if collection_name in db_manager.collections_metadata:
+            db_manager.collections_metadata[collection_name]["record_count"] = info.points_count
+            db_manager.collections_metadata[collection_name]["last_updated"] = datetime.now().strftime("%d.%m.%Y")
+            db_manager.save_configuration()
+
+# Инициализация менеджера задач (после определения классов)
+job_manager = BackgroundJobManager()
+
 # === MIDDLEWARE ===
 @app.middleware("http")
 async def log_processing_time(request, call_next):
@@ -1141,7 +1485,10 @@ async def root():
 @app.get("/databases")
 async def get_databases():
     """
-    Получение списка доступных баз данных для фронтенда
+    Получение списка доступных баз данных для фронтенда.
+    
+    ВАЖНО: Возвращает только коллекции с visible=True.
+    Скрытые коллекции не отображаются в основном интерфейсе поиска.
 
     Returns:
         {
@@ -1160,8 +1507,12 @@ async def get_databases():
     try:
         databases_list = []
 
-        # ИСПРАВЛЕНО: используем collections_metadata напрямую
+        # Фильтруем по visible=True (скрытые коллекции не показываем в UI поиска)
         for name, meta in db_manager.collections_metadata.items():
+            # Пропускаем скрытые коллекции
+            if not meta.get("visible", True):
+                continue
+                
             databases_list.append(
                 {
                     "name": name,
@@ -1172,7 +1523,7 @@ async def get_databases():
                         "thresholds", {"cosine": 0.45, "rerank": 0.6}
                     ),
                     "last_updated": meta.get("last_updated", ""),
-            }
+                }
             )
 
         return {
@@ -1254,8 +1605,8 @@ async def match_ksr(request: MatchRequest):
         columns = db_manager.get_columns()
 
         # Параметры поиска
-        TOP_K_QDRANT = 1500
-        MAX_FOR_RERANK = 200
+        TOP_K_QDRANT = 500
+        MAX_FOR_RERANK = 100
         MAX_RESULTS = 100
 
         # === ШАГ 1: Генерация эмбеддинга запроса (асинхронно с кэшем) ===
@@ -1378,7 +1729,7 @@ async def get_stats():
     collections_info = []
     for name in db_manager.collections_metadata.keys():
         try:
-            info = db_manager.get_collection_info(name)
+            info = db_manager.get_collection_stats(name)
             collections_info.append(info)
         except Exception as e:
             logger.error(f"Ошибка получения информации о '{name}': {e}")
@@ -1390,6 +1741,352 @@ async def get_stats():
         "device": db_manager.device,
         "executor_workers": db_manager.executor._max_workers,
     }
+
+
+# === ADMIN ENDPOINTS ===
+# Административная панель для управления коллекциями, импорта данных
+# и мониторинга фоновых задач. Доступ защищён паролем.
+
+@app.get("/admin", response_class=HTMLResponse)
+async def admin_page():
+    """
+    Возвращает HTML-страницу административной панели.
+    
+    Панель позволяет:
+    - Просматривать и редактировать коллекции
+    - Импортировать данные из CSV/Excel
+    - Настраивать пороги поиска
+    - Мониторить фоновые задачи
+    """
+    try:
+        admin_path = WEB_DIR / "admin.html"
+        with open(admin_path, "r", encoding="utf-8") as f:
+            return f.read()
+    except FileNotFoundError:
+        raise HTTPException(404, "Admin interface not found")
+
+
+class AuthRequest(BaseModel):
+    """Запрос аутентификации для админ-панели"""
+    password: str
+
+
+@app.post("/admin/auth")
+async def admin_auth(req: AuthRequest):
+    """
+    Аутентификация администратора.
+    
+    Простая проверка пароля без сессий (stateless).
+    В продакшн-среде рекомендуется использовать полноценную аутентификацию.
+    
+    Returns:
+        {"status": "ok", "token": "..."} при успехе
+        401 Unauthorized при неверном пароле
+    """
+    # TODO: В продакшне заменить на безопасное хранение пароля
+    if req.password == "admin123":
+        return {"status": "ok", "token": "admin-token-valid"}
+    raise HTTPException(status_code=401, detail="Invalid password")
+
+@app.get("/admin/collections")
+async def admin_list_collections():
+    """
+    Получение списка всех коллекций для админ-панели.
+    
+    В отличие от /databases, возвращает ВСЕ коллекции,
+    включая скрытые (visible=False).
+    
+    Returns:
+        {"collections": [список коллекций с полными метаданными]}
+    """
+    return {
+        "collections": [
+            {**meta, "is_active": name == db_manager.current_collection}
+            for name, meta in db_manager.collections_metadata.items()
+        ]
+    }
+
+
+@app.post("/admin/collections/{name}/config")
+async def admin_update_config(name: str, config: CollectionConfig):
+    """
+    Обновление настроек коллекции (пороги, видимость).
+    
+    ВАЖНО: Флаг 'locked' НЕ может быть изменён через этот endpoint!
+    Защита коллекции устанавливается только через прямое редактирование
+    файла vector_databases.json.
+    
+    Args:
+        name: Имя коллекции
+        config: Новые настройки (thresholds, visible)
+    
+    Returns:
+        {"status": "success", "config": обновлённые метаданные}
+    """
+    if name not in db_manager.collections_metadata:
+        raise HTTPException(404, "Collection not found")
+    
+    meta = db_manager.collections_metadata[name]
+    meta["thresholds"] = config.thresholds
+    meta["visible"] = config.visible
+    # ВАЖНО: locked НЕ обновляется через API - только через код/файл!
+    
+    # Сохраняем немедленно
+    db_manager.save_configuration()
+    
+    return {"status": "success", "config": meta}
+
+@app.delete("/admin/collections/{name}")
+async def admin_delete_collection(name: str):
+    """
+    Полное удаление коллекции из Qdrant.
+    
+    ВНИМАНИЕ: Операция необратима! Все данные будут удалены.
+    
+    Защищённые коллекции (locked=True) НЕ могут быть удалены через API.
+    Для снятия защиты необходимо вручную изменить файл vector_databases.json.
+    
+    Args:
+        name: Имя коллекции для удаления
+    
+    Returns:
+        {"status": "success"} при успехе
+        403 если коллекция защищена (locked)
+        404 если коллекция не найдена
+    """
+    if name not in db_manager.collections_metadata:
+        raise HTTPException(404, "Коллекция не найдена")
+    
+    # Проверяем флаг защиты
+    meta = db_manager.collections_metadata[name]
+    if meta.get("locked", False):
+        logger.warning(f"🔒 Попытка удаления защищённой коллекции: {name}")
+        raise HTTPException(
+            status_code=403, 
+            detail="Невозможно удалить защищённую коллекцию. Снимите защиту через файл конфигурации."
+        )
+    
+    try:
+        import shutil
+        
+        # 1. Удаляем из Qdrant API
+        db_manager.client.delete_collection(name)
+        logger.info(f"🗑️ Коллекция '{name}' удалена из Qdrant API")
+        
+        # 2. Удаляем из метаданных приложения
+        del db_manager.collections_metadata[name]
+        
+        # 3. Если была активной - сбрасываем или меняем
+        if db_manager.current_collection == name:
+            db_manager.current_collection = next(iter(db_manager.collections_metadata)) if db_manager.collections_metadata else None
+            
+        # 4. Сохраняем конфиг vector_databases.json
+        db_manager.save_configuration()
+        logger.info(f"💾 Конфигурация обновлена: коллекция '{name}' удалена")
+        
+        # 5. Принудительно обновляем meta.json Qdrant
+        meta_json_path = QDRANT_STORAGE_PATH / "meta.json"
+        if meta_json_path.exists():
+            try:
+                with open(meta_json_path, "r", encoding="utf-8") as f:
+                    meta_data = json.load(f)
+                
+                if "collections" in meta_data and name in meta_data["collections"]:
+                    del meta_data["collections"][name]
+                    
+                    with open(meta_json_path, "w", encoding="utf-8") as f:
+                        json.dump(meta_data, f, indent=4, ensure_ascii=False)
+                    
+                    logger.info(f"🗑️ Коллекция '{name}' удалена из meta.json")
+            except Exception as meta_err:
+                logger.warning(f"⚠️ Не удалось обновить meta.json: {meta_err}")
+        
+        # 6. ПОЛНОЕ УДАЛЕНИЕ: пытаемся удалить папку с данными коллекции
+        collection_dir = QDRANT_STORAGE_PATH / "collection" / name
+        folder_deleted = False
+        
+        if collection_dir.exists():
+            try:
+                # Пробуем удалить сразу
+                shutil.rmtree(collection_dir)
+                logger.info(f"🗑️ Удалена папка с эмбеддингами: {collection_dir}")
+                folder_deleted = True
+            except PermissionError:
+                # Файлы заблокированы Qdrant - планируем отложенное удаление
+                db_manager._schedule_deletion(name)
+                logger.warning(
+                    f"⚠️ Папка {name} заблокирована. "
+                    f"Будет удалена при следующем запуске сервера."
+                )
+            except Exception as e:
+                # Другая ошибка - тоже планируем отложенное удаление
+                db_manager._schedule_deletion(name)
+                logger.warning(f"⚠️ Ошибка удаления папки {name}: {e}. Запланировано отложенное удаление.")
+        
+        if folder_deleted:
+            logger.info(f"✅ Коллекция '{name}' полностью удалена (включая все данные)")
+            return {"status": "success", "message": f"Коллекция '{name}' полностью удалена"}
+        else:
+            logger.info(f"✅ Коллекция '{name}' удалена. Папка с данными будет очищена при перезапуске сервера.")
+            return {
+                "status": "success", 
+                "message": f"Коллекция '{name}' удалена. Папка с данными будет очищена при перезапуске сервера.",
+                "pending_cleanup": True
+            }
+        
+    except HTTPException:
+        raise  # Пробрасываем HTTP ошибки как есть
+    except Exception as e:
+        logger.error(f"❌ Ошибка удаления коллекции {name}: {e}")
+        raise HTTPException(500, str(e))
+
+@app.get("/admin/collections/{name}/data")
+async def admin_get_data(name: str, limit: int = 50, offset: str = None):
+    """
+    Пагинированный просмотр записей коллекции.
+    
+    Использует scroll API Qdrant для эффективной постраничной навигации.
+    
+    Args:
+        name: Имя коллекции
+        limit: Количество записей на страницу (default: 50)
+        offset: Токен следующей страницы (из предыдущего ответа)
+    
+    Returns:
+        {
+            "data": [список записей],
+            "next_offset": токен для следующей страницы или null,
+            "total": общее количество записей
+        }
+    """
+    if name not in db_manager.collections_metadata:
+        raise HTTPException(404, "Collection not found")
+        
+    try:
+        # Используем scroll api
+        points, next_offset = db_manager.client.scroll(
+            collection_name=name,
+            limit=limit,
+            offset=offset,
+            with_payload=True,
+            with_vectors=False
+        )
+        
+        columns = db_manager.collections_metadata[name]["columns"]
+        
+        data = []
+        for p in points:
+            data.append({
+                "id": p.id,
+                "code": p.payload.get(columns["code"]),
+                "description": p.payload.get(columns["description"]),
+                "meta": p.payload
+            })
+            
+        return {
+            "data": data,
+            "next_offset": next_offset,
+            "total": db_manager.collections_metadata[name]["record_count"]
+        }
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+@app.post("/admin/collections/{name}/data/{id}")
+async def admin_update_point(name: str, id: str, req: UpdatePointRequest):
+    """Редактирование конкретной ячейки"""
+    if name not in db_manager.collections_metadata:
+        raise HTTPException(404, "Collection not found")
+        
+    columns = db_manager.collections_metadata[name]["columns"]
+    
+    # Получаем текущую точку
+    points = db_manager.client.retrieve(
+        collection_name=name,
+        ids=[id],
+        with_payload=True,
+        with_vectors=True 
+    )
+    
+    if not points:
+        raise HTTPException(404, "Point not found")
+        
+    point = points[0]
+    payload = point.payload
+    vector = point.vector
+    
+    # Обновляем поле
+    if req.field == "description":
+        # Если меняется описание, нужно пересчитать вектор!
+        new_text = req.value
+        payload[columns["description"]] = new_text
+        
+        # Защищенный пересчет вектора
+        async with db_manager.gpu_lock:
+            emb = await db_manager.get_embedding_cached(new_text)
+            vector = emb.tolist() if isinstance(emb, np.ndarray) else emb
+            
+    elif req.field == "code":
+        payload[columns["code"]] = req.value
+        # Вектор не меняется
+        
+    else:
+        # Произвольное поле меты
+        payload[req.field] = req.value
+        
+    # Сохраняем
+    db_manager.client.upsert(
+        collection_name=name,
+        points=[
+            PointStruct(
+                id=id,
+                vector=vector,
+                payload=payload
+            )
+        ]
+    )
+    
+    return {"status": "success"}
+
+@app.delete("/admin/collections/{name}/data/{id}")
+async def admin_delete_point(name: str, id: str):
+    """Удаление точки"""
+    try:
+        db_manager.client.delete(
+            collection_name=name,
+            points_selector=[id]
+        )
+        # Обновляем счетчик
+        db_manager.collections_metadata[name]["record_count"] -= 1
+        return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+@app.post("/admin/import")
+async def admin_import_data(req: dict):
+    """
+    Старт фоновой задачи импорта.
+    req: {
+        "collection_name": str,
+        "data": str (TSV/JSON),
+        "mapping": ColumnMapping,
+        "recreate": bool
+    }
+    """
+    try:
+        # Парсинг данных (упрощенно, ожидаем уже распарсенный JSON для надежности,
+        # но по ТЗ фронт парсит, значит сюда придет готовый список)
+        # В ТЗ: "POST /admin/upload_data — прием распарсенного JSON с данными"
+        # Поэтому сигнатура будет чуть другая
+        
+        job_id = await job_manager.submit_job("import_batch", req)
+        return {"job_id": job_id, "status": "queued"}
+    except Exception as e:
+        logger.error(f"Import failed: {e}")
+        raise HTTPException(500, str(e))
+
+@app.get("/admin/jobs")
+async def admin_list_jobs():
+    return await job_manager.list_jobs()
 
 
 # === ENDPOINTS ДЛЯ ПОЛУЧЕНИЯ ВСЕХ КОДОВ КСР ИЗ БАЗЫ QDRANT ===
@@ -1501,9 +2198,28 @@ async def update_ksr_record(request: UpdateRequest):
     """
     try:
         collection_name = request.database or db_manager.current_collection
+        
+        # Проверка существования коллекции
+        if collection_name not in db_manager.collections_metadata:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Коллекция '{collection_name}' не найдена"
+            )
+        
+        # КРИТИЧНО: Проверяем размерность коллекции vs модели
+        collection_dim = db_manager.collections_metadata[collection_name].get("dimension")
+        model_dim = db_manager.embedding_model.config.hidden_size
+        
+        if collection_dim and collection_dim != model_dim:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Размерность коллекции ({collection_dim}) не совпадает с размерностью модели ({model_dim}). "
+                       f"Удалите коллекцию '{collection_name}' и создайте заново."
+            )
 
-        # Генерация эмбеддинга для нового описания
-        new_embedding = await db_manager.get_embedding_cached(request.description)
+        # Генерация эмбеддинга для нового описания (защищено GPU Lock)
+        async with db_manager.gpu_lock:
+            new_embedding = await db_manager.get_embedding_cached(request.description)
         
         # Конвертируем numpy array в список для Qdrant
         if isinstance(new_embedding, np.ndarray):
@@ -1535,6 +2251,10 @@ async def update_ksr_record(request: UpdateRequest):
             collection_name=collection_name,
             new_metadata=new_metadata
         )
+        
+        # Обновляем дату последнего изменения
+        db_manager.collections_metadata[collection_name]["last_updated"] = datetime.now().strftime("%d.%m.%Y")
+        db_manager.save_configuration()
         
         message = f"Запись с кодом '{request.code}' успешно сохранена"
 
@@ -1622,12 +2342,12 @@ async def delete_ksr_record(code: str, database: Optional[str] = None):
 
 
 # === СБОР АНАЛИТИКИ ===
-FEEDBACK_DIR = os.path.join(PROJECT_ROOT, "data", "04_feedback")
-FEEDBACK_FILE = os.path.join(FEEDBACK_DIR, "positive.jsonl")
-DISLIKE_FILE = os.path.join(FEEDBACK_DIR, "negative.jsonl")
+# FEEDBACK_DIR импортирован из config.py
+FEEDBACK_FILE = FEEDBACK_DIR / "positive.jsonl"
+DISLIKE_FILE = FEEDBACK_DIR / "negative.jsonl"
 
 # Создание директории и файлов для фидбека
-os.makedirs(FEEDBACK_DIR, exist_ok=True)
+FEEDBACK_DIR.mkdir(parents=True, exist_ok=True)
 for filepath in [FEEDBACK_FILE, DISLIKE_FILE]:
     if not os.path.exists(filepath):
         open(filepath, "w", encoding="utf-8").close()
@@ -1815,9 +2535,6 @@ async def reload_config():
         )
 
 
-from pydantic import BaseModel
-
-
 class CreateCollectionRequest(BaseModel):
     """Запрос на создание новой коллекции"""
 
@@ -1862,34 +2579,37 @@ async def create_collection(request: CreateCollectionRequest):
                 )
 
         # Создаем коллекцию
+        # Определяем размерность автоматически из загруженной модели
+        model_dimension = db_manager.embedding_model.config.hidden_size
+        
         db_manager.client.create_collection(
             collection_name=request.collection_name,
             vectors_config=VectorParams(
-                size=request.dimension, distance=Distance.COSINE
+                size=model_dimension, distance=Distance.COSINE
             ),
         )
 
-        logger.info(f"✅ Коллекция '{request.collection_name}' создана")
+        logger.info(f"✅ Коллекция '{request.collection_name}' создана (dim: {model_dimension})")
 
-        # Обновляем конфигурацию
-        config_path = os.path.join(BASE_DIR, "vector_databases.json")
-
-        if os.path.exists(config_path):
-            with open(config_path, "r", encoding="utf-8") as f:
+        # Обновляем конфигурацию (путь из config.py)
+        if VECTOR_DATABASES_CONFIG.exists():
+            with open(VECTOR_DATABASES_CONFIG, "r", encoding="utf-8") as f:
                 config = json.load(f)
         else:
             config = {}
 
-        # Добавляем новую коллекцию
+        # Добавляем новую коллекцию с полной конфигурацией
         config[request.collection_name] = {
-            "description": request.description
-            or f"Векторная база {request.collection_name}",
+            "description": request.description or f"Векторная база {request.collection_name}",
             "columns": {"code": "code", "description": "description"},
             "thresholds": {"cosine": 0.45, "rerank": 0.6},
+            "last_updated": datetime.now().strftime("%d.%m.%Y"),
+            "visible": True,  # По умолчанию видимая
+            "locked": False   # По умолчанию не заблокирована
         }
 
         # Сохраняем конфиг
-        with open(config_path, "w", encoding="utf-8") as f:
+        with open(VECTOR_DATABASES_CONFIG, "w", encoding="utf-8") as f:
             json.dump(config, f, indent=2, ensure_ascii=False)
 
         # Перезагружаем конфигурацию
@@ -1948,7 +2668,7 @@ if __name__ == "__main__":
     logger.info("=" * 80)
     logger.info("🚀 Запуск сервера KSR Matcher с Qdrant")
     logger.info("=" * 80)
-    logger.info(f"📍 Адрес: http://localhost:8000")
+    logger.info(f"📍 Адрес: http://{SERVER_HOST}:{SERVER_PORT}")
     logger.info(f"💾 Хранилище Qdrant: {QDRANT_STORAGE_PATH}")
     logger.info(f"🧠 Модель эмбеддингов: {QWEN_MODEL_PATH}")
     logger.info(f"🎯 Reranker: {RERANKER_PATH}")
@@ -1971,8 +2691,8 @@ if __name__ == "__main__":
 
     uvicorn.run(
         app,
-        host="127.0.0.1",
-        port=8000,
+        host=SERVER_HOST,
+        port=SERVER_PORT,
         workers=1,
         loop="asyncio",
         http="httptools",

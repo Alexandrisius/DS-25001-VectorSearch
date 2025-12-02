@@ -1,5 +1,19 @@
+/**
+ * KSR Matcher - Клиентское приложение для семантического поиска
+ * 
+ * Основные возможности:
+ * - Поиск по векторной базе данных с отображением результатов
+ * - Переключение между коллекциями (базами данных)
+ * - Тёмная/светлая тема интерфейса
+ * - Сбор аналитики (копирование, дизлайки)
+ * 
+ * @author Alexandr
+ * @version 2.0.0
+ * @license MIT
+ */
 
 document.addEventListener('DOMContentLoaded', function () {
+    // === DOM ЭЛЕМЕНТЫ ===
     const queryInput = document.getElementById('query');
     const clearBtn = document.getElementById('clearBtn');
     const searchBtn = document.getElementById('searchBtn');
@@ -11,18 +25,25 @@ document.addEventListener('DOMContentLoaded', function () {
     const databaseSelect = document.getElementById('databaseSelect');
     const databaseOptions = document.getElementById('databaseOptions');
 
+    // Кастомный dropdown
     const customSelectWrapper = document.getElementById('customSelect');
     const customSelectTrigger = customSelectWrapper.querySelector('.custom-select-trigger');
     const customOptionsContainer = document.getElementById('customOptions');
     const customSelectValue = document.getElementById('customSelectValue');
 
+    // Переключатель темы
     const themeToggle = document.getElementById('themeToggle');
     const themeIcon = themeToggle.querySelector('i');
     const themeText = themeToggle.querySelector('span');
 
+    // === СОСТОЯНИЕ ПРИЛОЖЕНИЯ ===
+    /** @type {string} Текущая выбранная база данных */
     let currentDatabase = 'ksr_main';
+    /** @type {Array} Список доступных баз данных */
     let databases = [];
+    /** @type {string} Текущий поисковый запрос */
     let currentQuery = '';
+    /** @type {Array} Результаты последнего поиска */
     let currentResults = [];
 
     queryInput.focus();
@@ -184,6 +205,11 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     });
 
+    /**
+     * Управление состоянием загрузки UI.
+     * Блокирует кнопку поиска и показывает индикатор загрузки.
+     * @param {boolean} loading - true для показа состояния загрузки
+     */
     function setLoading(loading) {
         searchBtn.disabled = loading;
         if (loading) {
@@ -196,6 +222,9 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
+    /**
+     * Очистка таблицы результатов и сброс UI в исходное состояние.
+     */
     function clearResults() {
         resultsBody.innerHTML = `
                     <tr><td colspan="6" style="text-align: center; padding: 60px 20px; color: var(--text-secondary);">
@@ -205,6 +234,11 @@ document.addEventListener('DOMContentLoaded', function () {
         statusInfo.style.color = 'var(--success)';
     }
 
+    /**
+     * Создание HTML-разметки для индикатора прогресса (score bar).
+     * @param {number} val - Значение от 0 до 1
+     * @returns {string} HTML строка с прогресс-баром
+     */
     function createScoreBar(val) {
         const pct = Math.min(100, val * 100);
         return `<div class="progress-bg"><div class="progress-fill" style="width:${pct}%"></div></div>`;
@@ -260,6 +294,11 @@ document.addEventListener('DOMContentLoaded', function () {
         databaseOptions.innerHTML = html;
     }
 
+    /**
+     * Установка активной базы данных.
+     * Обновляет UI компоненты и метрики порогов.
+     * @param {string} name - Имя коллекции (например, 'ksr_main')
+     */
     function setCurrentDatabase(name) {
         currentDatabase = name;
         databaseSelect.value = name;
@@ -316,6 +355,14 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
+    /**
+     * Отображение результатов поиска в таблице.
+     * Генерирует HTML-разметку для каждого кандидата и вставляет в DOM.
+     * @param {Object} data - Ответ от сервера (/match)
+     * @param {string} data.query - Исходный запрос
+     * @param {Array} data.candidates - Массив результатов
+     * @param {number} data.processing_time - Время обработки (сек)
+     */
     function displayResults(data) {
         currentQuery = data.query;
         currentResults = data.candidates;
