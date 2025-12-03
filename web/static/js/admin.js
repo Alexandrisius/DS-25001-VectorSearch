@@ -153,9 +153,23 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // === AUTHENTICATION ===
+
+/**
+ * Инициализация аутентификации.
+ * Проверяет сохранённый токен и настраивает обработчики.
+ */
 function initAuth() {
+    // Проверяем есть ли сохранённый токен
     if (state.token) {
-        showApp();
+        // Валидируем токен через тестовый запрос
+        validateToken().then(valid => {
+            if (valid) {
+                showApp();
+            } else {
+                // Токен невалиден - очищаем и показываем форму входа
+                logout();
+            }
+        });
     }
 
     els.authBtn.addEventListener('click', attemptLogin);
@@ -163,14 +177,91 @@ function initAuth() {
         if (e.key === 'Enter') attemptLogin();
     });
 
-    els.logoutBtn.addEventListener('click', () => {
-        localStorage.removeItem('adminToken');
-        location.reload();
-    });
+    els.logoutBtn.addEventListener('click', logout);
 }
 
+/**
+ * Проверка валидности JWT токена через API запрос.
+ * @returns {Promise<boolean>} True если токен валиден.
+ */
+async function validateToken() {
+    if (!state.token) return false;
+    
+    try {
+        const res = await fetch('/admin/collections', {
+            headers: getAuthHeaders()
+        });
+        return res.ok;
+    } catch (e) {
+        return false;
+    }
+}
+
+/**
+ * Получение заголовков авторизации для API запросов.
+ * @returns {Object} Объект заголовков с Authorization Bearer token.
+ */
+function getAuthHeaders() {
+    return {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${state.token}`
+    };
+}
+
+/**
+ * Выполнение авторизованного API запроса.
+ * Автоматически добавляет JWT токен и обрабатывает ошибки авторизации.
+ * 
+ * @param {string} url - URL эндпоинта
+ * @param {Object} options - Опции fetch (method, body, etc.)
+ * @returns {Promise<Response>} Ответ сервера
+ * @throws {Error} При ошибке авторизации выполняет logout
+ */
+async function authFetch(url, options = {}) {
+    // Добавляем заголовки авторизации
+    const headers = {
+        ...getAuthHeaders(),
+        ...(options.headers || {})
+    };
+    
+    const res = await fetch(url, {
+        ...options,
+        headers
+    });
+    
+    // Обработка ошибок авторизации
+    if (res.status === 401) {
+        console.warn('🔒 JWT токен истёк или невалиден');
+        alert('Сессия истекла. Пожалуйста, войдите снова.');
+        logout();
+        throw new Error('Unauthorized');
+    }
+    
+    return res;
+}
+
+/**
+ * Выход из админ-панели.
+ * Очищает токен и перезагружает страницу.
+ */
+function logout() {
+    state.token = null;
+    localStorage.removeItem('adminToken');
+    location.reload();
+}
+
+/**
+ * Попытка входа в админ-панель.
+ * При успехе сохраняет JWT токен.
+ */
 async function attemptLogin() {
     const pwd = els.authPassword.value;
+    
+    // Блокируем кнопку на время запроса
+    els.authBtn.disabled = true;
+    els.authBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Вход...';
+    els.authError.classList.add('hidden');
+    
     try {
         const res = await fetch('/admin/auth', {
             method: 'POST',
@@ -179,15 +270,36 @@ async function attemptLogin() {
         });
         
         if (res.ok) {
-            state.token = 'valid';
-            localStorage.setItem('adminToken', state.token);
+            const data = await res.json();
+            
+            // Сохраняем JWT токен
+            state.token = data.token;
+            localStorage.setItem('adminToken', data.token);
+            
+            // Логируем время истечения
+            const expiresHours = Math.round(data.expires_in / 3600);
+            console.log(`✅ Вход выполнен. Токен действителен ${expiresHours} часов.`);
+            
             showApp();
         } else {
+            const error = await res.json();
+            
+            // Обработка rate limit
+            if (res.status === 429) {
+                els.authError.textContent = error.detail || 'Слишком много попыток. Подождите.';
+            } else {
+                els.authError.textContent = error.detail || 'Неверный пароль';
+            }
+            
             els.authError.classList.remove('hidden');
         }
     } catch (e) {
-        console.error(e);
-        alert('Ошибка подключения');
+        console.error('Login error:', e);
+        els.authError.textContent = 'Ошибка подключения к серверу';
+        els.authError.classList.remove('hidden');
+    } finally {
+        els.authBtn.disabled = false;
+        els.authBtn.innerHTML = 'Войти';
     }
 }
 
@@ -266,10 +378,16 @@ function switchView(viewName) {
 
 // === COLLECTIONS ===
 async function loadCollections() {
-    const res = await fetch('/admin/collections');
-    const data = await res.json();
-    state.collections = data.collections;
-    renderCollectionsGrid();
+    try {
+        const res = await authFetch('/admin/collections');
+        const data = await res.json();
+        state.collections = data.collections;
+        renderCollectionsGrid();
+    } catch (e) {
+        if (e.message !== 'Unauthorized') {
+            console.error('Failed to load collections:', e);
+        }
+    }
 }
 
 function renderCollectionsGrid() {
@@ -377,7 +495,7 @@ els.confirmDeleteBtn.addEventListener('click', async () => {
         els.confirmDeleteBtn.disabled = true;
         els.confirmDeleteBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Удаление...';
         
-        const res = await fetch(`/admin/collections/${pendingDeleteCollection}`, { method: 'DELETE' });
+        const res = await authFetch(`/admin/collections/${pendingDeleteCollection}`, { method: 'DELETE' });
         const result = await res.json();
         
         if (res.ok) {
@@ -431,9 +549,8 @@ function initCreateCollection() {
                 throw new Error(err.detail || 'Не удалось создать коллекцию');
             }
             
-            const res2 = await fetch(`/admin/collections/${id}/config`, {
+            const res2 = await authFetch(`/admin/collections/${id}/config`, {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
                     visible: visible,
                     locked: false,
@@ -476,14 +593,19 @@ els.saveConfigBtn.addEventListener('click', async () => {
         }
     };
     
-    await fetch(`/admin/collections/${name}/config`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(body)
-    });
-    
-    closeModal('config');
-    loadCollections();
+    try {
+        await authFetch(`/admin/collections/${name}/config`, {
+            method: 'POST',
+            body: JSON.stringify(body)
+        });
+        
+        closeModal('config');
+        loadCollections();
+    } catch (e) {
+        if (e.message !== 'Unauthorized') {
+            alert('Ошибка сохранения настроек');
+        }
+    }
 });
 
 // === DATA VIEW ===
@@ -502,22 +624,28 @@ window.openDataView = (name) => {
 async function loadData() {
     if (!state.activeCollection) return;
     
-    const offsetQuery = state.dataOffset ? `&offset=${state.dataOffset}` : '';
-    const res = await fetch(`/admin/collections/${state.activeCollection}/data?limit=50${offsetQuery}`);
-    const result = await res.json();
-    
-    state.dataOffset = result.next_offset;
-    
-    // Toggle Load More button
-    if (!state.dataOffset) els.loadMoreBtn.classList.add('hidden');
-    else els.loadMoreBtn.classList.remove('hidden');
-    
-    if (result.data.length === 0 && state.dataRows.length === 0) {
-        els.dataTableBody.innerHTML = '<tr><td colspan="3" style="text-align:center; padding:30px; color:var(--adm-text-sec)">Записей не найдено. Добавьте новые!</td></tr>';
-    } else {
-        // Добавляем к существующим данным
-        state.dataRows = state.dataRows.concat(result.data);
-        renderDataTable();
+    try {
+        const offsetQuery = state.dataOffset ? `&offset=${state.dataOffset}` : '';
+        const res = await authFetch(`/admin/collections/${state.activeCollection}/data?limit=50${offsetQuery}`);
+        const result = await res.json();
+        
+        state.dataOffset = result.next_offset;
+        
+        // Toggle Load More button
+        if (!state.dataOffset) els.loadMoreBtn.classList.add('hidden');
+        else els.loadMoreBtn.classList.remove('hidden');
+        
+        if (result.data.length === 0 && state.dataRows.length === 0) {
+            els.dataTableBody.innerHTML = '<tr><td colspan="3" style="text-align:center; padding:30px; color:var(--adm-text-sec)">Записей не найдено. Добавьте новые!</td></tr>';
+        } else {
+            // Добавляем к существующим данным
+            state.dataRows = state.dataRows.concat(result.data);
+            renderDataTable();
+        }
+    } catch (e) {
+        if (e.message !== 'Unauthorized') {
+            console.error('Failed to load data:', e);
+        }
     }
 }
 
@@ -662,9 +790,8 @@ function initInlineEdit() {
                 }
                 
                 try {
-                    const res = await fetch(`/admin/collections/${state.activeCollection}/data/${id}`, {
+                    const res = await authFetch(`/admin/collections/${state.activeCollection}/data/${id}`, {
                         method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify({
                             code: field === 'code' ? newVal : '', 
                             field: field,
@@ -682,8 +809,10 @@ function initInlineEdit() {
                         this.innerHTML = originalVal;
                     }
                 } catch (e) {
-                    alert('Ошибка обновления');
-                    this.innerHTML = originalVal;
+                    if (e.message !== 'Unauthorized') {
+                        alert('Ошибка обновления');
+                        this.innerHTML = originalVal;
+                    }
                 } finally {
                     this.classList.remove('editing');
                 }
@@ -700,7 +829,7 @@ function initInlineEdit() {
 window.deleteRecord = async (id) => {
     if (!confirm('Вы уверены, что хотите удалить эту запись?')) return;
     try {
-        await fetch(`/admin/collections/${state.activeCollection}/data/${id}`, {
+        await authFetch(`/admin/collections/${state.activeCollection}/data/${id}`, {
             method: 'DELETE'
         });
         // Удаляем из state
@@ -709,7 +838,9 @@ window.deleteRecord = async (id) => {
         const tr = document.querySelector(`tr[data-row-id="${id}"]`);
         if (tr) tr.remove();
     } catch (e) {
-        alert('Ошибка удаления');
+        if (e.message !== 'Unauthorized') {
+            alert('Ошибка удаления');
+        }
     }
 };
 
@@ -766,14 +897,20 @@ function initImportWizard() {
         showImportStep(2);
         els.importStatusText.innerText = 'Отправка задачи...';
         
-        const res = await fetch('/admin/import', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(payload)
-        });
-        
-        const json = await res.json();
-        pollJob(json.job_id);
+        try {
+            const res = await authFetch('/admin/import', {
+                method: 'POST',
+                body: JSON.stringify(payload)
+            });
+            
+            const json = await res.json();
+            pollJob(json.job_id);
+        } catch (e) {
+            if (e.message !== 'Unauthorized') {
+                els.importStatusText.innerText = 'Ошибка отправки';
+                alert('Ошибка импорта: ' + e.message);
+            }
+        }
     });
 }
 
@@ -918,9 +1055,10 @@ async function pollJob(jobId) {
     els.importProgress.style.width = '0%';
     
     const interval = setInterval(async () => {
-        const res = await fetch('/admin/jobs');
-        const jobs = await res.json();
-        const job = jobs.find(j => j.id === jobId);
+        try {
+            const res = await authFetch('/admin/jobs');
+            const jobs = await res.json();
+            const job = jobs.find(j => j.id === jobId);
         
         if (job) {
             els.importProgress.style.width = `${job.progress}%`;
@@ -953,13 +1091,19 @@ async function pollJob(jobId) {
                 closeModal('import');
             }
         }
+        } catch (e) {
+            if (e.message === 'Unauthorized') {
+                clearInterval(interval);
+            }
+        }
     }, 1500);
 }
 
 // === JOBS VIEW ===
 async function loadJobs() {
-    const res = await fetch('/admin/jobs');
-    const jobs = await res.json();
+    try {
+        const res = await authFetch('/admin/jobs');
+        const jobs = await res.json();
     
     const statusText = {
         'pending': 'Ожидание',
@@ -968,19 +1112,24 @@ async function loadJobs() {
         'error': 'Ошибка'
     };
     
-    els.jobsTableBody.innerHTML = jobs.map(j => `
-        <tr>
-            <td style="font-family:monospace; font-size:0.8rem">${j.id.slice(0, 8)}...</td>
-            <td>${j.type === 'import_batch' ? 'Импорт' : j.type}</td>
-            <td><span class="status-badge ${j.status === 'completed' ? 'status-visible' : 'status-hidden'}">${statusText[j.status] || j.status}</span></td>
-            <td>
-                <div class="progress-bar-container" style="width: 100px; height: 6px;">
-                    <div class="progress-bar-fill" style="width: ${j.progress}%"></div>
-                </div>
-            </td>
-            <td>${new Date(j.created_at * 1000).toLocaleString('ru-RU')}</td>
-        </tr>
-    `).join('');
+        els.jobsTableBody.innerHTML = jobs.map(j => `
+            <tr>
+                <td style="font-family:monospace; font-size:0.8rem">${j.id.slice(0, 8)}...</td>
+                <td>${j.type === 'import_batch' ? 'Импорт' : j.type}</td>
+                <td><span class="status-badge ${j.status === 'completed' ? 'status-visible' : 'status-hidden'}">${statusText[j.status] || j.status}</span></td>
+                <td>
+                    <div class="progress-bar-container" style="width: 100px; height: 6px;">
+                        <div class="progress-bar-fill" style="width: ${j.progress}%"></div>
+                    </div>
+                </td>
+                <td>${new Date(j.created_at * 1000).toLocaleString('ru-RU')}</td>
+            </tr>
+        `).join('');
+    } catch (e) {
+        if (e.message !== 'Unauthorized') {
+            console.error('Failed to load jobs:', e);
+        }
+    }
 }
 
 function startJobPoller() {

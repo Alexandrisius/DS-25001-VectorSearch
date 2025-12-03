@@ -27,12 +27,12 @@ import re
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 
 import numpy as np
 import torch
-from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -49,6 +49,10 @@ from qdrant_client.models import (
 )
 from sentence_transformers import CrossEncoder
 from transformers import AutoModel, AutoTokenizer
+
+# === Библиотеки безопасности ===
+from passlib.context import CryptContext  # Хеширование паролей (bcrypt)
+from jose import jwt, JWTError  # JWT токены
 
 # === НАСТРОЙКА ЛОГИРОВАНИЯ ===
 logging.basicConfig(level=logging.INFO)
@@ -119,10 +123,134 @@ from config import (
     EMBEDDING_CACHE_SIZE,
     SERVER_HOST,
     SERVER_PORT,
+    # Настройки безопасности админ-панели
+    ADMIN_PASSWORD_HASH,
+    JWT_SECRET_KEY,
+    JWT_ALGORITHM,
+    JWT_EXPIRE_HOURS,
+    LOGIN_MAX_ATTEMPTS,
+    LOGIN_LOCKOUT_MINUTES,
 )
 
 # Базовая директория скрипта (для обратной совместимости)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
+# === БЕЗОПАСНОСТЬ: Контекст хеширования паролей ===
+# Используем bcrypt - современный алгоритм с адаптивной сложностью
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+
+# === БЕЗОПАСНОСТЬ: Защита от брутфорса ===
+class LoginRateLimiter:
+    """
+    Ограничитель частоты попыток входа (Rate Limiter).
+    
+    Защищает от атак перебором паролей (brute-force).
+    После превышения лимита попыток IP блокируется на заданное время.
+    
+    Алгоритм:
+    1. При каждой попытке входа записывается timestamp по IP.
+    2. Удаляются старые записи (старше lockout_seconds).
+    3. Если количество попыток >= max_attempts, вход блокируется.
+    
+    Attributes:
+        attempts (dict): Словарь {ip: [timestamp1, timestamp2, ...]}.
+        max_attempts (int): Максимальное количество попыток.
+        lockout_seconds (int): Время блокировки в секундах.
+    """
+    
+    def __init__(self, max_attempts: int = 5, lockout_minutes: int = 5):
+        """
+        Инициализация Rate Limiter.
+        
+        Args:
+            max_attempts: Максимальное количество попыток (по умолчанию 5).
+            lockout_minutes: Время блокировки в минутах (по умолчанию 5).
+        """
+        self.attempts: Dict[str, List[float]] = {}
+        self.max_attempts = max_attempts
+        self.lockout_seconds = lockout_minutes * 60
+        self.lock = asyncio.Lock()
+    
+    async def is_blocked(self, ip: str) -> bool:
+        """
+        Проверка, заблокирован ли IP.
+        
+        Args:
+            ip: IP-адрес клиента.
+            
+        Returns:
+            bool: True если IP заблокирован.
+        """
+        async with self.lock:
+            if ip not in self.attempts:
+                return False
+            
+            now = time.time()
+            # Удаляем старые попытки (старше lockout_seconds)
+            self.attempts[ip] = [
+                t for t in self.attempts[ip]
+                if now - t < self.lockout_seconds
+            ]
+            
+            # Проверяем количество попыток
+            return len(self.attempts[ip]) >= self.max_attempts
+    
+    async def record_attempt(self, ip: str):
+        """
+        Записывает попытку входа.
+        
+        Args:
+            ip: IP-адрес клиента.
+        """
+        async with self.lock:
+            if ip not in self.attempts:
+                self.attempts[ip] = []
+            
+            self.attempts[ip].append(time.time())
+            
+            # Логируем при приближении к лимиту
+            count = len(self.attempts[ip])
+            if count >= self.max_attempts - 1:
+                logger.warning(
+                    f"⚠️ Rate limit: IP {ip} - {count}/{self.max_attempts} попыток"
+                )
+    
+    async def clear(self, ip: str):
+        """
+        Очищает историю попыток для IP (после успешного входа).
+        
+        Args:
+            ip: IP-адрес клиента.
+        """
+        async with self.lock:
+            if ip in self.attempts:
+                del self.attempts[ip]
+    
+    def get_remaining_time(self, ip: str) -> int:
+        """
+        Возвращает оставшееся время блокировки в секундах.
+        
+        Args:
+            ip: IP-адрес клиента.
+            
+        Returns:
+            int: Секунд до разблокировки (0 если не заблокирован).
+        """
+        if ip not in self.attempts or not self.attempts[ip]:
+            return 0
+        
+        oldest_attempt = min(self.attempts[ip])
+        remaining = self.lockout_seconds - (time.time() - oldest_attempt)
+        return max(0, int(remaining))
+
+
+# Глобальный экземпляр Rate Limiter
+login_rate_limiter = LoginRateLimiter(
+    max_attempts=LOGIN_MAX_ATTEMPTS,
+    lockout_minutes=LOGIN_LOCKOUT_MINUTES
+)
 
 
 # === ОПТИМИЗАЦИЯ: Кэш для эмбеддингов ===
@@ -2775,30 +2903,251 @@ class AuthRequest(BaseModel):
     password: str
 
 
-@app.post("/admin/auth")
-async def admin_auth(req: AuthRequest):
+class AuthResponse(BaseModel):
+    """Ответ аутентификации с JWT токеном"""
+    status: str
+    token: str
+    expires_in: int  # Время жизни токена в секундах
+
+
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     """
-    Аутентификация администратора.
+    Создаёт JWT токен с заданными данными и сроком действия.
     
-    Простая проверка пароля без сессий (stateless).
-    В продакшн-среде рекомендуется использовать полноценную аутентификацию.
+    Args:
+        data: Данные для включения в токен (payload).
+        expires_delta: Время жизни токена (по умолчанию из конфига).
     
     Returns:
-        {"status": "ok", "token": "..."} при успехе
-        401 Unauthorized при неверном пароле
+        str: Закодированный JWT токен.
     """
-    # TODO: В продакшне заменить на безопасное хранение пароля
-    if req.password == "admin123":
-        return {"status": "ok", "token": "admin-token-valid"}
-    raise HTTPException(status_code=401, detail="Invalid password")
+    to_encode = data.copy()
+    
+    # Устанавливаем время истечения
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(hours=JWT_EXPIRE_HOURS)
+    
+    to_encode.update({
+        "exp": expire,  # Время истечения
+        "iat": datetime.utcnow(),  # Время создания
+        "type": "admin_access"  # Тип токена
+    })
+    
+    # Кодируем токен
+    encoded_jwt = jwt.encode(to_encode, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
+    return encoded_jwt
+
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """
+    Проверяет пароль против bcrypt хеша.
+    
+    Args:
+        plain_password: Пароль в открытом виде.
+        hashed_password: Хеш пароля из конфигурации.
+    
+    Returns:
+        bool: True если пароль верный.
+    """
+    try:
+        return pwd_context.verify(plain_password, hashed_password)
+    except Exception as e:
+        logger.error(f"Ошибка верификации пароля: {e}")
+        return False
+
+
+async def get_client_ip(request: Request) -> str:
+    """
+    Получает IP-адрес клиента (учитывает прокси).
+    
+    Args:
+        request: FastAPI Request объект.
+    
+    Returns:
+        str: IP-адрес клиента.
+    """
+    # Проверяем заголовки прокси
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        # X-Forwarded-For может содержать несколько IP через запятую
+        return forwarded.split(",")[0].strip()
+    
+    real_ip = request.headers.get("X-Real-IP")
+    if real_ip:
+        return real_ip
+    
+    # Fallback на прямой IP
+    return request.client.host if request.client else "unknown"
+
+
+@app.post("/admin/auth", response_model=AuthResponse)
+async def admin_auth(req: AuthRequest, request: Request):
+    """
+    Аутентификация администратора с защитой от брутфорса.
+    
+    Безопасность:
+    - Пароль проверяется через bcrypt (хеш хранится в переменной окружения)
+    - Rate limiting: 5 попыток, затем блокировка на 5 минут
+    - JWT токен с истечением через 8 часов
+    - Логирование попыток входа
+    
+    Returns:
+        AuthResponse: {"status": "ok", "token": "...", "expires_in": 28800}
+    
+    Raises:
+        HTTPException 401: Неверный пароль
+        HTTPException 429: Слишком много попыток (rate limit)
+        HTTPException 500: Ошибка конфигурации (хеш не установлен)
+    """
+    # Получаем IP клиента
+    client_ip = await get_client_ip(request)
+    
+    # === ПРОВЕРКА RATE LIMIT ===
+    if await login_rate_limiter.is_blocked(client_ip):
+        remaining = login_rate_limiter.get_remaining_time(client_ip)
+        logger.warning(f"🚫 Blocked login attempt from {client_ip} (rate limit)")
+        raise HTTPException(
+            status_code=429,
+            detail=f"Слишком много попыток входа. Повторите через {remaining} секунд."
+        )
+    
+    # === ПРОВЕРКА КОНФИГУРАЦИИ ===
+    if not ADMIN_PASSWORD_HASH:
+        logger.error("❌ ADMIN_PASSWORD_HASH не установлен!")
+        raise HTTPException(
+            status_code=500,
+            detail="Ошибка конфигурации сервера. Обратитесь к администратору."
+        )
+    
+    # === ПРОВЕРКА ПАРОЛЯ ===
+    if not verify_password(req.password, ADMIN_PASSWORD_HASH):
+        # Записываем неудачную попытку
+        await login_rate_limiter.record_attempt(client_ip)
+        logger.warning(f"❌ Failed login attempt from {client_ip}")
+        raise HTTPException(
+            status_code=401,
+            detail="Неверный пароль"
+        )
+    
+    # === УСПЕШНАЯ АУТЕНТИФИКАЦИЯ ===
+    # Очищаем историю попыток
+    await login_rate_limiter.clear(client_ip)
+    
+    # Создаём JWT токен
+    expires_delta = timedelta(hours=JWT_EXPIRE_HOURS)
+    access_token = create_access_token(
+        data={"sub": "admin", "ip": client_ip},
+        expires_delta=expires_delta
+    )
+    
+    logger.info(f"✅ Successful admin login from {client_ip}")
+    
+    return AuthResponse(
+        status="ok",
+        token=access_token,
+        expires_in=int(expires_delta.total_seconds())
+    )
+
+
+async def verify_admin_token(request: Request) -> dict:
+    """
+    Проверяет JWT токен из заголовка Authorization.
+    
+    Используется как dependency для защищённых admin endpoints.
+    Извлекает токен из заголовка "Authorization: Bearer <token>".
+    
+    Args:
+        request: FastAPI Request объект.
+    
+    Returns:
+        dict: Декодированный payload токена.
+    
+    Raises:
+        HTTPException 401: Токен отсутствует, невалидный или истёк.
+    """
+    # Получаем заголовок Authorization
+    auth_header = request.headers.get("Authorization")
+    
+    if not auth_header:
+        raise HTTPException(
+            status_code=401,
+            detail="Требуется авторизация",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+    
+    # Проверяем формат "Bearer <token>"
+    parts = auth_header.split()
+    if len(parts) != 2 or parts[0].lower() != "bearer":
+        raise HTTPException(
+            status_code=401,
+            detail="Неверный формат токена. Используйте: Bearer <token>",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+    
+    token = parts[1]
+    
+    try:
+        # Декодируем и верифицируем токен
+        payload = jwt.decode(
+            token,
+            JWT_SECRET_KEY,
+            algorithms=[JWT_ALGORITHM]
+        )
+        
+        # Проверяем тип токена
+        if payload.get("type") != "admin_access":
+            raise HTTPException(
+                status_code=401,
+                detail="Неверный тип токена"
+            )
+        
+        return payload
+        
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(
+            status_code=401,
+            detail="Токен истёк. Пожалуйста, войдите снова.",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+    except JWTError as e:
+        logger.warning(f"JWT verification failed: {e}")
+        raise HTTPException(
+            status_code=401,
+            detail="Недействительный токен",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+
+
+# Dependency для защиты admin endpoints
+async def admin_required(token_data: dict = Depends(verify_admin_token)) -> dict:
+    """
+    Dependency для защиты admin endpoints.
+    
+    Использование:
+        @app.get("/admin/protected")
+        async def protected_endpoint(admin: dict = Depends(admin_required)):
+            ...
+    
+    Args:
+        token_data: Декодированный JWT payload.
+    
+    Returns:
+        dict: Данные администратора из токена.
+    """
+    return token_data
+
 
 @app.get("/admin/collections")
-async def admin_list_collections():
+async def admin_list_collections(admin: dict = Depends(admin_required)):
     """
     Получение списка всех коллекций для админ-панели.
     
     В отличие от /databases, возвращает ВСЕ коллекции,
     включая скрытые (visible=False).
+    
+    Требует JWT авторизации.
     
     Returns:
         {"collections": [список коллекций с полными метаданными]}
@@ -2812,13 +3161,15 @@ async def admin_list_collections():
 
 
 @app.post("/admin/collections/{name}/config")
-async def admin_update_config(name: str, config: CollectionConfig):
+async def admin_update_config(name: str, config: CollectionConfig, admin: dict = Depends(admin_required)):
     """
     Обновление настроек коллекции (пороги, видимость).
     
     ВАЖНО: Флаг 'locked' НЕ может быть изменён через этот endpoint!
     Защита коллекции устанавливается только через прямое редактирование
     файла vector_databases.json.
+    
+    Требует JWT авторизации.
     
     Args:
         name: Имя коллекции
@@ -2841,7 +3192,7 @@ async def admin_update_config(name: str, config: CollectionConfig):
     return {"status": "success", "config": meta}
 
 @app.delete("/admin/collections/{name}")
-async def admin_delete_collection(name: str):
+async def admin_delete_collection(name: str, admin: dict = Depends(admin_required)):
     """
     Полное удаление коллекции из Qdrant.
     
@@ -2849,6 +3200,8 @@ async def admin_delete_collection(name: str):
     
     Защищённые коллекции (locked=True) НЕ могут быть удалены через API.
     Для снятия защиты необходимо вручную изменить файл vector_databases.json.
+    
+    Требует JWT авторизации.
     
     Args:
         name: Имя коллекции для удаления
@@ -2945,11 +3298,12 @@ async def admin_delete_collection(name: str):
         raise HTTPException(500, str(e))
 
 @app.get("/admin/collections/{name}/data")
-async def admin_get_data(name: str, limit: int = 50, offset: str = None):
+async def admin_get_data(name: str, limit: int = 50, offset: str = None, admin: dict = Depends(admin_required)):
     """
     Пагинированный просмотр записей коллекции.
     
     Использует scroll API Qdrant для эффективной постраничной навигации.
+    Требует JWT авторизации.
     
     Args:
         name: Имя коллекции
@@ -2996,8 +3350,8 @@ async def admin_get_data(name: str, limit: int = 50, offset: str = None):
         raise HTTPException(500, str(e))
 
 @app.post("/admin/collections/{name}/data/{id}")
-async def admin_update_point(name: str, id: str, req: UpdatePointRequest):
-    """Редактирование конкретной ячейки"""
+async def admin_update_point(name: str, id: str, req: UpdatePointRequest, admin: dict = Depends(admin_required)):
+    """Редактирование конкретной ячейки. Требует JWT авторизации."""
     if name not in db_manager.collections_metadata:
         raise HTTPException(404, "Collection not found")
         
@@ -3056,8 +3410,8 @@ async def admin_update_point(name: str, id: str, req: UpdatePointRequest):
     return {"status": "success"}
 
 @app.delete("/admin/collections/{name}/data/{id}")
-async def admin_delete_point(name: str, id: str):
-    """Удаление точки"""
+async def admin_delete_point(name: str, id: str, admin: dict = Depends(admin_required)):
+    """Удаление точки. Требует JWT авторизации."""
     try:
         db_manager.client.delete(
             collection_name=name,
@@ -3070,9 +3424,11 @@ async def admin_delete_point(name: str, id: str):
         raise HTTPException(500, str(e))
 
 @app.post("/admin/import")
-async def admin_import_data(req: dict):
+async def admin_import_data(req: dict, admin: dict = Depends(admin_required)):
     """
     Старт фоновой задачи импорта.
+    Требует JWT авторизации.
+    
     req: {
         "collection_name": str,
         "data": str (TSV/JSON),
@@ -3093,7 +3449,8 @@ async def admin_import_data(req: dict):
         raise HTTPException(500, str(e))
 
 @app.get("/admin/jobs")
-async def admin_list_jobs():
+async def admin_list_jobs(admin: dict = Depends(admin_required)):
+    """Получение списка фоновых задач. Требует JWT авторизации."""
     return await job_manager.list_jobs()
 
 

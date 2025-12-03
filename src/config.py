@@ -111,6 +111,30 @@ SERVER_HOST = "127.0.0.1"
 SERVER_PORT = 8000
 
 
+# === БЕЗОПАСНОСТЬ АДМИН-ПАНЕЛИ ===
+
+# Хеш пароля администратора (bcrypt)
+# Генерируется скриптом: python scripts/service/generate_password_hash.py
+# ВАЖНО: В продакшене установите через переменную окружения!
+ADMIN_PASSWORD_HASH = os.getenv("ADMIN_PASSWORD_HASH", "")
+
+# Секретный ключ для подписи JWT токенов
+# ВАЖНО: В продакшене замените на случайную строку минимум 32 символа!
+JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "change-me-in-production-use-random-32-chars")
+
+# Алгоритм подписи JWT (HS256 - HMAC с SHA-256)
+JWT_ALGORITHM = "HS256"
+
+# Время жизни токена в часах (8 часов = рабочий день)
+JWT_EXPIRE_HOURS = 8
+
+# Защита от брутфорса: максимальное количество попыток входа
+LOGIN_MAX_ATTEMPTS = 5
+
+# Время блокировки после превышения попыток (в минутах)
+LOGIN_LOCKOUT_MINUTES = 5
+
+
 # === ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ===
 
 def ensure_directories():
