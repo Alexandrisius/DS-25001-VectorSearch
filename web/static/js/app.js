@@ -78,13 +78,37 @@ document.addEventListener('DOMContentLoaded', function () {
     const catalogSearchResults = document.getElementById('catalogSearchResults');
     const filterIndicator = document.getElementById('filterIndicator');
     
-    // === DOM ЭЛЕМЕНТЫ STICKY HEADER ===
+    // === DOM ЭЛЕМЕНТЫ STICKY BREADCRUMBS ===
     const sidebarContent = document.getElementById('sidebarContent');
-    const stickyCategoryHeader = document.getElementById('stickyCategoryHeader');
-    const stickyCategoryName = document.getElementById('stickyCategoryName');
+    const stickyBreadcrumbs = document.getElementById('stickyBreadcrumbs');
     
     /** @type {number|null} Таймер debounce для поиска по каталогу */
     let catalogSearchDebounce = null;
+    
+    /** @type {string|null} Последний показанный sticky path (для гистерезиса) */
+    let lastStickyPath = null;
+    
+    /** @type {number} Порог гистерезиса для предотвращения мерцания sticky header */
+    const STICKY_HYSTERESIS = 20;
+    
+    // === LONG PRESS ДЛЯ МОБИЛЬНЫХ УСТРОЙСТВ ===
+    /** @type {number|null} Таймер для long press */
+    let longPressTimer = null;
+    
+    /** @type {boolean} Флаг что long press сработал */
+    let longPressTriggered = false;
+    
+    /** @type {number} Начальная X координата касания */
+    let touchStartX = 0;
+    
+    /** @type {number} Начальная Y координата касания */
+    let touchStartY = 0;
+    
+    /** @type {number} Время в мс для срабатывания long press */
+    const LONG_PRESS_DURATION = 500;
+    
+    /** @type {number} Максимальное смещение пальца для отмены long press */
+    const LONG_PRESS_MOVE_THRESHOLD = 10;
 
     queryInput.focus();
     loadAvailableDatabases();
@@ -247,6 +271,17 @@ document.addEventListener('DOMContentLoaded', function () {
             const option = Array.from(customOptionsContainer.children).find(div => div.dataset.value === dbName);
             if (option) option.click();
         }
+        
+        // Обработчик клика по пути категорий в результатах поиска
+        // Открывает каталог и навигирует к выбранной категории
+        if (e.target.closest('.result-category-path')) {
+            const pathEl = e.target.closest('.result-category-path');
+            const categoryPath = pathEl.dataset.categoryPath;
+            
+            if (categoryPath) {
+                navigateToCategoryInCatalog(categoryPath);
+            }
+        }
     });
 
     /**
@@ -370,8 +405,12 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         }
         
-        // Загружаем иерархию категорий для новой базы
-        loadHierarchy(name);
+        // ИСПРАВЛЕНИЕ: Загрузка иерархии в отложенном режиме для предотвращения блокировки UI
+        // setTimeout с 0 ms переносит выполнение в следующий цикл event loop,
+        // позволяя основному приложению (GPU-поиск) работать без ожидания загрузки каталога (CPU)
+        setTimeout(() => {
+            loadHierarchy(name);
+        }, 0);
     }
 
     /**
@@ -471,6 +510,25 @@ document.addEventListener('DOMContentLoaded', function () {
         let html = '';
         data.candidates.forEach(c => {
             const isTop = c.rank === 1;
+            
+            // Определяем название материала и путь категорий
+            // material_name - название без категорий, category_path - путь категорий
+            // Fallback на description если material_name не пришёл (старые данные)
+            const materialName = c.material_name || c.description;
+            const categoryPath = c.category_path || '';
+            
+            // Заменяем стрелочки "→" на слэши "/" для более чёткого отображения
+            const categoryPathDisplay = categoryPath ? categoryPath.replace(/ → /g, ' / ') : '';
+            
+            // Формируем HTML для пути категорий (кликабельный, с иконкой папки)
+            // data-category-path хранит оригинальный путь со стрелками для навигации в каталоге
+            const categoryHtml = categoryPath 
+                ? `<div class="result-category-path" data-category-path="${escapeHtml(categoryPath)}" title="Перейти в каталог: ${escapeHtml(categoryPath)}">
+                       <i class="fas fa-folder"></i>
+                       <span>${escapeHtml(categoryPathDisplay)}</span>
+                   </div>` 
+                : '';
+            
             html += `
                         <tr data-rank="${c.rank}">
                             <td style="font-weight:bold; color:${isTop ? 'var(--success)' : 'var(--text-secondary)'}">${c.rank}</td>
@@ -482,7 +540,10 @@ document.addEventListener('DOMContentLoaded', function () {
                                     <i class="fas fa-copy"></i>
                                 </button>
                             </td>
-                            <td>${c.description}</td>
+                            <td class="description-cell">
+                                <div class="result-material-name">${escapeHtml(materialName)}</div>
+                                ${categoryHtml}
+                            </td>
                             <td class="copy-cell">
                                 <button class="dislike-btn" data-rank="${c.rank}">
                                     <i class="far fa-thumbs-down"></i>
@@ -588,6 +649,12 @@ document.addEventListener('DOMContentLoaded', function () {
         if (collapseAllBtn) {
             collapseAllBtn.addEventListener('click', collapseAllTreeNodes);
         }
+        
+        // Обработчик кнопки "Обновить каталог"
+        const refreshCatalogBtn = document.getElementById('refreshCatalogBtn');
+        if (refreshCatalogBtn) {
+            refreshCatalogBtn.addEventListener('click', refreshCatalog);
+        }
 
         // Восстановление состояния sidebar из localStorage
         const savedState = localStorage.getItem('catalogSidebarCollapsed');
@@ -604,54 +671,56 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     
     /**
-     * Инициализация sticky header для отображения текущей категории при скролле.
-     * Показывает закреплённую строку с названием раскрытой категории,
-     * когда её заголовок "уходит" за верхнюю границу при прокрутке.
+     * Инициализация sticky breadcrumbs для отображения иерархии категорий при скролле.
+     * Показывает многоуровневые закреплённые строки с названиями раскрытых категорий,
+     * когда их заголовки "уходят" за верхнюю границу при прокрутке.
+     * Использует requestAnimationFrame и гистерезис для предотвращения мерцания.
      */
     function initStickyCategoryHeader() {
-        if (!sidebarContent || !stickyCategoryHeader || !stickyCategoryName) {
-            console.warn('⚠️ Элементы sticky header не найдены');
+        if (!sidebarContent || !stickyBreadcrumbs) {
+            console.warn('⚠️ Элементы sticky breadcrumbs не найдены');
             return;
         }
         
-        // Добавляем обработчик скролла с throttle для производительности
-        let scrollThrottleTimer = null;
+        // Флаг для requestAnimationFrame (предотвращает множественные вызовы)
+        let rafPending = false;
         
         sidebarContent.addEventListener('scroll', () => {
-            // Throttle: обновляем не чаще чем раз в 50ms
-            if (scrollThrottleTimer) return;
+            // Используем requestAnimationFrame для плавности и производительности
+            if (rafPending) return;
             
-            scrollThrottleTimer = setTimeout(() => {
-                scrollThrottleTimer = null;
+            rafPending = true;
+            requestAnimationFrame(() => {
+                rafPending = false;
                 updateStickyCategoryHeader();
-            }, 50);
+            });
         });
     }
     
     /**
-     * Обновление sticky header на основе текущей позиции скролла.
-     * Определяет какая раскрытая категория "ушла" за верхнюю границу
-     * и показывает её название в закреплённом заголовке.
+     * Обновление sticky breadcrumbs на основе текущей позиции скролла.
+     * Находит все раскрытые категории, чьи заголовки "ушли" за верхнюю границу,
+     * и показывает их в виде многоуровневых закреплённых строк.
+     * Использует гистерезис для предотвращения мерцания на границе.
      */
     function updateStickyCategoryHeader() {
-        if (!sidebarContent || !stickyCategoryHeader) return;
+        if (!sidebarContent || !stickyBreadcrumbs) return;
         
         // Получаем позицию верхней границы видимой области (относительно контейнера)
         const containerRect = sidebarContent.getBoundingClientRect();
         const containerTop = containerRect.top;
         
-        // Высота sticky header (для учёта отступа)
-        const stickyHeight = stickyCategoryHeader.classList.contains('hidden') ? 0 : stickyCategoryHeader.offsetHeight;
+        // Высота sticky breadcrumbs (для учёта отступа)
+        const stickyHeight = stickyBreadcrumbs.classList.contains('hidden') ? 0 : stickyBreadcrumbs.offsetHeight;
         
         // Порог: считаем что категория "ушла" если её верх выше этой линии
-        const threshold = containerTop + stickyHeight + 10;
+        const baseThreshold = containerTop + stickyHeight + 10;
         
         // Ищем все раскрытые категории (у которых есть expanded children)
-        // Нам нужны только те, чьи заголовки "ушли" за верхнюю границу
         const allExpandedNodes = sidebarContent.querySelectorAll('.tree-node > .tree-children.expanded');
         
-        let topCategory = null;
-        let topCategoryLevel = 0;
+        // Собираем все категории, которые "ушли" за верх, по уровням
+        const visibleCategories = [];
         
         allExpandedNodes.forEach(childrenContainer => {
             // Получаем родительский узел и его заголовок
@@ -661,41 +730,56 @@ document.addEventListener('DOMContentLoaded', function () {
             if (!header) return;
             
             // ВАЖНО: Проверяем что категория действительно видима
-            // (все её родители тоже раскрыты, т.е. она не внутри свёрнутой папки)
             if (!isCategoryVisible(parentNode)) {
-                return; // Пропускаем категории внутри свёрнутых родителей
+                return;
             }
             
             const headerRect = header.getBoundingClientRect();
             const level = parseInt(header.dataset.level) || 0;
+            const path = header.dataset.path || '';
+            const name = header.querySelector('.tree-node-name')?.textContent || '';
             
             // Проверяем: заголовок "ушёл" за верхнюю границу?
-            // И дочерние элементы ещё видны (контейнер ещё не полностью прокручен)
             const childrenRect = childrenContainer.getBoundingClientRect();
             
-            if (headerRect.top < threshold && childrenRect.bottom > threshold) {
-                // Эта категория раскрыта и её заголовок "ушёл" за верх,
-                // но дети ещё видны - это кандидат на sticky
-                
-                // Выбираем категорию с наибольшим уровнем (самую глубокую)
-                if (level > topCategoryLevel) {
-                    topCategoryLevel = level;
-                    topCategory = header;
-                }
+            // Гистерезис для текущих sticky категорий
+            const isCurrentlySticky = lastStickyPath && lastStickyPath.includes(path);
+            const hysteresisOffset = isCurrentlySticky ? STICKY_HYSTERESIS : 0;
+            const threshold = baseThreshold - hysteresisOffset;
+            
+            if (headerRect.top < threshold && childrenRect.bottom > (baseThreshold + STICKY_HYSTERESIS)) {
+                visibleCategories.push({ level, path, name });
             }
         });
         
-        // Обновляем sticky header
-        if (topCategory) {
-            // Показываем sticky с названием найденной категории
-            const name = topCategory.querySelector('.tree-node-name');
-            if (name) {
-                stickyCategoryName.textContent = name.textContent;
+        // Сортируем по уровню для правильного порядка отображения
+        visibleCategories.sort((a, b) => a.level - b.level);
+        
+        // Формируем ключ для сравнения (все пути объединены)
+        const newStickyKey = visibleCategories.map(c => c.path).join('|||');
+        
+        // Обновляем breadcrumbs только если изменился состав
+        if (visibleCategories.length > 0) {
+            if (lastStickyPath !== newStickyKey) {
+                // Строим HTML для breadcrumbs
+                const html = visibleCategories.map(cat => `
+                    <div class="sticky-breadcrumb-item" data-level="${cat.level}" data-path="${escapeHtml(cat.path)}">
+                        <i class="fas fa-folder"></i>
+                        <span title="${escapeHtml(cat.path)}">${escapeHtml(cat.name)}</span>
+                    </div>
+                `).join('');
+                
+                stickyBreadcrumbs.innerHTML = html;
+                lastStickyPath = newStickyKey;
             }
-            stickyCategoryHeader.classList.remove('hidden');
+            stickyBreadcrumbs.classList.remove('hidden');
         } else {
-            // Скрываем sticky - все категории видны или ничего не раскрыто
-            stickyCategoryHeader.classList.add('hidden');
+            // Скрываем breadcrumbs - все категории видны или ничего не раскрыто
+            if (lastStickyPath !== null) {
+                stickyBreadcrumbs.classList.add('hidden');
+                stickyBreadcrumbs.innerHTML = '';
+                lastStickyPath = null;
+            }
         }
     }
     
@@ -832,24 +916,90 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         });
         
-        // Скрываем sticky header так как все категории свёрнуты
-        if (stickyCategoryHeader) {
-            stickyCategoryHeader.classList.add('hidden');
+        // Скрываем sticky breadcrumbs так как все категории свёрнуты
+        if (stickyBreadcrumbs) {
+            stickyBreadcrumbs.classList.add('hidden');
+            stickyBreadcrumbs.innerHTML = '';
+            lastStickyPath = null;
         }
         
         console.log(`📁 Свёрнуто ${expandedChildren.length} категорий`);
+    }
+    
+    /**
+     * Обновление каталога - инвалидирует серверный кэш и перезагружает дерево.
+     * Вызывается по клику на кнопку "Обновить" в footer каталога.
+     */
+    async function refreshCatalog() {
+        const refreshBtn = document.getElementById('refreshCatalogBtn');
+        const icon = refreshBtn ? refreshBtn.querySelector('i') : null;
+        
+        // Показываем анимацию вращения
+        if (icon) {
+            icon.classList.add('fa-spin');
+        }
+        if (refreshBtn) {
+            refreshBtn.disabled = true;
+        }
+        
+        try {
+            // 1. Инвалидируем серверный кэш
+            console.log(`🔄 Инвалидация кэша для ${currentDatabase}...`);
+            const res = await fetch(`/hierarchy/${currentDatabase}/invalidate`, { method: 'POST' });
+            
+            if (!res.ok) {
+                throw new Error(`HTTP ${res.status}`);
+            }
+            
+            console.log('✅ Серверный кэш очищен');
+            
+            // 2. Очищаем клиентский кэш загруженных путей
+            loadedPaths.clear();
+            
+            // 3. Сворачиваем все раскрытые узлы
+            collapseAllTreeNodes();
+            
+            // 4. Перезагружаем иерархию
+            await loadHierarchy(currentDatabase);
+            
+            console.log('✅ Каталог обновлён');
+            
+        } catch (e) {
+            console.error('❌ Ошибка обновления каталога:', e);
+            alert('Ошибка обновления каталога: ' + e.message);
+        } finally {
+            // Убираем анимацию вращения
+            if (icon) {
+                icon.classList.remove('fa-spin');
+            }
+            if (refreshBtn) {
+                refreshBtn.disabled = false;
+            }
+        }
     }
 
     /** @type {Set} Кэш загруженных путей (для ленивой загрузки) */
     const loadedPaths = new Set();
     
+    /** @type {boolean} Флаг загрузки иерархии (предотвращает повторные вызовы) */
+    let isHierarchyLoading = false;
+    
     /**
      * Загрузка иерархии категорий с сервера (ЛЕНИВАЯ ЗАГРУЗКА).
      * Загружает только верхний уровень, остальное - при раскрытии.
+     * Полностью асинхронна - не блокирует основной поток UI и GPU-поиск.
      * @param {string} databaseName - Имя коллекции
      */
     async function loadHierarchy(databaseName) {
         if (!hierarchyTreeEl) return;
+        
+        // Предотвращаем повторный запуск если загрузка уже идёт
+        if (isHierarchyLoading) {
+            console.log('⏳ Загрузка иерархии уже выполняется, пропускаем...');
+            return;
+        }
+        
+        isHierarchyLoading = true;
         
         // Очищаем кэш загруженных путей при смене базы
         loadedPaths.clear();
@@ -878,13 +1028,13 @@ document.addEventListener('DOMContentLoaded', function () {
             // Обновляем статистику (примерно)
             if (totalCategoriesEl) totalCategoriesEl.textContent = data.total || 0;
             
-            // Рендерим только верхний уровень
-            renderTreeLazy(data.children);
+            // Рендерим только верхний уровень (категории + материалы без категорий)
+            renderTreeLazy(data.children || [], data.materials || []);
             
             // Сбрасываем фильтр при смене базы
             clearFilter();
             
-            console.log(`✅ Загружено ${data.total} категорий верхнего уровня, cached: ${data.cached}`);
+            console.log(`✅ Загружено ${data.total} элементов верхнего уровня, cached: ${data.cached}`);
             
         } catch (e) {
             console.error('❌ Ошибка загрузки иерархии:', e);
@@ -895,11 +1045,17 @@ document.addEventListener('DOMContentLoaded', function () {
                     <div style="font-size: 0.8rem; margin-top: 5px;">${e.message}</div>
                 </div>
             `;
+        } finally {
+            // Сбрасываем флаг загрузки в любом случае
+            isHierarchyLoading = false;
         }
     }
     
     /**
-     * Загрузка дочерних категорий при раскрытии.
+     * Загрузка дочерних категорий и материалов при раскрытии.
+     * 
+     * НОВАЯ ЛОГИКА v2: Поддержка раздельной загрузки категорий и материалов.
+     * 
      * @param {string} parentPath - Путь родительской категории
      * @param {HTMLElement} childrenContainer - Контейнер для вставки детей
      */
@@ -931,13 +1087,17 @@ document.addEventListener('DOMContentLoaded', function () {
             // Помечаем как загруженный
             loadedPaths.add(parentPath);
             
-            // Рендерим детей
-            if (data.children && data.children.length > 0) {
-                childrenContainer.innerHTML = renderTreeNodesLazy(data.children);
+            // Рендерим детей (категории + материалы)
+            const hasChildren = (data.children && data.children.length > 0);
+            const hasMaterials = (data.materials && data.materials.length > 0);
+            
+            if (hasChildren || hasMaterials) {
+                // Передаём и категории, и материалы в renderTreeNodesLazy
+                childrenContainer.innerHTML = renderTreeNodesLazy(data.children || [], data.materials || []);
                 // Добавляем обработчики событий для новых узлов
                 attachTreeEventHandlersForContainer(childrenContainer);
             } else {
-                childrenContainer.innerHTML = '';
+                childrenContainer.innerHTML = '<div class="tree-empty-children" style="padding: 10px; color: var(--text-secondary); font-size: 0.85rem;">Нет элементов</div>';
             }
             
         } catch (e) {
@@ -982,12 +1142,19 @@ document.addEventListener('DOMContentLoaded', function () {
     
     /**
      * Рендеринг дерева с ленивой загрузкой (только верхний уровень).
-     * @param {Array} nodes - Массив узлов верхнего уровня
+     * 
+     * НОВАЯ ЛОГИКА v2: Поддержка раздельного отображения категорий и материалов.
+     * 
+     * @param {Array} nodes - Массив узлов верхнего уровня (категории)
+     * @param {Array} materials - Массив материалов верхнего уровня (опционально)
      */
-    function renderTreeLazy(nodes) {
+    function renderTreeLazy(nodes, materials = []) {
         if (!hierarchyTreeEl) return;
         
-        if (!nodes || nodes.length === 0) {
+        const hasNodes = nodes && nodes.length > 0;
+        const hasMaterials = materials && materials.length > 0;
+        
+        if (!hasNodes && !hasMaterials) {
             hierarchyTreeEl.innerHTML = `
                 <div class="tree-empty">
                     <i class="fas fa-folder-open" style="opacity: 0.5;"></i>
@@ -997,7 +1164,7 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
         
-        hierarchyTreeEl.innerHTML = renderTreeNodesLazy(nodes);
+        hierarchyTreeEl.innerHTML = renderTreeNodesLazy(nodes, materials);
         
         // Добавляем обработчики событий
         attachTreeEventHandlers();
@@ -1005,54 +1172,100 @@ document.addEventListener('DOMContentLoaded', function () {
     
     /**
      * Рендеринг узлов для ленивой загрузки.
-     * has_children определяет нужен ли контейнер для детей.
-     * @param {Array} nodes - Массив узлов
+     * 
+     * НОВАЯ ЛОГИКА v2: Поддержка раздельного отображения категорий и материалов.
+     * - is_category: true - это папка (категория)
+     * - is_material: true - это материал (листовой элемент)
+     * - has_children или has_materials - есть дочерние элементы для ленивой загрузки
+     * 
+     * @param {Array} nodes - Массив узлов (категории)
+     * @param {Array} materials - Массив материалов (опционально)
      * @returns {string} HTML-разметка
      */
-    function renderTreeNodesLazy(nodes) {
-        if (!nodes || nodes.length === 0) return '';
-        
+    function renderTreeNodesLazy(nodes, materials = []) {
         let html = '';
         
-        for (const node of nodes) {
-            const hasChildren = node.has_children;
-            const isMultiSelected = selectedPaths.some(p => p.path === node.path);
-            
-            // Определяем классы
-            let headerClasses = 'tree-node-header';
-            if (isMultiSelected) headerClasses += ' multi-selected';
-            
-            // Кнопка копирования
-            let copyBtnHtml = '';
-            const codeValue = node.code || (node.codes && node.codes.length > 0 ? node.codes[0] : null);
-            if (codeValue) {
-                copyBtnHtml = `
+        // Рендерим категории (папки)
+        if (nodes && nodes.length > 0) {
+            for (const node of nodes) {
+                // Определяем, есть ли дочерние элементы (категории или материалы)
+                const hasChildren = node.has_children || node.has_materials || (node.materials && node.materials.length > 0);
+                const isMultiSelected = selectedPaths.some(p => p.path === node.path);
+                const isCategory = node.is_category !== false; // По умолчанию true
+                
+                // Определяем классы
+                let headerClasses = 'tree-node-header';
+                if (isMultiSelected) headerClasses += ' multi-selected';
+                
+                // Кнопка копирования (для материалов)
+                let copyBtnHtml = '';
+                const codeValue = node.code || (node.codes && node.codes.length > 0 ? node.codes[0] : null);
+                if (codeValue) {
+                    copyBtnHtml = `
+                        <button class="tree-node-copy" data-code="${escapeHtml(codeValue)}" title="Копировать ${escapeHtml(codeValue)}">
+                            <i class="fas fa-copy"></i>
+                        </button>
+                    `;
+                }
+                
+                // Иконка: папка для категории, куб для материала
+                const iconClass = isCategory ? 
+                    (hasChildren ? 'fa-folder' : 'fa-folder-open') : 
+                    'fa-cube';
+                const iconTypeClass = isCategory ? 'folder' : 'material';
+                
+                html += `
+                    <div class="tree-node ${isCategory ? 'category' : 'material'}" data-path="${escapeHtml(node.path)}" data-level="${node.level || 0}">
+                        <div class="${headerClasses}" data-path="${escapeHtml(node.path)}" data-level="${node.level || 0}">
+                            <span class="tree-node-expand ${hasChildren ? '' : 'empty'}">
+                                <i class="fas fa-chevron-right"></i>
+                            </span>
+                            <span class="tree-node-icon ${iconTypeClass}">
+                                <i class="fas ${iconClass}"></i>
+                            </span>
+                            <span class="tree-node-name" title="${escapeHtml(node.path || node.name)}">${escapeHtml(node.name)}</span>
+                            ${copyBtnHtml}
+                            <span class="tree-node-count">${(node.count || 1).toLocaleString()}</span>
+                        </div>
+                        ${hasChildren ? `
+                            <div class="tree-children collapsed" data-parent-path="${escapeHtml(node.path)}">
+                                <!-- Дети загружаются лениво при раскрытии -->
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            }
+        }
+        
+        // Рендерим материалы (листовые элементы)
+        if (materials && materials.length > 0) {
+            for (const material of materials) {
+                const codeValue = material.code || '';
+                const copyBtnHtml = codeValue ? `
                     <button class="tree-node-copy" data-code="${escapeHtml(codeValue)}" title="Копировать ${escapeHtml(codeValue)}">
                         <i class="fas fa-copy"></i>
                     </button>
+                ` : '';
+                
+                html += `
+                    <div class="tree-node material" data-code="${escapeHtml(codeValue)}">
+                        <div class="tree-node-header material-item" data-code="${escapeHtml(codeValue)}">
+                            <span class="tree-node-expand empty">
+                                <i class="fas fa-chevron-right" style="visibility: hidden;"></i>
+                            </span>
+                            <span class="tree-node-icon material">
+                                <i class="fas fa-cube"></i>
+                            </span>
+                            <span class="tree-node-name" title="${escapeHtml(material.name)}">${escapeHtml(material.name)}</span>
+                            ${copyBtnHtml}
+                        </div>
+                    </div>
                 `;
             }
-            
-            html += `
-                <div class="tree-node" data-path="${escapeHtml(node.path)}" data-level="${node.level}">
-                    <div class="${headerClasses}" data-path="${escapeHtml(node.path)}" data-level="${node.level}">
-                        <span class="tree-node-expand ${hasChildren ? '' : 'empty'}">
-                            <i class="fas fa-chevron-right"></i>
-                        </span>
-                        <span class="tree-node-icon ${hasChildren ? 'folder' : 'leaf'}">
-                            <i class="fas ${hasChildren ? 'fa-folder' : 'fa-cube'}"></i>
-                        </span>
-                        <span class="tree-node-name" title="${escapeHtml(node.path)}">${escapeHtml(node.name)}</span>
-                        ${copyBtnHtml}
-                        <span class="tree-node-count">${node.count.toLocaleString()}</span>
-                    </div>
-                    ${hasChildren ? `
-                        <div class="tree-children collapsed" data-parent-path="${escapeHtml(node.path)}">
-                            <!-- Дети загружаются лениво при раскрытии -->
-                        </div>
-                    ` : ''}
-                </div>
-            `;
+        }
+        
+        if (!html) {
+            return '<div class="tree-empty-children" style="padding: 10px; color: var(--text-secondary); font-size: 0.85rem;">Нет элементов</div>';
         }
         
         return html;
@@ -1075,9 +1288,19 @@ document.addEventListener('DOMContentLoaded', function () {
      * Логика:
      * - Обычный клик: только раскрывает/сворачивает категорию (БЕЗ фильтра)
      * - Ctrl+клик: добавляет/убирает категорию в фильтр
+     * - Long press (мобильные): добавляет/убирает категорию в фильтр
      */
     function attachSingleNodeHandler(header) {
+        // === ОБРАБОТКА КЛИКОВ (ПК) ===
         header.addEventListener('click', (e) => {
+            // Если long press сработал - игнорируем клик
+            if (longPressTriggered) {
+                longPressTriggered = false;
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+            }
+            
             const path = header.dataset.path;
             const level = parseInt(header.dataset.level);
             const node = header.closest('.tree-node');
@@ -1107,6 +1330,96 @@ document.addEventListener('DOMContentLoaded', function () {
                 toggleTreeNodeLazy(children, expandIcon, path);
             }
         });
+        
+        // === ОБРАБОТКА LONG PRESS (МОБИЛЬНЫЕ) ===
+        header.addEventListener('touchstart', (e) => {
+            // Не обрабатываем если нажали на кнопку копирования
+            if (e.target.closest('.tree-node-copy')) return;
+            
+            const touch = e.touches[0];
+            touchStartX = touch.clientX;
+            touchStartY = touch.clientY;
+            longPressTriggered = false;
+            
+            // Запускаем таймер long press
+            longPressTimer = setTimeout(() => {
+                const path = header.dataset.path;
+                const level = parseInt(header.dataset.level);
+                
+                // Long press сработал
+                longPressTriggered = true;
+                
+                // Вибрация для обратной связи (если поддерживается)
+                if (navigator.vibrate) {
+                    navigator.vibrate(50);
+                }
+                
+                // Пробуем добавить/убрать из фильтра
+                const wasAlreadySelected = selectedPaths.some(p => p.path === path);
+                const success = toggleMultiSelect(path, level, header);
+                
+                // Показываем toast уведомление только если операция успешна
+                if (success) {
+                    // Если был выбран - теперь удалён, и наоборот
+                    showLongPressToast(!wasAlreadySelected);
+                }
+                
+            }, LONG_PRESS_DURATION);
+        }, { passive: true });
+        
+        header.addEventListener('touchmove', (e) => {
+            // Отменяем long press если палец сдвинулся слишком далеко
+            if (longPressTimer) {
+                const touch = e.touches[0];
+                const deltaX = Math.abs(touch.clientX - touchStartX);
+                const deltaY = Math.abs(touch.clientY - touchStartY);
+                
+                if (deltaX > LONG_PRESS_MOVE_THRESHOLD || deltaY > LONG_PRESS_MOVE_THRESHOLD) {
+                    clearTimeout(longPressTimer);
+                    longPressTimer = null;
+                }
+            }
+        }, { passive: true });
+        
+        header.addEventListener('touchend', () => {
+            // Отменяем таймер если отпустили раньше
+            if (longPressTimer) {
+                clearTimeout(longPressTimer);
+                longPressTimer = null;
+            }
+        });
+        
+        header.addEventListener('touchcancel', () => {
+            // Отменяем таймер при отмене касания
+            if (longPressTimer) {
+                clearTimeout(longPressTimer);
+                longPressTimer = null;
+            }
+        });
+    }
+    
+    /**
+     * Показывает временное уведомление о результате long press.
+     * @param {boolean} added - true если категория добавлена, false если удалена
+     */
+    function showLongPressToast(added) {
+        // Удаляем предыдущий toast если есть
+        const existingToast = document.querySelector('.longpress-toast');
+        if (existingToast) existingToast.remove();
+        
+        const toast = document.createElement('div');
+        toast.className = 'longpress-toast';
+        toast.innerHTML = added 
+            ? '<i class="fas fa-check"></i> Добавлено в фильтр' 
+            : '<i class="fas fa-times"></i> Удалено из фильтра';
+        
+        document.body.appendChild(toast);
+        
+        // Удаляем через 2 секунды
+        setTimeout(() => {
+            toast.classList.add('fade-out');
+            setTimeout(() => toast.remove(), 300);
+        }, 2000);
     }
     
     /**
@@ -1193,9 +1506,11 @@ document.addEventListener('DOMContentLoaded', function () {
     
     /**
      * Переключение множественного выбора категории.
+     * Разрешает выбор только папок (категорий), но не листьев (материалов).
      * @param {string} path - Путь категории
      * @param {number} level - Уровень
      * @param {HTMLElement} header - Элемент заголовка узла
+     * @returns {boolean} true если выбор успешен
      */
     function toggleMultiSelect(path, level, header) {
         const index = selectedPaths.findIndex(p => p.path === path);
@@ -1204,13 +1519,48 @@ document.addEventListener('DOMContentLoaded', function () {
             // Убираем из выбранных
             selectedPaths.splice(index, 1);
             header.classList.remove('multi-selected');
-        } else {
-            // Добавляем в выбранные
-            selectedPaths.push({ path, level });
-            header.classList.add('multi-selected');
+            updateMultiSelectUI();
+            return true;
         }
         
+        // Проверяем - это папка или лист?
+        // Папка имеет .tree-children, лист - нет
+        const node = header.closest('.tree-node');
+        const hasChildren = node && node.querySelector('.tree-children');
+        
+        if (!hasChildren) {
+            // Это лист (материал) - запрещаем добавление в фильтр
+            showCategoryOnlyToast();
+            return false;
+        }
+        
+        // Это папка - добавляем в выбранные
+        selectedPaths.push({ path, level });
+        header.classList.add('multi-selected');
+        
         updateMultiSelectUI();
+        return true;
+    }
+    
+    /**
+     * Показывает уведомление что можно выбрать только категории.
+     */
+    function showCategoryOnlyToast() {
+        // Удаляем предыдущий toast если есть
+        const existingToast = document.querySelector('.longpress-toast');
+        if (existingToast) existingToast.remove();
+        
+        const toast = document.createElement('div');
+        toast.className = 'longpress-toast toast-warning';
+        toast.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Можно выбрать только категории';
+        
+        document.body.appendChild(toast);
+        
+        // Удаляем через 2 секунды
+        setTimeout(() => {
+            toast.classList.add('fade-out');
+            setTimeout(() => toast.remove(), 300);
+        }, 2000);
     }
     
     /**
@@ -1426,16 +1776,24 @@ document.addEventListener('DOMContentLoaded', function () {
             const isSelected = selectedPaths.some(p => p.path === cat.path);
             const selectedClass = isSelected ? ' selected' : '';
             
+            // Название папки - последний сегмент пути
+            const folderName = cat.name || cat.path.split(' → ').pop();
+            
+            // Полный путь иерархии от корня до текущей папки
+            // Всегда показываем cat.path - это и есть полный путь через " → "
+            const fullHierarchyPath = cat.path;
+            
             html += `
                 <div class="catalog-search-result${selectedClass}" 
                      data-path="${escapeHtml(cat.path)}" 
                      data-level="${cat.level}">
                     <div class="catalog-search-result-name">
                         ${isSelected ? '<i class="fas fa-check-circle" style="color: var(--success); margin-right: 5px;"></i>' : ''}
-                        ${escapeHtml(cat.name)}
+                        <i class="fas fa-folder" style="color: #f59e0b; margin-right: 5px;"></i>
+                        ${escapeHtml(folderName)}
                         <span class="catalog-search-result-score">${scoreText}</span>
                     </div>
-                    <div class="catalog-search-result-path">${escapeHtml(cat.path)}</div>
+                    <div class="catalog-search-result-path">${escapeHtml(fullHierarchyPath)}</div>
                 </div>
             `;
         });
@@ -1493,6 +1851,50 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     /**
+     * Раскрытие пути в дереве (с ленивой загрузкой).
+     * Последовательно раскрывает все РОДИТЕЛЬСКИЕ категории вдоль пути и загружает их детей.
+     * Оптимизировано для быстрого перехода без лишних задержек.
+     * @param {string} targetPath - Путь к категории (например, "Арматура → Краны → Шаровые")
+     */
+    async function expandPathInTree(targetPath) {
+        const separator = ' → ';
+        const parts = targetPath.split(separator);
+        
+        console.log(`🔓 Раскрытие пути: "${targetPath}"`);
+        
+        // Проходим по РОДИТЕЛЬСКИМ уровням пути
+        let currentPath = '';
+        for (let i = 0; i < parts.length - 1; i++) {
+            currentPath += (i > 0 ? separator : '') + parts[i];
+            
+            // Находим узел
+            // Используем Array.from для поиска, так как querySelector с CSS.escape может не сработать на сложных путях
+            const node = Array.from(document.querySelectorAll('.tree-node')).find(n => n.dataset.path === currentPath);
+            
+            if (node) {
+                const children = node.querySelector(':scope > .tree-children');
+                const expandIcon = node.querySelector(':scope > .tree-node-header .tree-node-expand');
+                
+                // Если детей нужно загрузить
+                if (children && !loadedPaths.has(currentPath)) {
+                    console.log(`      ⬇️ Загрузка детей для "${currentPath}"`);
+                    await loadChildren(currentPath, children);
+                }
+                
+                // Раскрываем
+                if (children && children.classList.contains('collapsed')) {
+                    children.classList.remove('collapsed');
+                    children.classList.add('expanded');
+                    if (expandIcon) expandIcon.classList.add('expanded');
+                }
+            } else {
+                console.warn(`   ⚠️ Узел "${currentPath}" не найден, прерывание цепочки`);
+                return;
+            }
+        }
+    }
+
+    /**
      * Выбор категории из результатов поиска.
      * Раскрывает дерево до нужной категории и выделяет её.
      * 
@@ -1505,96 +1907,110 @@ document.addEventListener('DOMContentLoaded', function () {
      * @param {MouseEvent} event - Событие клика (для проверки Ctrl)
      */
     async function selectCategoryFromSearch(path, level, event) {
-        // Раскрываем путь до категории в дереве (с ленивой загрузкой)
+        // 1. Раскрываем путь (быстро, без искусственных задержек)
         await expandPathInTree(path);
         
-        // Находим узел в дереве
-        const targetHeader = document.querySelector(`.tree-node-header[data-path="${CSS.escape(path)}"]`);
+        // 2. Находим целевой узел (он должен быть уже в DOM)
+        const targetHeader = Array.from(document.querySelectorAll('.tree-node-header')).find(h => h.dataset.path === path);
         
         // Проверяем Ctrl+клик для добавления в фильтр
         const isCtrlClick = event && (event.ctrlKey || event.metaKey);
         
         if (isCtrlClick) {
-            // Ctrl+клик - добавляем/убираем из фильтра
-            const exists = selectedPaths.some(p => p.path === path);
-            
-            if (!exists) {
-                // Добавляем новую категорию в фильтр
-                selectedPaths.push({ path, level });
-                
-                // Выделяем узел в дереве
-                if (targetHeader) {
-                    targetHeader.classList.add('multi-selected');
-                }
-                
-                console.log(`➕ Добавлена категория в фильтр (Ctrl): ${path}`);
+            if (targetHeader) {
+                toggleMultiSelect(path, level, targetHeader);
             } else {
-                // Если уже выбрана - убираем из фильтра
-                const index = selectedPaths.findIndex(p => p.path === path);
-                if (index > -1) {
-                    selectedPaths.splice(index, 1);
-                    if (targetHeader) {
-                        targetHeader.classList.remove('multi-selected');
-                    }
-                    console.log(`➖ Удалена категория из фильтра (Ctrl): ${path}`);
+                // Если узел не найден (что странно), работаем с данными
+                const exists = selectedPaths.some(p => p.path === path);
+                if (!exists) {
+                    selectedPaths.push({ path, level });
+                } else {
+                    const index = selectedPaths.findIndex(p => p.path === path);
+                    if (index > -1) selectedPaths.splice(index, 1);
                 }
+                updateMultiSelectUI();
             }
-            
-            // Обновляем UI фильтра только при Ctrl+клике
-            updateMultiSelectUI();
         } else {
-            // Обычный клик - только навигация к категории БЕЗ изменения фильтра
-            // Фильтр остаётся как есть!
-            console.log(`📍 Переход к категории (без фильтра): ${path}`);
+            console.log(`📍 Переход к категории: "${path}"`);
         }
         
-        // Скроллим к элементу в дереве (всегда)
+        // 3. Скроллим и подсвечиваем
         if (targetHeader) {
             targetHeader.scrollIntoView({ behavior: 'smooth', block: 'center' });
             
-            // Добавляем временную подсветку для визуальной обратной связи
+            // Лёгкая зеленоватая подсветка
             targetHeader.classList.add('highlight-pulse');
             setTimeout(() => {
                 targetHeader.classList.remove('highlight-pulse');
-            }, 1500);
+            }, 2000);
+        } else {
+            console.warn(`⚠️ Целевой узел "${path}" не найден в DOM после раскрытия`);
         }
     }
 
     /**
-     * Раскрытие пути в дереве до указанной категории.
-     * @param {string} targetPath - Путь к категории
+     * Навигация в каталог по пути категорий из результатов поиска.
+     * Вызывается при клике на путь категорий в таблице результатов.
+     * 
+     * Логика:
+     * 1. Раскрыть sidebar каталога (если свёрнут)
+     * 2. Раскрыть путь в дереве категорий
+     * 3. Подсветить целевую категорию
+     * 
+     * @param {string} categoryPath - Путь категорий (например, "Арматура → Краны → Шаровые")
      */
-    /**
-     * Раскрытие пути в дереве (с ленивой загрузкой).
-     * @param {string} targetPath - Путь к категории
-     */
-    async function expandPathInTree(targetPath) {
-        const separator = ' → ';
-        const parts = targetPath.split(separator);
+    async function navigateToCategoryInCatalog(categoryPath) {
+        if (!categoryPath) {
+            console.warn('⚠️ Путь категории не указан');
+            return;
+        }
         
-        // Проходим по всем уровням пути и раскрываем с загрузкой
-        let currentPath = '';
-        for (let i = 0; i < parts.length; i++) {
-            currentPath += (i > 0 ? separator : '') + parts[i];
+        console.log(`🔍 Навигация в каталог: "${categoryPath}"`);
+        
+        // 1. Раскрыть sidebar если свёрнут
+        if (sidebarCollapsed) {
+            toggleSidebar();
+            // Небольшая задержка для анимации раскрытия
+            await new Promise(resolve => setTimeout(resolve, 300));
+        }
+        
+        // 2. Раскрываем путь в дереве категорий
+        await expandPathInTree(categoryPath);
+        
+        // 3. Находим целевую категорию и подсвечиваем
+        // Ищем заголовок с точным совпадением пути
+        const targetHeader = Array.from(document.querySelectorAll('.tree-node-header'))
+            .find(h => h.dataset.path === categoryPath);
+        
+        if (targetHeader) {
+            // Скроллим к категории
+            targetHeader.scrollIntoView({ behavior: 'smooth', block: 'center' });
             
-            // Находим узел с этим путём
-            const node = document.querySelector(`.tree-node[data-path="${CSS.escape(currentPath)}"]`);
-            if (node) {
-                const children = node.querySelector('.tree-children');
-                const expandIcon = node.querySelector('.tree-node-expand');
+            // Добавляем подсветку
+            targetHeader.classList.add('highlight-pulse');
+            setTimeout(() => {
+                targetHeader.classList.remove('highlight-pulse');
+            }, 2500);
+            
+            console.log(`✅ Перешли к категории: "${categoryPath}"`);
+        } else {
+            // Категория не найдена - возможно путь неполный или данные ещё не загружены
+            console.warn(`⚠️ Категория "${categoryPath}" не найдена в дереве`);
+            
+            // Попробуем найти родительскую категорию
+            const parts = categoryPath.split(' → ');
+            if (parts.length > 1) {
+                const parentPath = parts.slice(0, -1).join(' → ');
+                const parentHeader = Array.from(document.querySelectorAll('.tree-node-header'))
+                    .find(h => h.dataset.path === parentPath);
                 
-                // Раскрываем если есть дочерние и они свёрнуты
-                if (children && children.classList.contains('collapsed')) {
-                    children.classList.remove('collapsed');
-                    children.classList.add('expanded');
-                    if (expandIcon) {
-                        expandIcon.classList.add('expanded');
-                    }
-                    
-                    // Загружаем детей если ещё не загружены
-                    if (!loadedPaths.has(currentPath)) {
-                        await loadChildren(currentPath, children);
-                    }
+                if (parentHeader) {
+                    parentHeader.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    parentHeader.classList.add('highlight-pulse');
+                    setTimeout(() => {
+                        parentHeader.classList.remove('highlight-pulse');
+                    }, 2500);
+                    console.log(`📁 Показана родительская категория: "${parentPath}"`);
                 }
             }
         }

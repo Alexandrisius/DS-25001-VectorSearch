@@ -407,6 +407,84 @@ th {
     border-bottom: 1px solid var(--adm-border);
 }
 
+/* === DATA TABLE WITH HIERARCHY (Таблица с иерархией) === */
+.data-table-container {
+    overflow: hidden;
+}
+
+.data-table-scroll {
+    overflow-x: auto;
+    overflow-y: auto;
+    max-height: calc(100vh - 250px);
+}
+
+.data-table-full {
+    min-width: max-content;
+}
+
+.data-table-full th,
+.data-table-full td {
+    white-space: nowrap;
+    padding: 12px 15px;
+    /* Визуальное разделение столбцов вертикальными границами */
+    border-right: 1px solid var(--adm-border);
+}
+
+/* Убираем границу справа у последнего столбца */
+.data-table-full th:last-child,
+.data-table-full td:last-child {
+    border-right: none;
+}
+
+/* Колонки иерархии (уровни категорий) - ИСПРАВЛЕНО: убрана прозрачность */
+.data-table-full .col-hierarchy {
+    /* Теперь используется сплошной фон как у остальных ячеек */
+    background: var(--adm-surface);
+    font-size: 0.85rem;
+    color: var(--adm-text);
+    min-width: 100px;
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.data-table-full .col-hierarchy:hover {
+    background: rgba(99, 102, 241, 0.08);
+}
+
+/* Заголовок колонки иерархии - ИСПРАВЛЕНО: такой же фон как у остальных th */
+.col-hierarchy-header {
+    background: var(--adm-bg) !important;
+}
+
+/* Колонка описания - полный текст без обрезки */
+.data-table-full .col-description {
+    white-space: normal;
+    min-width: 250px;
+    max-width: 500px;
+    line-height: 1.4;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.data-table-full .col-description:hover {
+    background: rgba(99, 102, 241, 0.08);
+}
+
+/* Колонка кода */
+.data-table-full .col-code {
+    font-family: monospace;
+    font-weight: 600;
+    color: var(--adm-primary);
+    cursor: pointer;
+}
+
+.data-table-full .col-code:hover {
+    background: rgba(99, 102, 241, 0.08);
+}
+
 th.sortable {
     cursor: pointer;
     user-select: none;
@@ -851,9 +929,502 @@ tr:hover td {
     background: rgba(0,0,0,0.02);
 }
 
-/* Responsive */
-@media (max-width: 768px) {
+/* === IMPORT MODAL WIDE & RESIZABLE (для 3 панелей) === */
+#importModal .modal-window {
+    max-width: 90vw;
+    width: 1200px;
+    min-width: 800px;
+    position: relative;
+}
+
+/* Ресайзабельное модальное окно */
+.modal-resizable {
+    /* CSS resize не работает хорошо с модалками, используем кастомный resizer */
+}
+
+/* Resizer элементы по бокам */
+.modal-resizer {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 8px;
+    cursor: ew-resize;
+    background: transparent;
+    z-index: 10;
+    transition: background 0.2s;
+}
+
+.modal-resizer:hover,
+.modal-resizer.active {
+    background: var(--adm-primary);
+    opacity: 0.5;
+}
+
+.modal-resizer-left {
+    left: 0;
+    border-radius: var(--radius-lg) 0 0 var(--radius-lg);
+}
+
+.modal-resizer-right {
+    right: 0;
+    border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+}
+
+/* Grid на 3 колонки для панелей маппинга */
+.import-mapper-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+/* Улучшенный предпросмотр для широкого окна */
+.preview-table td {
+    max-width: 300px;
+}
+
+.preview-table-wrap {
+    max-height: 250px;
+    overflow: auto;
+}
+
+/* === NUMBERED CHECKBOXES (Цифровые чек-боксы) === */
+.numbered-select-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 200px;
+    overflow-y: auto;
+    padding: 4px;
+}
+
+.numbered-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.15s;
+    user-select: none;
+}
+
+.numbered-option:hover {
+    background: var(--adm-surface);
+}
+
+/* Круглый badge с номером */
+.num-badge {
+    width: 24px;
+    height: 24px;
+    min-width: 24px;
+    border-radius: 50%;
+    border: 2px solid var(--adm-border);
+    background: var(--adm-surface);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--adm-text-sec);
+    transition: all 0.2s;
+}
+
+/* Выбранный badge с номером */
+.numbered-option.selected .num-badge {
+    background: var(--adm-primary);
+    border-color: var(--adm-primary);
+    color: white;
+}
+
+/* Hover эффект для невыбранных */
+.numbered-option:not(.selected):hover .num-badge {
+    border-color: var(--adm-primary);
+    color: var(--adm-primary);
+}
+
+.num-label {
+    font-size: 0.9rem;
+    color: var(--adm-text);
+    font-weight: 500;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* === HEADER SEPARATOR (Разделитель в заголовке панели) === */
+.header-separator {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+    font-size: 0.75rem;
+}
+
+.header-separator label {
+    color: var(--adm-text-sec);
+    white-space: nowrap;
+}
+
+.header-separator input {
+    width: 40px;
+    padding: 4px 8px;
+    text-align: center;
+    font-family: monospace;
+    font-size: 0.85rem;
+    font-weight: 600;
+    border-radius: 4px;
+}
+
+/* === PREVIEW ROW (Строка с превью) === */
+.preview-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 20px;
+    padding: 12px;
+    background: var(--adm-surface);
+    border: 1px solid var(--adm-border);
+    border-radius: var(--radius-md);
+}
+
+.preview-row .concat-preview {
+    flex: 1;
+    margin: 0;
+    min-width: 0;
+}
+
+/* Preview для склеенного значения */
+.concat-preview {
+    margin-top: 10px;
+    padding: 8px 12px;
+    background: var(--adm-bg);
+    border: 1px dashed var(--adm-border);
+    border-radius: 6px;
+    font-size: 0.8rem;
+    color: var(--adm-text-sec);
+}
+
+.concat-preview span {
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.concat-preview code {
+    display: block;
+    margin-top: 4px;
+    color: var(--adm-primary);
+    font-weight: 600;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    /* Не обрезаем текст, позволяем переносить */
+    white-space: normal;
+    line-height: 1.4;
+}
+
+/* === DIFF VIEW STYLES (Просмотр изменений) === */
+.diff-summary {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+.diff-stat {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 20px;
+    border-radius: var(--radius-md);
+    font-weight: 600;
+    font-size: 1rem;
+}
+
+.diff-stat.added {
+    background: var(--adm-success-bg);
+    color: var(--adm-success);
+}
+
+.diff-stat.modified {
+    background: #fef3c7;
+    color: #d97706;
+}
+
+.diff-stat.deleted {
+    background: var(--adm-danger-bg);
+    color: var(--adm-danger);
+}
+
+.diff-stat .count {
+    font-size: 1.25rem;
+    font-weight: 700;
+}
+
+/* Diff Tabs */
+.diff-tabs {
+    display: flex;
+    gap: 5px;
+    margin-bottom: 15px;
+    border-bottom: 2px solid var(--adm-border);
+    padding-bottom: 0;
+}
+
+.diff-tab-btn {
+    padding: 10px 20px;
+    border: none;
+    background: none;
+    color: var(--adm-text-sec);
+    font-weight: 500;
+    font-size: 0.9rem;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    transition: all 0.2s;
+}
+
+.diff-tab-btn:hover {
+    color: var(--adm-text);
+}
+
+.diff-tab-btn.active {
+    color: var(--adm-primary);
+    border-bottom-color: var(--adm-primary);
+}
+
+.diff-tab-btn .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.75rem;
+    margin-left: 6px;
+    background: var(--adm-bg);
+}
+
+.diff-tab-btn.active .badge {
+    background: rgba(99, 102, 241, 0.15);
+    color: var(--adm-primary);
+}
+
+/* Diff Table */
+.diff-table-wrap {
+    max-height: 350px;
+    overflow-y: auto;
+    border: 1px solid var(--adm-border);
+    border-radius: var(--radius-md);
+}
+
+.diff-table {
+    width: 100%;
+    font-size: 0.85rem;
+}
+
+.diff-table th {
+    background: var(--adm-bg);
+    padding: 10px 15px;
+    text-align: left;
+    font-weight: 600;
+    color: var(--adm-text-sec);
+    position: sticky;
+    top: 0;
+    z-index: 5;
+}
+
+.diff-table td {
+    padding: 10px 15px;
+    border-bottom: 1px solid var(--adm-border);
+    vertical-align: top;
+}
+
+.diff-table .code-col {
+    width: 180px;
+    font-family: monospace;
+    font-weight: 600;
+    color: var(--adm-primary);
+}
+
+.diff-table .desc-col {
+    max-width: 400px;
+    word-break: break-word;
+}
+
+/* Стили для изменённых записей (старое → новое) */
+.diff-old {
+    background: var(--adm-danger-bg);
+    color: var(--adm-danger);
+    padding: 4px 8px;
+    border-radius: 4px;
+    display: block;
+    margin-bottom: 6px;
+    text-decoration: line-through;
+    opacity: 0.8;
+}
+
+.diff-new {
+    background: var(--adm-success-bg);
+    color: var(--adm-success);
+    padding: 4px 8px;
+    border-radius: 4px;
+    display: block;
+}
+
+.diff-arrow {
+    color: var(--adm-text-sec);
+    margin: 4px 0;
+    font-size: 0.75rem;
+}
+
+/* Empty state для diff */
+.diff-empty {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--adm-text-sec);
+}
+
+.diff-empty i {
+    font-size: 2rem;
+    margin-bottom: 10px;
+    display: block;
+    opacity: 0.5;
+}
+
+/* Loading state */
+.diff-loading {
+    text-align: center;
+    padding: 40px 20px;
+}
+
+.diff-loading i {
+    font-size: 2rem;
+    color: var(--adm-primary);
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+/* Checkbox для выбора записей в diff */
+.diff-checkbox {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+}
+
+/* Warning box для удалений */
+.diff-delete-warning {
+    background: var(--adm-danger-bg);
+    border: 1px solid var(--adm-danger);
+    border-radius: var(--radius-md);
+    padding: 12px 15px;
+    margin-bottom: 15px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--adm-danger);
+    font-size: 0.9rem;
+}
+
+.diff-delete-warning i {
+    font-size: 1.2rem;
+}
+
+/* === SUCCESS BUTTON (Зеленая кнопка) === */
+.btn-success {
+    background-color: var(--adm-success);
+    color: white;
+    border-color: var(--adm-success);
+}
+
+.btn-success:hover {
+    background-color: #059669;
+    border-color: #059669;
+}
+
+/* === WARNING BUTTON (Оранжевая кнопка) === */
+.btn-warning {
+    background-color: #f59e0b;
+    color: white;
+    border-color: #f59e0b;
+}
+
+.btn-warning:hover {
+    background-color: #d97706;
+    border-color: #d97706;
+}
+
+/* Responsive для широкого модального окна */
+@media (max-width: 1250px) {
+    #importModal .modal-window {
+        max-width: 95vw;
+    }
+}
+
+@media (max-width: 900px) {
+    .import-mapper-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+@media (max-width: 600px) {
     .import-mapper-grid {
         grid-template-columns: 1fr;
     }
+    
+    .diff-summary {
+        flex-direction: column;
+    }
+}
+
+/* === MOBILE WARNING OVERLAY === */
+.mobile-warning-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.9);
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.mobile-warning-overlay.hidden {
+    display: none;
+}
+
+.mobile-warning-card {
+    background: var(--adm-surface);
+    border-radius: var(--radius-lg);
+    padding: 40px 30px;
+    max-width: 400px;
+    text-align: center;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.mobile-warning-card i {
+    font-size: 4rem;
+    color: var(--adm-primary);
+    margin-bottom: 20px;
+    display: block;
+}
+
+.mobile-warning-card h2 {
+    font-size: 1.3rem;
+    margin-bottom: 15px;
+    color: var(--adm-text);
+}
+
+.mobile-warning-card p {
+    color: var(--adm-text-sec);
+    margin-bottom: 15px;
+    line-height: 1.5;
+}
+
+.mobile-warning-card .btn {
+    width: 100%;
+    margin-top: 10px;
+    justify-content: center;
 }

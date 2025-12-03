@@ -11,6 +11,17 @@
 </head>
 <body>
 
+    <!-- === ПРЕДУПРЕЖДЕНИЕ ДЛЯ МОБИЛЬНЫХ УСТРОЙСТВ === -->
+    <div id="mobileWarning" class="mobile-warning-overlay hidden">
+        <div class="mobile-warning-card">
+            <i class="fas fa-desktop"></i>
+            <h2>Админ-панель оптимизирована для ПК</h2>
+            <p>Для полноценной работы с админ-панелью рекомендуется использовать компьютер с большим экраном.</p>
+            <p style="font-size: 0.85rem; opacity: 0.8;">На мобильных устройствах некоторые функции могут работать некорректно.</p>
+            <button id="mobileWarningClose" class="btn btn-primary">Понятно, продолжить</button>
+        </div>
+    </div>
+
     <!-- === ЭКРАН ВХОДА === -->
     <div id="loginScreen" class="login-container">
         <div class="login-card">
@@ -69,18 +80,19 @@
 
                 <!-- ВИД: ТАБЛИЦА ДАННЫХ -->
                 <div id="viewData" class="view-section hidden">
-                    <div class="table-container">
-                        <div class="table-scroll">
-                            <table id="dataTable">
-                                <thead>
+                    <div class="table-container data-table-container">
+                        <div class="table-scroll data-table-scroll">
+                            <table id="dataTable" class="data-table-full">
+                                <thead id="dataTableHead">
+                                    <!-- Заголовок генерируется динамически через JS -->
                                     <tr>
-                                        <th class="sortable" data-sort="code" style="width: 150px;">
+                                        <th class="sortable" data-sort="code" style="min-width: 150px;">
                                             Код <i class="fas fa-sort sort-icon"></i>
                                         </th>
-                                        <th class="sortable" data-sort="description">
+                                        <th class="sortable" data-sort="description" style="min-width: 300px;">
                                             Описание <i class="fas fa-sort sort-icon"></i>
                                         </th>
-                                        <th style="width: 100px;">Действия</th>
+                                        <th style="width: 80px;">Действия</th>
                                     </tr>
                                 </thead>
                                 <tbody id="dataTableBody"></tbody>
@@ -252,11 +264,14 @@
         </div>
     </div>
 
-    <!-- Мастер импорта -->
+    <!-- Мастер импорта (расширенный, ресайзабельный) -->
     <div id="importModal" class="modal-overlay">
-        <div class="modal-window" style="max-width: 700px;">
+        <div class="modal-window modal-resizable" id="importModalWindow">
+            <!-- Resizer для изменения ширины -->
+            <div class="modal-resizer modal-resizer-left" data-direction="left"></div>
+            <div class="modal-resizer modal-resizer-right" data-direction="right"></div>
             <div class="modal-header">
-                <h3>Импорт данных</h3>
+                <h3><i class="fas fa-file-import"></i> Импорт данных</h3>
                 <button class="modal-close">&times;</button>
             </div>
             <div class="modal-body">
@@ -296,45 +311,85 @@
                     <textarea id="pasteArea" style="height: 180px; font-family: monospace;" placeholder="Вставьте данные TSV/CSV сюда..."></textarea>
                 </div>
 
-                <!-- Шаг 2: Маппинг колонок -->
+                <!-- Шаг 2: Маппинг колонок (3 панели) -->
                 <div id="importStep2" class="step-content">
                     <div class="import-mapper-grid">
-                        <!-- Колонка кода -->
+                        
+                        <!-- Панель 1: Колонки Кода (ID) -->
                         <div class="mapper-card">
                             <div class="mapper-card-header">
                                 <i class="fas fa-hashtag"></i>
-                                <span>Колонка Кода</span>
+                                <span>Колонки Кода (ID)</span>
+                                <!-- Разделитель перемещён сюда -->
+                                <div class="header-separator">
+                                    <label>Разд:</label>
+                                    <input type="text" id="codeSeparator" value="." maxlength="3" placeholder=".">
+                                </div>
                             </div>
-                            <select id="mapCodeCol" class="form-select-modern"></select>
-                            <p class="mapper-hint">Уникальный идентификатор записи (шифр КСР)</p>
+                            <!-- Цифровые чек-боксы для выбора колонок кода -->
+                            <div class="numbered-select-list" id="mapCodeCols">
+                                <!-- Заполняется через JS -->
+                            </div>
+                            <p class="mapper-hint">
+                                <i class="fas fa-lightbulb"></i>
+                                Уникальный шифр записи
+                            </p>
                         </div>
                         
-                        <!-- Колонки описания -->
+                        <!-- Панель 2: Колонки Описания (название материала) -->
                         <div class="mapper-card">
                             <div class="mapper-card-header">
                                 <i class="fas fa-align-left"></i>
                                 <span>Колонки Описания</span>
-                            </div>
-                            
-                            <div class="multi-select-dropdown" id="descMultiSelect">
-                                <div class="select-trigger">
-                                    <span id="descSelectedCount">Выберите колонки...</span>
-                                    <i class="fas fa-chevron-down"></i>
-                                </div>
-                                <div class="select-options" id="mapDescCols">
-                                    <!-- Опции через JS -->
+                                <!-- Кастомный разделитель для склейки описания -->
+                                <div class="header-separator">
+                                    <label>Разд:</label>
+                                    <input type="text" id="descSeparator" value=" " maxlength="5" placeholder=" " title="Разделитель для склейки колонок описания">
                                 </div>
                             </div>
-                            
+                            <!-- Цифровые чек-боксы для описания -->
+                            <div class="numbered-select-list" id="mapDescCols">
+                                <!-- Заполняется через JS -->
+                            </div>
                             <p class="mapper-hint">
-                                <i class="fas fa-info-circle"></i>
-                                Выбранные колонки будут объединены через " → "
-                            </p>
-                            <p class="mapper-hint" style="margin-top: 8px; color: var(--adm-success);">
-                                <i class="fas fa-folder-tree"></i>
-                                Поля path_level_N для каталога будут созданы автоматически
+                                <i class="fas fa-lightbulb"></i>
+                                Полное наименование материала
                             </p>
                         </div>
+                        
+                        <!-- Панель 3: Колонки Иерархии (каталог) -->
+                        <div class="mapper-card">
+                            <div class="mapper-card-header">
+                                <i class="fas fa-folder-tree"></i>
+                                <span>Колонки Иерархии</span>
+                            </div>
+                            <!-- Цифровые чек-боксы для иерархии -->
+                            <div class="numbered-select-list" id="mapHierarchyCols">
+                                <!-- Заполняется через JS -->
+                            </div>
+                            <p class="mapper-hint">
+                                <i class="fas fa-lightbulb"></i>
+                                Структура каталога (или как описание)
+                            </p>
+                        </div>
+                        
+                    </div>
+                    
+                    <!-- Общая строка с preview элементами -->
+                    <div class="preview-row">
+                        <div class="concat-preview" id="codePreview">
+                            <span>Код:</span>
+                            <code>—</code>
+                        </div>
+                        <div class="concat-preview" id="descPreview">
+                            <span>Описание:</span>
+                            <code>—</code>
+                        </div>
+                        <div class="concat-preview" id="hierarchyPreview">
+                            <span>Иерархия:</span>
+                            <code>—</code>
+                        </div>
+                        
                     </div>
                     
                     <!-- Предпросмотр данных -->
@@ -352,7 +407,78 @@
                     </div>
                 </div>
 
-                <!-- Шаг 3: Прогресс -->
+                <!-- Шаг 3: Diff (сравнение с базой) -->
+                <div id="importStepDiff" class="step-content">
+                    <!-- Статистика изменений -->
+                    <div class="diff-summary" id="diffSummary">
+                        <div class="diff-stat added">
+                            <i class="fas fa-plus-circle"></i>
+                            <span class="count" id="diffAddedCount">0</span>
+                            <span>добавлено</span>
+                        </div>
+                        <div class="diff-stat modified">
+                            <i class="fas fa-edit"></i>
+                            <span class="count" id="diffModifiedCount">0</span>
+                            <span>изменено</span>
+                        </div>
+                        <div class="diff-stat deleted">
+                            <i class="fas fa-minus-circle"></i>
+                            <span class="count" id="diffDeletedCount">0</span>
+                            <span>удалено</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Предупреждение об удалениях -->
+                    <div class="diff-delete-warning hidden" id="diffDeleteWarning">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <span>Записи будут удалены из базы! Проверьте список ниже.</span>
+                    </div>
+                    
+                    <!-- Табы для категорий -->
+                    <div class="diff-tabs">
+                        <button class="diff-tab-btn active" data-tab="added">
+                            <i class="fas fa-plus"></i> Добавленные
+                            <span class="badge" id="diffAddedBadge">0</span>
+                        </button>
+                        <button class="diff-tab-btn" data-tab="modified">
+                            <i class="fas fa-edit"></i> Изменённые
+                            <span class="badge" id="diffModifiedBadge">0</span>
+                        </button>
+                        <button class="diff-tab-btn" data-tab="deleted">
+                            <i class="fas fa-trash"></i> Удалённые
+                            <span class="badge" id="diffDeletedBadge">0</span>
+                        </button>
+                    </div>
+                    
+                    <!-- Таблица изменений -->
+                    <div class="diff-table-wrap">
+                        <table class="diff-table" id="diffTable">
+                            <thead>
+                                <tr>
+                                    <th style="width: 180px;">Код</th>
+                                    <th>Описание</th>
+                                </tr>
+                            </thead>
+                            <tbody id="diffTableBody">
+                                <!-- Заполняется через JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <!-- Empty state -->
+                    <div class="diff-empty hidden" id="diffEmpty">
+                        <i class="fas fa-check-circle"></i>
+                        <p>Нет записей в этой категории</p>
+                    </div>
+                    
+                    <!-- Loading state -->
+                    <div class="diff-loading hidden" id="diffLoading">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        <p style="margin-top: 10px;">Сравнение с базой...</p>
+                    </div>
+                </div>
+
+                <!-- Шаг 4: Прогресс -->
                 <div id="importStep3" class="step-content">
                     <div style="text-align: center; padding: 20px;">
                         <h4 style="margin-bottom: 10px;">Обработка...</h4>
@@ -366,9 +492,21 @@
             </div>
             <div class="modal-footer">
                 <!-- Кнопки меняются в зависимости от шага -->
-                <button id="importBackBtn" class="btn btn-outline hidden">Назад</button>
-                <button id="importNextBtn" class="btn btn-primary">Далее</button>
-                <button id="importUploadBtn" class="btn btn-primary hidden">Начать загрузку</button>
+                <button id="importBackBtn" class="btn btn-outline hidden">
+                    <i class="fas fa-arrow-left"></i> Назад
+                </button>
+                <button id="importNextBtn" class="btn btn-primary">
+                    Далее <i class="fas fa-arrow-right"></i>
+                </button>
+                <button id="importCompareBtn" class="btn btn-warning hidden">
+                    <i class="fas fa-code-compare"></i> Сравнить с базой
+                </button>
+                <button id="importUploadBtn" class="btn btn-primary hidden">
+                    <i class="fas fa-upload"></i> Загрузить всё
+                </button>
+                <button id="importApplyBtn" class="btn btn-success hidden">
+                    <i class="fas fa-check"></i> Применить изменения
+                </button>
             </div>
         </div>
     </div>

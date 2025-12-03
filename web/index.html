@@ -82,10 +82,9 @@
                 </div>
                 
                 <div class="sidebar-content" id="sidebarContent">
-                    <!-- Закреплённый заголовок текущей категории (sticky) -->
-                    <div class="sticky-category-header hidden" id="stickyCategoryHeader">
-                        <i class="fas fa-folder-open"></i>
-                        <span id="stickyCategoryName">Категория</span>
+                    <!-- Контейнер для многоуровневых sticky breadcrumbs -->
+                    <div class="sticky-breadcrumbs hidden" id="stickyBreadcrumbs">
+                        <!-- Динамически заполняется через JS -->
                     </div>
                     
                     <!-- Дерево категорий -->
@@ -109,12 +108,20 @@
                                 <strong id="totalItems">0</strong> записей
                             </span>
                         </div>
-                        <button class="collapse-all-btn" id="collapseAllBtn" title="Свернуть все категории">
-                            <i class="fas fa-compress-alt"></i>
-                        </button>
+                        <div class="sidebar-buttons-group">
+                            <button class="refresh-catalog-btn" id="refreshCatalogBtn" title="Обновить каталог">
+                                <i class="fas fa-sync-alt"></i>
+                            </button>
+                            <button class="collapse-all-btn" id="collapseAllBtn" title="Свернуть все категории">
+                                <i class="fas fa-compress-alt"></i>
+                            </button>
+                        </div>
                     </div>
-                    <div class="sidebar-hint">
+                    <div class="sidebar-hint sidebar-hint-desktop">
                         <i class="fas fa-keyboard"></i> Ctrl+клик для множественного выбора
+                    </div>
+                    <div class="sidebar-hint sidebar-hint-mobile">
+                        <i class="fas fa-hand-pointer"></i> Долгое нажатие для выбора
                     </div>
                 </div>
             </aside>

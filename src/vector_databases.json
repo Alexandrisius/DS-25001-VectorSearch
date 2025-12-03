@@ -12,5 +12,19 @@
     "last_updated": "29.11.2025",
     "visible": true,
     "locked": true
+  },
+  "ksr_4": {
+    "description": "Тестовая",
+    "columns": {
+      "code": "code",
+      "description": "description"
+    },
+    "thresholds": {
+      "cosine": 0.45,
+      "rerank": 0.6
+    },
+    "last_updated": "03.12.2025",
+    "visible": true,
+    "locked": false
   }
 }
