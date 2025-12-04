@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="ru">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,6 +10,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="/static/css/admin.css">
 </head>
+
 <body>
 
     <!-- === ПРЕДУПРЕЖДЕНИЕ ДЛЯ МОБИЛЬНЫХ УСТРОЙСТВ === -->
@@ -17,7 +19,8 @@
             <i class="fas fa-desktop"></i>
             <h2>Админ-панель оптимизирована для ПК</h2>
             <p>Для полноценной работы с админ-панелью рекомендуется использовать компьютер с большим экраном.</p>
-            <p style="font-size: 0.85rem; opacity: 0.8;">На мобильных устройствах некоторые функции могут работать некорректно.</p>
+            <p style="font-size: 0.85rem; opacity: 0.8;">На мобильных устройствах некоторые функции могут работать
+                некорректно.</p>
             <button id="mobileWarningClose" class="btn btn-primary">Понятно, продолжить</button>
         </div>
     </div>
@@ -34,13 +37,13 @@
 
     <!-- === ПАНЕЛЬ УПРАВЛЕНИЯ === -->
     <div id="adminApp" class="dashboard-layout hidden">
-        
+
         <!-- Боковая панель -->
         <aside class="sidebar">
             <div class="sidebar-header">
                 <i class="fas fa-bolt" style="color: var(--adm-primary);"></i> Админ-панель
             </div>
-            
+
             <nav class="nav-links">
                 <a href="#" class="nav-item active" data-view="collections">
                     <i class="fas fa-database"></i> Коллекции
@@ -57,7 +60,8 @@
                 <a href="/" class="nav-item">
                     <i class="fas fa-external-link-alt"></i> К поиску
                 </a>
-                <button id="logoutBtn" class="nav-item" style="width: 100%; border: none; background: none; text-align: left;">
+                <button id="logoutBtn" class="nav-item"
+                    style="width: 100%; border: none; background: none; text-align: left;">
                     <i class="fas fa-sign-out-alt"></i> Выйти
                 </button>
             </div>
@@ -73,7 +77,7 @@
             </header>
 
             <div id="contentBody" class="content-body">
-                
+
                 <!-- ВИД: СЕТКА КОЛЛЕКЦИЙ -->
                 <div id="viewCollections" class="view-section">
                     <div id="collectionsGrid" class="collections-grid">
@@ -89,7 +93,8 @@
                                 <thead id="dataTableHead">
                                     <!-- Заголовок генерируется динамически через JS -->
                                     <tr>
-                                        <th class="sortable" data-sort="code" style="min-width: 150px; text-align: center;">
+                                        <th class="sortable" data-sort="code"
+                                            style="min-width: 150px; text-align: center;">
                                             Код <i class="fas fa-sort sort-icon"></i>
                                         </th>
                                         <th class="sortable" data-sort="description" style="min-width: 300px;">
@@ -114,7 +119,7 @@
                 <!-- ВИД: ЗАДАЧИ -->
                 <div id="viewJobs" class="view-section hidden">
                     <div class="table-container">
-                         <table id="jobsTable">
+                        <table id="jobsTable">
                             <thead>
                                 <tr>
                                     <th>ID задачи</th>
@@ -139,15 +144,15 @@
                                 <h3>Статусы записей</h3>
                             </div>
                             <p class="settings-card-desc">
-                                Настройте статусы для управления жизненным циклом записей в коллекциях. 
+                                Настройте статусы для управления жизненным циклом записей в коллекциях.
                                 Каждый статус имеет уникальный идентификатор, название и цвет для визуального различия.
                             </p>
-                            
+
                             <!-- Список существующих статусов -->
                             <div id="statusesList" class="status-list">
                                 <!-- Заполняется через JS -->
                             </div>
-                            
+
                             <!-- Форма добавления нового статуса -->
                             <div class="add-status-section">
                                 <div class="add-status-header">
@@ -158,7 +163,8 @@
                                     <input type="text" id="newStatusId" placeholder="ID (review, pending...)">
                                     <input type="text" id="newStatusLabel" placeholder="Название статуса">
                                     <div class="new-status-color-wrapper">
-                                        <div class="new-status-color-preview" id="newStatusColorPreview" style="background: #6366f1;"></div>
+                                        <div class="new-status-color-preview" id="newStatusColorPreview"
+                                            style="background: #6366f1;"></div>
                                         <input type="color" id="newStatusColor" value="#6366f1">
                                     </div>
                                     <button id="addStatusBtn" class="btn btn-primary" title="Добавить статус">
@@ -166,7 +172,7 @@
                                     </button>
                                 </div>
                             </div>
-                            
+
                             <!-- Статус по умолчанию -->
                             <div class="default-status-section">
                                 <div class="default-status-header">
@@ -180,7 +186,7 @@
                                     <!-- Заполняется через JS -->
                                 </select>
                             </div>
-                            
+
                             <!-- Кнопка сохранения -->
                             <div class="save-statuses-section">
                                 <button id="saveStatusesBtn" class="btn btn-primary">
@@ -196,7 +202,7 @@
     </div>
 
     <!-- === МОДАЛЬНЫЕ ОКНА === -->
-    
+
     <!-- Настройки коллекции -->
     <div id="configModal" class="modal-overlay">
         <div class="modal-window">
@@ -206,17 +212,18 @@
             </div>
             <div class="modal-body">
                 <input type="hidden" id="cfgName">
-                
+
                 <div style="margin-bottom: 20px;">
                     <label style="display: block; margin-bottom: 8px; font-weight: 500;">Порог Cosine</label>
                     <input type="number" step="0.05" id="cfgCosine">
                     <small style="color: var(--adm-text-sec);">Минимальное сходство для первичной выборки.</small>
                 </div>
-                
+
                 <div style="margin-bottom: 20px;">
                     <label style="display: block; margin-bottom: 8px; font-weight: 500;">Порог Rerank</label>
                     <input type="number" step="0.05" id="cfgRerank">
-                    <small style="color: var(--adm-text-sec);">Минимальный балл для Cross-Encoder ре-ранжирования.</small>
+                    <small style="color: var(--adm-text-sec);">Минимальный балл для Cross-Encoder
+                        ре-ранжирования.</small>
                 </div>
 
                 <div style="display: flex; gap: 10px; align-items: center;">
@@ -303,23 +310,24 @@
             </div>
             <div class="modal-body">
                 <div class="delete-warning">
-                    <i class="fas fa-skull-crossbones" style="font-size: 3rem; color: #dc3545; margin-bottom: 15px;"></i>
+                    <i class="fas fa-skull-crossbones"
+                        style="font-size: 3rem; color: #dc3545; margin-bottom: 15px;"></i>
                     <h4 style="color: #dc3545; margin-bottom: 10px;">Это действие необратимо!</h4>
                     <p style="color: var(--adm-text-sec); margin-bottom: 20px;">
-                        Коллекция <strong id="deleteCollectionName" style="color: var(--adm-text);">—</strong> 
+                        Коллекция <strong id="deleteCollectionName" style="color: var(--adm-text);">—</strong>
                         и все её данные будут <strong>безвозвратно удалены</strong>.
                     </p>
                 </div>
-                
+
                 <div class="confirm-input-section">
                     <label style="display: block; margin-bottom: 10px; font-weight: 600;">
                         Для подтверждения введите название коллекции:
                     </label>
-                    <input type="text" id="deleteConfirmInput" 
-                           placeholder="Введите название коллекции" 
-                           autocomplete="off"
-                           style="width: 100%; padding: 12px; font-size: 1rem; border: 2px solid var(--adm-border); border-radius: var(--radius-md);">
-                    <p id="deleteConfirmHint" class="confirm-hint" style="margin-top: 8px; font-size: 0.85rem; color: var(--adm-text-sec);">
+                    <input type="text" id="deleteConfirmInput" placeholder="Введите название коллекции"
+                        autocomplete="off"
+                        style="width: 100%; padding: 12px; font-size: 1rem; border: 2px solid var(--adm-border); border-radius: var(--radius-md);">
+                    <p id="deleteConfirmHint" class="confirm-hint"
+                        style="margin-top: 8px; font-size: 0.85rem; color: var(--adm-text-sec);">
                         Введите: <code id="deleteCollectionNameHint">—</code>
                     </p>
                 </div>
@@ -351,7 +359,7 @@
                     <p style="margin-bottom: 15px; color: var(--adm-text-sec);">
                         Скопируйте данные из Excel или CSV (включая заголовки) и вставьте ниже.
                     </p>
-                    
+
                     <!-- Выбор разделителя -->
                     <div class="delimiter-selector" style="margin-bottom: 15px;">
                         <label style="font-weight: 600; margin-bottom: 8px; display: block;">
@@ -376,14 +384,15 @@
                             </label>
                         </div>
                     </div>
-                    
-                    <textarea id="pasteArea" style="height: 180px; font-family: monospace;" placeholder="Вставьте данные TSV/CSV сюда..."></textarea>
+
+                    <textarea id="pasteArea" style="height: 180px; font-family: monospace;"
+                        placeholder="Вставьте данные TSV/CSV сюда..."></textarea>
                 </div>
 
                 <!-- Шаг 2: Маппинг колонок (3 панели) -->
                 <div id="importStep2" class="step-content">
                     <div class="import-mapper-grid">
-                        
+
                         <!-- Панель 1: Колонки Кода (ID) -->
                         <div class="mapper-card">
                             <div class="mapper-card-header">
@@ -404,7 +413,7 @@
                                 Уникальный шифр записи
                             </p>
                         </div>
-                        
+
                         <!-- Панель 2: Колонки Описания (название материала) -->
                         <div class="mapper-card">
                             <div class="mapper-card-header">
@@ -413,7 +422,8 @@
                                 <!-- Кастомный разделитель для склейки описания -->
                                 <div class="header-separator">
                                     <label>Разд:</label>
-                                    <input type="text" id="descSeparator" value=" " maxlength="5" placeholder=" " title="Разделитель для склейки колонок описания">
+                                    <input type="text" id="descSeparator" value=" " maxlength="5" placeholder=" "
+                                        title="Разделитель для склейки колонок описания">
                                 </div>
                             </div>
                             <!-- Цифровые чек-боксы для описания -->
@@ -425,7 +435,7 @@
                                 Полное наименование материала
                             </p>
                         </div>
-                        
+
                         <!-- Панель 3: Колонки Иерархии (каталог) -->
                         <div class="mapper-card">
                             <div class="mapper-card-header">
@@ -441,9 +451,9 @@
                                 Структура каталога (или как описание)
                             </p>
                         </div>
-                        
+
                     </div>
-                    
+
                     <!-- Общая строка с preview элементами -->
                     <div class="preview-row">
                         <div class="concat-preview" id="codePreview">
@@ -458,9 +468,9 @@
                             <span>Иерархия:</span>
                             <code>—</code>
                         </div>
-                        
+
                     </div>
-                    
+
                     <!-- Предпросмотр данных -->
                     <div class="import-preview">
                         <div class="preview-header">
@@ -501,13 +511,13 @@
                             <span>папок</span>
                         </div>
                     </div>
-                    
+
                     <!-- Предупреждение об удалениях -->
                     <div class="diff-delete-warning hidden" id="diffDeleteWarning">
                         <i class="fas fa-exclamation-triangle"></i>
                         <span>Записи будут удалены из базы! Проверьте список ниже.</span>
                     </div>
-                    
+
                     <!-- Табы для категорий -->
                     <div class="diff-tabs">
                         <button class="diff-tab-btn active" data-tab="added">
@@ -527,7 +537,7 @@
                             <span class="badge" id="diffFoldersBadge">0</span>
                         </button>
                     </div>
-                    
+
                     <!-- Таблица изменений -->
                     <div class="diff-table-wrap">
                         <table class="diff-table" id="diffTable">
@@ -542,13 +552,13 @@
                             </tbody>
                         </table>
                     </div>
-                    
+
                     <!-- Empty state -->
                     <div class="diff-empty hidden" id="diffEmpty">
                         <i class="fas fa-check-circle"></i>
                         <p>Нет записей в этой категории</p>
                     </div>
-                    
+
                     <!-- Loading state -->
                     <div class="diff-loading hidden" id="diffLoading">
                         <i class="fas fa-spinner fa-spin"></i>
@@ -591,4 +601,5 @@
 
     <script src="/static/js/admin.js"></script>
 </body>
+
 </html>

@@ -26,5 +26,22 @@
     "last_updated": "04.12.2025",
     "visible": false,
     "locked": false
+  },
+  "ksr.125": {
+    "description": "Красивое название",
+    "columns": {
+      "code": "code",
+      "description": "description"
+    },
+    "thresholds": {
+      "cosine": 0.45,
+      "rerank": 0.6
+    },
+    "last_updated": "04.12.2025",
+    "visible": true,
+    "locked": false
+  },
+  "_settings": {
+    "active_reranker": "jina-v3"
   }
 }

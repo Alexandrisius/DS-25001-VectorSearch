@@ -3457,9 +3457,37 @@ async def match_ksr(request: MatchRequest):
         candidates_for_rerank = candidates[:MAX_FOR_RERANK]
 
         # === ШАГ 4: Reranking ===
+        # ИСПРАВЛЕНИЕ: Rerank по full_description (короткое имя материала),
+        # а не по description (полный контекстный путь с категориями).
+        # Это улучшает качество Cross-Encoder модели, так как она сравнивает
+        # запрос пользователя с конкретным названием материала.
         normalized_query = query_text.lower().strip()
+        
+        # Вспомогательная функция для извлечения описания для реранжирования
+        def get_rerank_text(candidate: dict) -> str:
+            """
+            Извлекает текст для реранжирования, предпочитая full_description.
+            
+            full_description - короткое название материала (например: "Кран шаровой DN50")
+            description - полный контекстный путь (например: "Арматура → Краны → Кран шаровой DN50")
+            """
+            metadata = candidate.get("metadata", {})
+            full_desc = metadata.get("full_description")
+            
+            if full_desc:
+                return full_desc
+            else:
+                # Fallback для обратной совместимости со старыми записями
+                # где нет поля full_description
+                if candidate.get("code"):
+                    logger.debug(
+                        f"⚠️ Запись {candidate['code']} не имеет full_description, "
+                        f"используется description для реранжирования"
+                    )
+                return candidate.get("description", "")
+        
         candidate_pairs = [
-            (normalized_query, c["description"]) for c in candidates_for_rerank
+            (normalized_query, get_rerank_text(c)) for c in candidates_for_rerank
         ]
 
         loop = asyncio.get_event_loop()
