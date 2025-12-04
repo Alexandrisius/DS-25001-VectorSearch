@@ -43,13 +43,21 @@ const state = {
     },
     /** @type {Object} Результаты diff-анализа */
     diffData: {
-        added: [],      // Новые записи
-        modified: [],   // Изменённые записи
-        deleted: [],    // Удалённые записи
-        unchanged: 0,   // Количество без изменений
-        existingRecords: {} // Текущие записи из базы {code: description}
+        added: [],      // Новые записи материалов
+        modified: [],   // Изменённые записи материалов
+        deleted: [],    // Удалённые записи материалов
+        unchanged: 0,   // Количество материалов без изменений
+        existingRecords: {}, // Текущие записи материалов из базы {code: description}
+        
+        // === ПАПКИ ===
+        folderChanges: {
+            added: [],      // Новые папки [{full_path, leaf_name, items_count}]
+            modified: [],   // Изменённые папки (изменилось количество материалов)
+            deleted: []     // Удалённые папки (осиротевшие)
+        },
+        existingFolders: {} // Текущие папки из базы {full_path: {leaf_name, items_count}}
     },
-    /** @type {string} Текущий таб в diff: 'added' | 'modified' | 'deleted' */
+    /** @type {string} Текущий таб в diff: 'added' | 'modified' | 'deleted' | 'folders' */
     diffActiveTab: 'added',
     /** @type {Array} Загруженные строки данных для таблицы */
     dataRows: [],
@@ -60,7 +68,19 @@ const state = {
     /** @type {Array} Список колонок path_level_N в данных */
     pathLevelColumns: [],
     /** @type {boolean} Флаг наличия поля full_description в данных */
-    hasFullDescription: false
+    hasFullDescription: false,
+    
+    // === НОВЫЕ ПОЛЯ v3 ===
+    /** @type {Object} Ширины колонок {columnKey: width} */
+    columnWidths: JSON.parse(localStorage.getItem('adminColumnWidths') || '{}'),
+    /** @type {Array} Список доступных статусов записей */
+    statuses: [],
+    /** @type {string} Статус по умолчанию для новых записей */
+    defaultStatus: 'active',
+    /** @type {boolean} Флаг загрузки данных (для infinite scroll) */
+    isLoadingData: false,
+    /** @type {IntersectionObserver|null} Observer для infinite scroll */
+    scrollObserver: null
 };
 
 // === DOM ELEMENTS ===
@@ -82,7 +102,8 @@ const els = {
     views: {
         collections: document.getElementById('viewCollections'),
         jobs: document.getElementById('viewJobs'),
-        data: document.getElementById('viewData')
+        data: document.getElementById('viewData'),
+        settings: document.getElementById('viewSettings')
     },
     
     // Collections
@@ -91,7 +112,9 @@ const els = {
     // Data Table
     dataTable: document.getElementById('dataTable'),
     dataTableBody: document.getElementById('dataTableBody'),
-    loadMoreBtn: document.getElementById('loadMoreBtn'),
+    // loadMoreBtn заменён на infinite scroll
+    scrollSentinel: document.getElementById('scrollSentinel'),
+    infiniteScrollLoader: document.getElementById('infiniteScrollLoader'),
     
     // Jobs
     jobsTableBody: document.getElementById('jobsTableBody'),
@@ -172,9 +195,11 @@ const els = {
     diffAddedCount: document.getElementById('diffAddedCount'),
     diffModifiedCount: document.getElementById('diffModifiedCount'),
     diffDeletedCount: document.getElementById('diffDeletedCount'),
+    diffFoldersCount: document.getElementById('diffFoldersCount'),
     diffAddedBadge: document.getElementById('diffAddedBadge'),
     diffModifiedBadge: document.getElementById('diffModifiedBadge'),
     diffDeletedBadge: document.getElementById('diffDeletedBadge'),
+    diffFoldersBadge: document.getElementById('diffFoldersBadge'),
     diffDeleteWarning: document.getElementById('diffDeleteWarning'),
     diffTableBody: document.getElementById('diffTableBody'),
     diffEmpty: document.getElementById('diffEmpty'),
@@ -199,7 +224,265 @@ document.addEventListener('DOMContentLoaded', () => {
     initDiffTabs();
     initSorting();
     initModalResize();
+    initStatusDropdowns(); // Инициализация кастомных dropdown статусов (делегирование событий)
+    loadStatuses(); // Загрузка статусов при инициализации
+    initSettingsPage(); // Инициализация страницы настроек
 });
+
+/**
+ * Загрузка списка статусов из конфигурации
+ */
+async function loadStatuses() {
+    try {
+        const res = await fetch('/admin/statuses');
+        if (res.ok) {
+            const data = await res.json();
+            state.statuses = data.statuses || [];
+            state.defaultStatus = data.default_status || 'active';
+            console.log('✅ Статусы загружены:', state.statuses.length);
+        }
+    } catch (e) {
+        console.warn('⚠️ Не удалось загрузить статусы:', e);
+        // Используем статусы по умолчанию
+        state.statuses = [
+            {id: 'active', label: 'Активная', color: '#10b981'},
+            {id: 'draft', label: 'Черновик', color: '#f59e0b'},
+            {id: 'deprecated', label: 'Устаревшая', color: '#ef4444'}
+        ];
+    }
+}
+
+// === SETTINGS PAGE (Страница настроек) ===
+
+/**
+ * Рендеринг списка статусов на странице настроек.
+ * 
+ * УЛУЧШЕНИЯ v2:
+ * - Современный дизайн карточек с цветной полосой слева
+ * - Большой цветовой превью с иконкой редактирования
+ * - ID статуса в виде badge
+ * - Плавные анимации
+ */
+function renderStatusesSettings() {
+    const container = document.getElementById('statusesList');
+    const defaultSelect = document.getElementById('defaultStatusSelect');
+    
+    if (!container || !defaultSelect) return;
+    
+    // Рендерим список статусов с новым дизайном
+    container.innerHTML = state.statuses.map(status => `
+        <div class="status-item" data-status-id="${status.id}" style="--status-color: ${status.color};">
+            <div class="status-color-preview" style="background: ${status.color};" title="Нажмите для изменения цвета">
+                <i class="fas fa-palette"></i>
+                <input type="color" class="status-color-picker" value="${status.color}">
+            </div>
+            <div class="status-content">
+                <div class="status-id-badge">
+                    <i class="fas fa-hashtag"></i>
+                    ${status.id}
+                </div>
+                <input type="text" class="status-label-input" value="${status.label}" placeholder="Название статуса">
+            </div>
+            <button class="btn-remove-status" title="Удалить статус">
+                <i class="fas fa-trash"></i>
+            </button>
+        </div>
+    `).join('');
+    
+    // Рендерим select для статуса по умолчанию
+    defaultSelect.innerHTML = state.statuses.map(status => `
+        <option value="${status.id}" ${status.id === state.defaultStatus ? 'selected' : ''}>
+            ${status.label}
+        </option>
+    `).join('');
+    
+    // Привязываем обработчики изменения цвета
+    container.querySelectorAll('.status-color-picker').forEach(picker => {
+        picker.addEventListener('input', (e) => {
+            const item = e.target.closest('.status-item');
+            const preview = item.querySelector('.status-color-preview');
+            const newColor = e.target.value;
+            
+            // Обновляем превью и CSS переменную
+            preview.style.background = newColor;
+            item.style.setProperty('--status-color', newColor);
+        });
+    });
+    
+    // Привязываем обработчики удаления
+    container.querySelectorAll('.btn-remove-status').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const item = e.target.closest('.status-item');
+            const statusId = item.dataset.statusId;
+            
+            // Нельзя удалить статус по умолчанию
+            if (statusId === state.defaultStatus) {
+                alert('Нельзя удалить статус по умолчанию. Сначала выберите другой статус по умолчанию.');
+                return;
+            }
+            
+            // Нельзя удалить последний статус
+            if (state.statuses.length <= 1) {
+                alert('Должен остаться хотя бы один статус.');
+                return;
+            }
+            
+            // Анимация удаления
+            item.style.opacity = '0';
+            item.style.transform = 'translateX(-20px)';
+            
+            setTimeout(() => {
+                // Удаляем из массива
+                state.statuses = state.statuses.filter(s => s.id !== statusId);
+                renderStatusesSettings();
+            }, 200);
+        });
+    });
+}
+
+/**
+ * Инициализация страницы настроек.
+ * 
+ * УЛУЧШЕНИЯ v2:
+ * - Поддержка превью цвета для нового статуса
+ * - Улучшенная валидация
+ * - Плавные анимации
+ */
+function initSettingsPage() {
+    const addBtn = document.getElementById('addStatusBtn');
+    const saveBtn = document.getElementById('saveStatusesBtn');
+    const colorInput = document.getElementById('newStatusColor');
+    const colorPreview = document.getElementById('newStatusColorPreview');
+    
+    // Обновляем превью цвета при изменении
+    if (colorInput && colorPreview) {
+        colorInput.addEventListener('input', (e) => {
+            colorPreview.style.background = e.target.value;
+        });
+    }
+    
+    if (addBtn) {
+        addBtn.addEventListener('click', () => {
+            const idInput = document.getElementById('newStatusId');
+            const labelInput = document.getElementById('newStatusLabel');
+            const colorInput = document.getElementById('newStatusColor');
+            const colorPreview = document.getElementById('newStatusColorPreview');
+            
+            const id = idInput.value.trim().toLowerCase().replace(/\s+/g, '_');
+            const label = labelInput.value.trim();
+            const color = colorInput.value;
+            
+            if (!id || !label) {
+                // Подсвечиваем пустые поля
+                if (!id) idInput.style.borderColor = 'var(--adm-danger)';
+                if (!label) labelInput.style.borderColor = 'var(--adm-danger)';
+                
+                setTimeout(() => {
+                    idInput.style.borderColor = '';
+                    labelInput.style.borderColor = '';
+                }, 2000);
+                
+                return;
+            }
+            
+            // Проверяем уникальность ID
+            if (state.statuses.some(s => s.id === id)) {
+                idInput.style.borderColor = 'var(--adm-danger)';
+                idInput.placeholder = 'ID уже существует!';
+                
+                setTimeout(() => {
+                    idInput.style.borderColor = '';
+                    idInput.placeholder = 'ID (review, pending...)';
+                }, 2000);
+                
+                return;
+            }
+            
+            // Добавляем новый статус
+            state.statuses.push({ id, label, color });
+            
+            // Очищаем поля с анимацией
+            idInput.value = '';
+            labelInput.value = '';
+            colorInput.value = '#6366f1';
+            if (colorPreview) colorPreview.style.background = '#6366f1';
+            
+            // Перерисовываем список
+            renderStatusesSettings();
+            
+            // Фокус на ID для быстрого добавления следующего
+            idInput.focus();
+        });
+    }
+    
+    if (saveBtn) {
+        saveBtn.addEventListener('click', async () => {
+            // Собираем актуальные данные из DOM
+            const container = document.getElementById('statusesList');
+            const defaultSelect = document.getElementById('defaultStatusSelect');
+            
+            const updatedStatuses = [];
+            container.querySelectorAll('.status-item').forEach(item => {
+                const id = item.dataset.statusId;
+                const label = item.querySelector('.status-label-input').value.trim();
+                const color = item.querySelector('.status-color-picker').value;
+                
+                if (id && label) {
+                    updatedStatuses.push({ id, label, color });
+                }
+            });
+            
+            const defaultStatus = defaultSelect.value;
+            
+            // Показываем индикатор загрузки
+            const originalText = saveBtn.innerHTML;
+            saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Сохранение...';
+            saveBtn.disabled = true;
+            
+            try {
+                const res = await authFetch('/admin/statuses', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        statuses: updatedStatuses,
+                        default_status: defaultStatus
+                    })
+                });
+                
+                if (res.ok) {
+                    const data = await res.json();
+                    state.statuses = data.statuses;
+                    state.defaultStatus = data.default_status;
+                    
+                    // Показываем успех
+                    saveBtn.innerHTML = '<i class="fas fa-check"></i> Сохранено!';
+                    saveBtn.style.background = 'var(--adm-success)';
+                    
+                    setTimeout(() => {
+                        saveBtn.innerHTML = originalText;
+                        saveBtn.style.background = '';
+                        saveBtn.disabled = false;
+                    }, 2000);
+                } else {
+                    const err = await res.json();
+                    throw new Error(err.detail || 'Не удалось сохранить');
+                }
+            } catch (e) {
+                console.error('Ошибка сохранения статусов:', e);
+                
+                // Показываем ошибку
+                saveBtn.innerHTML = '<i class="fas fa-times"></i> Ошибка';
+                saveBtn.style.background = 'var(--adm-danger)';
+                
+                setTimeout(() => {
+                    saveBtn.innerHTML = originalText;
+                    saveBtn.style.background = '';
+                    saveBtn.disabled = false;
+                }, 2000);
+            }
+        });
+    }
+}
 
 /**
  * Проверка мобильного устройства и показ предупреждения.
@@ -407,7 +690,9 @@ function switchView(viewName) {
     });
     
     // Hide all views
-    Object.values(els.views).forEach(v => v.classList.add('hidden'));
+    Object.values(els.views).forEach(v => {
+        if (v) v.classList.add('hidden');
+    });
     
     // Show target view
     if (els.views[viewName]) {
@@ -449,6 +734,9 @@ function switchView(viewName) {
             openModal('addRecord');
         };
         els.headerActions.appendChild(addBtn);
+    } else if (viewName === 'settings') {
+        els.pageTitle.innerText = 'Настройки';
+        renderStatusesSettings();
     }
 }
 
@@ -699,21 +987,22 @@ window.openDataView = (name) => {
 };
 
 async function loadData() {
-    if (!state.activeCollection) return;
+    // Защита от повторных вызовов при infinite scroll
+    if (!state.activeCollection || state.isLoadingData) return;
+    
+    state.isLoadingData = true;
+    showInfiniteScrollLoader(true);
     
     try {
         const offsetQuery = state.dataOffset ? `&offset=${state.dataOffset}` : '';
-        const res = await authFetch(`/admin/collections/${state.activeCollection}/data?limit=50${offsetQuery}`);
+        // Увеличим limit для более плавной прокрутки
+        const res = await authFetch(`/admin/collections/${state.activeCollection}/data?limit=100${offsetQuery}`);
         const result = await res.json();
         
         state.dataOffset = result.next_offset;
         
-        // Toggle Load More button
-        if (!state.dataOffset) els.loadMoreBtn.classList.add('hidden');
-        else els.loadMoreBtn.classList.remove('hidden');
-        
         if (result.data.length === 0 && state.dataRows.length === 0) {
-            els.dataTableBody.innerHTML = '<tr><td colspan="3" style="text-align:center; padding:30px; color:var(--adm-text-sec)">Записей не найдено. Добавьте новые!</td></tr>';
+            els.dataTableBody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding:30px; color:var(--adm-text-sec)">Записей не найдено. Добавьте новые!</td></tr>';
         } else {
             // Добавляем к существующим данным
             state.dataRows = state.dataRows.concat(result.data);
@@ -729,11 +1018,164 @@ async function loadData() {
             
             renderDataTable();
         }
+        
+        // Если есть ещё данные - продолжаем наблюдение, иначе останавливаем
+        if (!state.dataOffset) {
+            stopInfiniteScroll();
+        }
     } catch (e) {
         if (e.message !== 'Unauthorized') {
             console.error('Failed to load data:', e);
         }
+    } finally {
+        state.isLoadingData = false;
+        showInfiniteScrollLoader(false);
     }
+}
+
+/**
+ * Показать/скрыть индикатор загрузки для infinite scroll
+ * @param {boolean} show - Показать или скрыть
+ */
+function showInfiniteScrollLoader(show) {
+    const loader = document.getElementById('infiniteScrollLoader');
+    if (loader) {
+        loader.classList.toggle('hidden', !show);
+    }
+}
+
+/**
+ * Инициализация infinite scroll с IntersectionObserver
+ */
+function initInfiniteScroll() {
+    // Останавливаем предыдущий observer если есть
+    stopInfiniteScroll();
+    
+    const sentinel = document.getElementById('scrollSentinel');
+    if (!sentinel) return;
+    
+    // Создаём IntersectionObserver
+    state.scrollObserver = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            // Когда sentinel становится видимым - загружаем ещё данные
+            if (entry.isIntersecting && state.dataOffset && !state.isLoadingData) {
+                loadData();
+            }
+        });
+    }, {
+        root: document.querySelector('.data-table-scroll'),
+        rootMargin: '100px', // Начинаем загрузку за 100px до конца
+        threshold: 0
+    });
+    
+    state.scrollObserver.observe(sentinel);
+}
+
+/**
+ * Остановка infinite scroll
+ */
+function stopInfiniteScroll() {
+    if (state.scrollObserver) {
+        state.scrollObserver.disconnect();
+        state.scrollObserver = null;
+    }
+}
+
+// === COLUMN RESIZE ===
+/**
+ * Инициализация drag-resize для колонок таблицы.
+ * Позволяет изменять ширину колонок как в Excel/Google Sheets.
+ * 
+ * УЛУЧШЕНИЯ v2:
+ * - Визуальная ручка resize с 3 точками
+ * - Линия-индикатор при перетаскивании
+ * - Увеличенная область активации (12px вместо 5px)
+ * - Не конфликтует с сортировкой (отдельные области)
+ */
+function initColumnResize() {
+    const table = document.getElementById('dataTable');
+    if (!table) return;
+    
+    const headerCells = table.querySelectorAll('thead th');
+    
+    // Создаём линию-индикатор (один раз для всей таблицы)
+    let resizeLine = document.querySelector('.resize-line');
+    if (!resizeLine) {
+        resizeLine = document.createElement('div');
+        resizeLine.className = 'resize-line';
+        document.body.appendChild(resizeLine);
+    }
+    
+    headerCells.forEach((th, index) => {
+        // Не добавляем resizer для последней колонки (Действия)
+        if (index === headerCells.length - 1) return;
+        
+        // Проверяем, есть ли уже resizer (избегаем дублирования)
+        if (th.querySelector('.th-resizer')) return;
+        
+        // Создаём элемент resizer
+        const resizer = document.createElement('div');
+        resizer.className = 'th-resizer';
+        th.appendChild(resizer);
+        
+        // Восстанавливаем сохранённую ширину
+        const columnKey = th.dataset.sort || `col_${index}`;
+        if (state.columnWidths[columnKey]) {
+            th.style.width = state.columnWidths[columnKey] + 'px';
+            th.style.minWidth = state.columnWidths[columnKey] + 'px';
+        }
+        
+        // Обработчики событий для resize
+        let startX, startWidth;
+        
+        resizer.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            startX = e.pageX;
+            startWidth = th.offsetWidth;
+            
+            // Показываем линию-индикатор
+            const thRect = th.getBoundingClientRect();
+            resizeLine.style.left = (thRect.right - 1) + 'px';
+            resizeLine.classList.add('visible');
+            
+            resizer.classList.add('active');
+            document.body.classList.add('resizing-columns');
+            
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
+        });
+        
+        function onMouseMove(e) {
+            const diff = e.pageX - startX;
+            const newWidth = Math.max(60, startWidth + diff); // Минимум 60px
+            
+            // Обновляем ширину столбца
+            th.style.width = newWidth + 'px';
+            th.style.minWidth = newWidth + 'px';
+            
+            // Обновляем позицию линии-индикатора
+            const thRect = th.getBoundingClientRect();
+            resizeLine.style.left = (thRect.right - 1) + 'px';
+        }
+        
+        function onMouseUp() {
+            // Скрываем линию-индикатор
+            resizeLine.classList.remove('visible');
+            
+            resizer.classList.remove('active');
+            document.body.classList.remove('resizing-columns');
+            
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+            
+            // Сохраняем ширину в localStorage
+            const columnKey = th.dataset.sort || `col_${index}`;
+            state.columnWidths[columnKey] = th.offsetWidth;
+            localStorage.setItem('adminColumnWidths', JSON.stringify(state.columnWidths));
+        }
+    });
 }
 
 /**
@@ -815,6 +1257,18 @@ function renderDataTable() {
                 // Уровни категорий - из meta
                 valA = (a.meta && a.meta[state.sortColumn]) || '';
                 valB = (b.meta && b.meta[state.sortColumn]) || '';
+            } else if (state.sortColumn === 'updated_at') {
+                // Дата изменения - сортировка по ISO строке
+                valA = (a.meta && a.meta.updated_at) || '';
+                valB = (b.meta && b.meta.updated_at) || '';
+            } else if (state.sortColumn === 'version') {
+                // Версия - числовая сортировка
+                valA = (a.meta && a.meta.version) || 1;
+                valB = (b.meta && b.meta.version) || 1;
+                // Для числовой сортировки
+                if (valA < valB) return state.sortDirection === 'asc' ? -1 : 1;
+                if (valA > valB) return state.sortDirection === 'asc' ? 1 : -1;
+                return 0;
             } else {
                 // Любое другое поле
                 valA = a[state.sortColumn] || '';
@@ -835,16 +1289,26 @@ function renderDataTable() {
     });
     
     initInlineEdit();
+    
+    // Инициализируем infinite scroll после рендера таблицы
+    initInfiniteScroll();
 }
 
 /**
  * Генерация заголовка таблицы с динамическими колонками иерархии.
  * 
- * НОВАЯ ЛОГИКА v2:
- * - Код (сортируемый)
+ * НОВАЯ ЛОГИКА v4:
+ * - Код (сортируемый, по центру)
  * - Уровни категорий (path_level_N) - все сортируемые
  * - Полное описание материала (full_description) - сортируемый
- * - Действия
+ * - Дата изменения (updated_at) - сортируемая
+ * - Версия (version)
+ * - Статус (status) - фильтруемый
+ * - Действия (по центру)
+ * 
+ * УЛУЧШЕНИЕ: Название столбца обёрнуто в .sort-trigger для отделения
+ * области сортировки от области изменения ширины (resize).
+ * Сортировка срабатывает ТОЛЬКО при клике на название, не на всю колонку.
  */
 function renderDataTableHeader() {
     const thead = document.getElementById('dataTableHead');
@@ -852,23 +1316,44 @@ function renderDataTableHeader() {
     
     let html = '<tr>';
     
-    // Колонка Код (сортируемая)
-    const codeActive = state.sortColumn === 'code';
-    const codeIcon = codeActive ? (state.sortDirection === 'asc' ? 'fa-sort-up' : 'fa-sort-down') : 'fa-sort';
-    html += `
-        <th class="sortable" data-sort="code" style="min-width: 120px; cursor: pointer;">
-            Код <i class="fas ${codeIcon} sort-icon${codeActive ? ' active' : ''}"></i>
-        </th>
-    `;
+    /**
+     * Вспомогательная функция для создания заголовка с сортировкой.
+     * Название обёрнуто в .sort-trigger для отделения от resize.
+     */
+    const createSortableHeader = (sortKey, label, iconClass, isCenter = false, extraClass = '') => {
+        const isActive = state.sortColumn === sortKey;
+        const sortIcon = isActive ? (state.sortDirection === 'asc' ? 'fa-sort-up' : 'fa-sort-down') : 'fa-sort';
+        const centerStyle = isCenter ? 'text-align: center;' : '';
+        const iconHtml = iconClass ? `<i class="fas ${iconClass}" style="opacity: 0.6; margin-right: 5px;"></i>` : '';
+        
+        return `
+            <th class="sortable ${extraClass}" data-sort="${sortKey}" style="min-width: 120px; ${centerStyle}">
+                <div class="th-content">
+                    <span class="sort-trigger" data-sort="${sortKey}">
+                        ${iconHtml}${label}
+                        <i class="fas ${sortIcon} sort-icon${isActive ? ' active' : ''}"></i>
+                    </span>
+                </div>
+            </th>
+        `;
+    };
+    
+    // Колонка Код (сортируемая, по центру)
+    html += createSortableHeader('code', 'Код', null, true);
     
     // Динамические колонки иерархии (все сортируемые)
     state.pathLevelColumns.forEach((col) => {
         const isActive = state.sortColumn === col.key;
-        const icon = isActive ? (state.sortDirection === 'asc' ? 'fa-sort-up' : 'fa-sort-down') : 'fa-sort';
+        const sortIcon = isActive ? (state.sortDirection === 'asc' ? 'fa-sort-up' : 'fa-sort-down') : 'fa-sort';
         html += `
-            <th class="sortable col-hierarchy-header" data-sort="${col.key}" style="min-width: 120px; cursor: pointer;">
-                <i class="fas fa-folder" style="color: #f59e0b; margin-right: 5px;"></i>
-                Уровень ${col.level} <i class="fas ${icon} sort-icon${isActive ? ' active' : ''}"></i>
+            <th class="sortable col-hierarchy-header" data-sort="${col.key}" style="min-width: 120px;">
+                <div class="th-content">
+                    <span class="sort-trigger" data-sort="${col.key}">
+                        <i class="fas fa-folder" style="color: #f59e0b; margin-right: 5px;"></i>
+                        Уровень ${col.level}
+                        <i class="fas ${sortIcon} sort-icon${isActive ? ' active' : ''}"></i>
+                    </span>
+                </div>
             </th>
         `;
     });
@@ -877,29 +1362,61 @@ function renderDataTableHeader() {
     const descActive = state.sortColumn === 'full_description';
     const descIcon = descActive ? (state.sortDirection === 'asc' ? 'fa-sort-up' : 'fa-sort-down') : 'fa-sort';
     html += `
-        <th class="sortable" data-sort="full_description" style="min-width: 300px; cursor: pointer;">
-            Полное описание <i class="fas ${descIcon} sort-icon${descActive ? ' active' : ''}"></i>
+        <th class="sortable" data-sort="full_description" style="min-width: 300px;">
+            <div class="th-content">
+                <span class="sort-trigger" data-sort="full_description">
+                    Полное описание
+                    <i class="fas ${descIcon} sort-icon${descActive ? ' active' : ''}"></i>
+                </span>
+            </div>
         </th>
     `;
     
-    // Колонка Действия
-    html += '<th style="width: 80px;">Действия</th>';
+    // Колонка Дата изменения (сортируемая)
+    html += createSortableHeader('updated_at', 'Изменено', 'fa-clock', true);
+    
+    // Колонка Версия (не сортируемая)
+    html += `
+        <th style="min-width: 70px; text-align: center;">
+            <div class="th-content" style="justify-content: center;">
+                <i class="fas fa-code-branch" style="margin-right: 5px; opacity: 0.6;"></i>
+                Версия
+            </div>
+        </th>
+    `;
+    
+    // Колонка Статус (не сортируемая)
+    html += `
+        <th style="min-width: 130px; text-align: center;">
+            <div class="th-content" style="justify-content: center;">
+                <i class="fas fa-tag" style="margin-right: 5px; opacity: 0.6;"></i>
+                Статус
+            </div>
+        </th>
+    `;
+    
+    // Колонка Действия (по центру, без resize)
+    html += '<th class="col-actions-header" style="width: 80px; text-align: center;">Действия</th>';
     
     html += '</tr>';
     thead.innerHTML = html;
     
-    // Перепривязываем обработчики сортировки
+    // Перепривязываем обработчики сортировки и resize
     initSorting();
+    initColumnResize();
 }
 
 /**
  * Рендеринг строки таблицы данных.
  * 
- * НОВАЯ ЛОГИКА v2:
- * - Код (редактируемый)
+ * НОВАЯ ЛОГИКА v3:
+ * - Код (редактируемый, по центру)
  * - Уровни категорий (path_level_N) - редактируемые, показывают ТОЛЬКО своё значение
  * - Полное описание материала (full_description) - редактируемое
- * - Действия
+ * - Дата изменения (updated_at) - только чтение
+ * - Версия (version) - только чтение
+ * - Статус (status) - редактируемый через select
+ * - Действия (по центру)
  * 
  * @param {Object} row - Запись с данными {id, code, description, meta}
  */
@@ -909,7 +1426,7 @@ function renderRow(row) {
     
     const meta = row.meta || {};
     
-    // Колонка Код (редактируемая)
+    // Колонка Код (редактируемая, по центру)
     let html = `<td class="col-code editable" data-id="${row.id}" data-field="code">${escapeHtml(row.code || '')}</td>`;
     
     // Динамические колонки иерархии (редактируемые)
@@ -924,9 +1441,21 @@ function renderRow(row) {
     const fullDescription = meta.full_description || row.description || '';
     html += `<td class="col-description editable" data-id="${row.id}" data-field="full_description">${escapeHtml(fullDescription)}</td>`;
     
-    // Колонка Действия
+    // Колонка Дата изменения (только чтение)
+    const updatedAt = meta.updated_at ? formatDateTime(meta.updated_at) : '—';
+    html += `<td class="col-date">${updatedAt}</td>`;
+    
+    // Колонка Версия (только чтение)
+    const version = meta.version || 1;
+    html += `<td class="col-version"><span class="version-badge">v${version}</span></td>`;
+    
+    // Колонка Статус (редактируемый через select)
+    const currentStatus = meta.status || state.defaultStatus;
+    html += `<td class="col-status">${renderStatusSelect(row.id, currentStatus)}</td>`;
+    
+    // Колонка Действия (по центру)
     html += `
-        <td>
+        <td class="col-actions">
             <button class="btn btn-danger btn-delete-record" style="padding: 6px;" data-id="${row.id}">
                 <i class="fas fa-trash"></i>
             </button>
@@ -935,14 +1464,236 @@ function renderRow(row) {
     
     tr.innerHTML = html;
     els.dataTableBody.appendChild(tr);
+    
+    // Обработчики для dropdown статусов привязываются через делегирование
+    // в функции initStatusDropdowns() - один раз на документ
+}
+
+/**
+ * Форматирование даты/времени для отображения
+ * @param {string} isoString - ISO строка даты
+ * @returns {string} Отформатированная дата
+ */
+function formatDateTime(isoString) {
+    if (!isoString) return '—';
+    try {
+        const date = new Date(isoString);
+        const day = String(date.getDate()).padStart(2, '0');
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const year = date.getFullYear();
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        return `${day}.${month}.${year} ${hours}:${minutes}`;
+    } catch {
+        return '—';
+    }
+}
+
+/**
+ * Рендеринг кастомного выпадающего списка статусов.
+ * 
+ * УЛУЧШЕНИЯ v2:
+ * - Кастомный dropdown вместо нативного select
+ * - Цветные точки рядом со статусами
+ * - Плавная анимация открытия/закрытия
+ * - Галочка у выбранного элемента
+ * 
+ * @param {string} recordId - ID записи
+ * @param {string} currentStatus - Текущий статус
+ * @returns {string} HTML кастомного dropdown
+ */
+function renderStatusSelect(recordId, currentStatus) {
+    // Находим текущий статус
+    const currentStatusObj = state.statuses.find(s => s.id === currentStatus);
+    const statusColor = currentStatusObj ? currentStatusObj.color : '#64748b';
+    const statusLabel = currentStatusObj ? currentStatusObj.label : currentStatus;
+    
+    // Генерируем опции
+    let optionsHtml = '';
+    state.statuses.forEach(status => {
+        const isSelected = status.id === currentStatus;
+        optionsHtml += `
+            <div class="status-option ${isSelected ? 'selected' : ''}" data-value="${status.id}">
+                <span class="status-dot" style="background: ${status.color};"></span>
+                <span class="status-label">${status.label}</span>
+                <i class="fas fa-check status-check"></i>
+            </div>
+        `;
+    });
+    
+    // Если статусы ещё не загружены - показываем текущий
+    if (state.statuses.length === 0) {
+        optionsHtml = `
+            <div class="status-option selected" data-value="${currentStatus}">
+                <span class="status-dot" style="background: #64748b;"></span>
+                <span class="status-label">${currentStatus}</span>
+                <i class="fas fa-check status-check"></i>
+            </div>
+        `;
+    }
+    
+    return `
+        <div class="status-dropdown" data-id="${recordId}">
+            <div class="status-dropdown-trigger" tabindex="0">
+                <span class="status-dot" style="background: ${statusColor};"></span>
+                <span class="status-label">${statusLabel}</span>
+                <i class="fas fa-chevron-down status-arrow"></i>
+            </div>
+            <div class="status-dropdown-options">
+                ${optionsHtml}
+            </div>
+        </div>
+    `;
+}
+
+/**
+ * Инициализация кастомных dropdown статусов.
+ * Привязывает обработчики событий к dropdown элементам.
+ */
+function initStatusDropdowns() {
+    // Закрытие всех dropdown при клике вне
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.status-dropdown')) {
+            document.querySelectorAll('.status-dropdown.open').forEach(dd => {
+                dd.classList.remove('open');
+            });
+        }
+    });
+    
+    // Делегирование событий для trigger
+    document.addEventListener('click', (e) => {
+        const trigger = e.target.closest('.status-dropdown-trigger');
+        if (!trigger) return;
+        
+        const dropdown = trigger.closest('.status-dropdown');
+        const wasOpen = dropdown.classList.contains('open');
+        
+        // Закрываем все остальные
+        document.querySelectorAll('.status-dropdown.open').forEach(dd => {
+            if (dd !== dropdown) dd.classList.remove('open');
+        });
+        
+        // Переключаем текущий
+        dropdown.classList.toggle('open', !wasOpen);
+    });
+    
+    // Делегирование событий для option
+    document.addEventListener('click', (e) => {
+        const option = e.target.closest('.status-option');
+        if (!option) return;
+        
+        const dropdown = option.closest('.status-dropdown');
+        const recordId = dropdown.dataset.id;
+        const newStatus = option.dataset.value;
+        
+        // Закрываем dropdown
+        dropdown.classList.remove('open');
+        
+        // Обновляем trigger
+        const trigger = dropdown.querySelector('.status-dropdown-trigger');
+        const statusObj = state.statuses.find(s => s.id === newStatus);
+        
+        if (statusObj && trigger) {
+            trigger.querySelector('.status-dot').style.background = statusObj.color;
+            trigger.querySelector('.status-label').textContent = statusObj.label;
+        }
+        
+        // Обновляем selected состояние
+        dropdown.querySelectorAll('.status-option').forEach(opt => {
+            opt.classList.toggle('selected', opt.dataset.value === newStatus);
+        });
+        
+        // Вызываем обработчик изменения статуса
+        handleStatusChange(recordId, newStatus);
+    });
+}
+
+/**
+ * Обработчик изменения статуса записи
+ * @param {string} recordId - ID записи
+ * @param {string} newStatus - Новый статус
+ */
+async function handleStatusChange(recordId, newStatus) {
+    try {
+        const res = await authFetch(`/admin/collections/${state.activeCollection}/data/${recordId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ field: 'status', value: newStatus })
+        });
+        
+        if (!res.ok) {
+            throw new Error('Failed to update status');
+        }
+        
+        const result = await res.json();
+        
+        // === ИСПРАВЛЕНО: Поиск по ID с приведением типов ===
+        const rowData = state.dataRows.find(r => String(r.id) === String(recordId));
+        if (rowData) {
+            if (!rowData.meta) rowData.meta = {};
+            rowData.meta.status = newStatus;
+            
+            // === НОВОЕ: Обновляем дату и версию из ответа сервера ===
+            if (result.updated_at) {
+                rowData.meta.updated_at = result.updated_at;
+                rowData.meta.version = result.version;
+                updateRowMetaDisplay(recordId, result.updated_at, result.version);
+            }
+        }
+        
+        // Визуальное подтверждение (кастомный dropdown уже обновлён в initStatusDropdowns)
+        console.log(`✅ Статус записи ${recordId} изменён на ${newStatus}`);
+        
+    } catch (e) {
+        console.error('Ошибка изменения статуса:', e);
+        alert('Не удалось изменить статус');
+        
+        // Откатываем dropdown на предыдущее значение
+        const rowData = state.dataRows.find(r => String(r.id) === String(recordId));
+        if (rowData) {
+            const dropdown = document.querySelector(`.status-dropdown[data-id="${recordId}"]`);
+            if (dropdown) {
+                const previousStatus = rowData.meta?.status || state.defaultStatus;
+                const statusObj = state.statuses.find(s => s.id === previousStatus);
+                
+                // Восстанавливаем trigger
+                const trigger = dropdown.querySelector('.status-dropdown-trigger');
+                if (trigger && statusObj) {
+                    trigger.querySelector('.status-dot').style.background = statusObj.color;
+                    trigger.querySelector('.status-label').textContent = statusObj.label;
+                }
+                
+                // Восстанавливаем selected состояние
+                dropdown.querySelectorAll('.status-option').forEach(opt => {
+                    opt.classList.toggle('selected', opt.dataset.value === previousStatus);
+                });
+            }
+        }
+    }
 }
 
 // === SORTING ===
+/**
+ * Инициализация сортировки таблицы.
+ * 
+ * УЛУЧШЕНИЕ: Обработчик привязывается к .sort-trigger внутри th,
+ * а не ко всему th. Это позволяет отделить область сортировки
+ * от области изменения ширины столбца (resize).
+ */
 function initSorting() {
-    document.querySelectorAll('th.sortable').forEach(th => {
-        th.style.cursor = 'pointer';
-        th.addEventListener('click', () => {
-            const column = th.dataset.sort;
+    // Привязываем обработчик к .sort-trigger, а не ко всему th
+    document.querySelectorAll('.sort-trigger').forEach(trigger => {
+        // Убираем старые обработчики (если есть)
+        trigger.replaceWith(trigger.cloneNode(true));
+    });
+    
+    // Заново привязываем обработчики к свежим элементам
+    document.querySelectorAll('.sort-trigger').forEach(trigger => {
+        trigger.addEventListener('click', (e) => {
+            e.stopPropagation(); // Не даём событию всплыть к th
+            
+            const column = trigger.dataset.sort;
+            if (!column) return;
             
             if (state.sortColumn === column) {
                 // Переключаем направление
@@ -958,20 +1709,26 @@ function initSorting() {
     });
 }
 
+/**
+ * Обновление иконок сортировки в заголовках таблицы.
+ */
 function updateSortIcons() {
     document.querySelectorAll('th.sortable').forEach(th => {
         const icon = th.querySelector('.sort-icon');
         const column = th.dataset.sort;
         
-        if (state.sortColumn === column) {
-            icon.className = `fas fa-sort-${state.sortDirection === 'asc' ? 'up' : 'down'} sort-icon active`;
-        } else {
-            icon.className = 'fas fa-sort sort-icon';
+        if (icon) {
+            if (state.sortColumn === column) {
+                icon.className = `fas fa-sort-${state.sortDirection === 'asc' ? 'up' : 'down'} sort-icon active`;
+            } else {
+                icon.className = 'fas fa-sort sort-icon';
+            }
         }
     });
 }
 
-els.loadMoreBtn.addEventListener('click', loadData);
+// loadMoreBtn заменён на infinite scroll - см. initInfiniteScroll()
+// els.loadMoreBtn.addEventListener('click', loadData);
 
 // === ADD RECORD ===
 function initAddRecord() {
@@ -1080,8 +1837,10 @@ function initInlineEdit() {
                         const result = await res.json();
                         cellElement.innerHTML = escapeHtml(newVal);
                         
-                        // Обновляем в state
-                        const row = state.dataRows.find(r => r.id === id);
+                        // === ИСПРАВЛЕНО: Поиск по ID с приведением типов ===
+                        // ID может быть строкой или числом, приводим к строке для сравнения
+                        const row = state.dataRows.find(r => String(r.id) === String(id));
+                        
                         if (row) {
                             if (field === 'code') {
                                 row.code = newVal;
@@ -1099,6 +1858,16 @@ function initInlineEdit() {
                                 row.description = result.context_description;
                             } else if (field === 'description') {
                                 row.description = newVal;
+                            }
+                            
+                            // === НОВОЕ: Обновляем дату и версию из ответа сервера ===
+                            if (result.updated_at) {
+                                if (!row.meta) row.meta = {};
+                                row.meta.updated_at = result.updated_at;
+                                row.meta.version = result.version;
+                                
+                                // Обновляем отображение в DOM для этой конкретной строки
+                                updateRowMetaDisplay(id, result.updated_at, result.version);
                             }
                         }
                         
@@ -1131,6 +1900,37 @@ function initInlineEdit() {
             });
         });
     });
+}
+
+/**
+ * Обновление отображения даты и версии в конкретной строке таблицы.
+ * Находит строку по ID и обновляет соответствующие ячейки.
+ * 
+ * @param {string} recordId - ID записи
+ * @param {string} updatedAt - Новая дата изменения (ISO формат)
+ * @param {number} version - Новая версия
+ */
+function updateRowMetaDisplay(recordId, updatedAt, version) {
+    // Находим строку таблицы по data-row-id
+    const row = document.querySelector(`tr[data-row-id="${recordId}"]`);
+    if (!row) {
+        console.warn(`⚠️ Строка с ID ${recordId} не найдена в DOM`);
+        return;
+    }
+    
+    // Обновляем ячейку с датой
+    const dateCell = row.querySelector('.col-date');
+    if (dateCell) {
+        dateCell.textContent = formatDateTime(updatedAt);
+    }
+    
+    // Обновляем ячейку с версией
+    const versionCell = row.querySelector('.col-version');
+    if (versionCell) {
+        versionCell.innerHTML = `<span class="version-badge">v${version}</span>`;
+    }
+    
+    console.log(`✅ Обновлено отображение: ID=${recordId}, дата=${formatDateTime(updatedAt)}, версия=v${version}`);
 }
 
 /**
@@ -1174,9 +1974,9 @@ window.deleteRecord = async (id) => {
             console.warn('⚠️ Не удалось очистить кэш иерархии:', e);
         }
         
-        // Удаляем из state
+        // Удаляем из state (приводим ID к строке для корректного сравнения)
         const beforeCount = state.dataRows.length;
-        state.dataRows = state.dataRows.filter(r => r.id !== id);
+        state.dataRows = state.dataRows.filter(r => String(r.id) !== String(id));
         const afterCount = state.dataRows.length;
         
         console.log(`📊 state.dataRows: ${beforeCount} → ${afterCount}`);
@@ -1763,6 +2563,180 @@ function analyzeChanges(newRecords, existingRecords) {
 }
 
 /**
+ * Извлечение уникальных папок из записей материалов.
+ * 
+ * Каждый материал имеет hierarchy (путь каталога), который разбивается на папки.
+ * Например: "Приборы → Аннотации → 2D узлы" создаёт 3 папки:
+ *   - "Приборы"
+ *   - "Приборы → Аннотации"  
+ *   - "Приборы → Аннотации → 2D узлы"
+ * 
+ * @param {Array<Object>} records - Записи материалов с полем hierarchy
+ * @returns {Object} Словарь {full_path: {leaf_name, items_count}}
+ */
+function extractFoldersFromRecords(records) {
+    const folderMap = {};  // {full_path: {leaf_name, items_count}}
+    
+    records.forEach(record => {
+        // Получаем путь иерархии из записи
+        const hierarchy = record.hierarchy || '';
+        if (!hierarchy) return;
+        
+        // Разбиваем путь на части
+        const parts = hierarchy.split(' → ').map(p => p.trim()).filter(Boolean);
+        
+        // Создаём записи для каждого уровня папки
+        let currentPath = '';
+        parts.forEach((part, idx) => {
+            // Формируем полный путь до текущего уровня
+            currentPath = idx === 0 ? part : currentPath + ' → ' + part;
+            
+            if (!folderMap[currentPath]) {
+                folderMap[currentPath] = {
+                    full_path: currentPath,
+                    leaf_name: part,  // Название текущей папки
+                    items_count: 0,
+                    level: idx + 1
+                };
+            }
+            
+            // Увеличиваем счётчик только для конечной папки (полный путь материала)
+            if (idx === parts.length - 1) {
+                folderMap[currentPath].items_count++;
+            }
+        });
+    });
+    
+    return folderMap;
+}
+
+/**
+ * Анализ изменений папок каталога.
+ * 
+ * Сравнивает папки, извлечённые из импортируемых данных, с текущими папками в базе.
+ * Определяет:
+ * - Новые папки (будут созданы с эмбеддингами)
+ * - Изменённые папки (изменилось количество материалов)
+ * - Удалённые папки (осиротевшие, без материалов)
+ * 
+ * @param {Array<Object>} newRecords - Новые записи материалов
+ * @param {Object} existingFolders - Текущие папки из базы {full_path: {leaf_name, items_count}}
+ * @returns {Object} {added: [], modified: [], deleted: []}
+ */
+function analyzeFolderChanges(newRecords, existingFolders) {
+    const result = {
+        added: [],
+        modified: [],  // Для переименований
+        deleted: []
+    };
+    
+    // Извлекаем папки из новых записей
+    const newFolders = extractFoldersFromRecords(newRecords);
+    
+    const newPaths = new Set(Object.keys(newFolders));
+    const existingPaths = new Set(Object.keys(existingFolders));
+    
+    // Собираем leaf_names для фильтрации "переехавших" папок
+    const newLeafNames = new Set();
+    const existingLeafNames = new Set();
+    
+    newPaths.forEach(path => {
+        newLeafNames.add(newFolders[path].leaf_name);
+    });
+    existingPaths.forEach(path => {
+        existingLeafNames.add(existingFolders[path].leaf_name || path.split(' → ').pop());
+    });
+    
+    // === ЛОГИКА СРАВНЕНИЯ ===
+    // Папка считается "новой" только если её leaf_name вообще НЕ существует в базе.
+    // Если leaf_name есть, но путь изменился - это "перенос" из-за переименования родителя.
+    // Такие папки НЕ показываем, они обновятся автоматически при импорте.
+    
+    // 1. Новые папки - только действительно НОВЫЕ названия (leaf_name не было в базе)
+    newPaths.forEach(path => {
+        if (!existingPaths.has(path)) {
+            const leafName = newFolders[path].leaf_name;
+            
+            // Проверяем: есть ли папка с таким leaf_name в базе?
+            // Если есть - значит папка просто "переехала" из-за переименования родителя
+            if (!existingLeafNames.has(leafName)) {
+                result.added.push({
+                    full_path: path,
+                    leaf_name: leafName,
+                    items_count: newFolders[path].items_count,
+                    level: newFolders[path].level
+                });
+            }
+        }
+    });
+    
+    // 2. Переименованные папки - где leaf_name изменился на том же уровне
+    // Ищем пары: (старый путь без последнего элемента) == (новый путь без последнего элемента)
+    // но сам leaf_name разный
+    existingPaths.forEach(oldPath => {
+        if (newPaths.has(oldPath)) return; // Путь не изменился
+        
+        const oldLeafName = existingFolders[oldPath].leaf_name || oldPath.split(' → ').pop();
+        const oldParent = oldPath.split(' → ').slice(0, -1).join(' → ');
+        
+        // Ищем в новых папках с тем же родителем, но другим leaf_name
+        newPaths.forEach(newPath => {
+            if (existingPaths.has(newPath)) return; // Уже есть в базе
+            
+            const newLeafName = newFolders[newPath].leaf_name;
+            const newParent = newPath.split(' → ').slice(0, -1).join(' → ');
+            
+            // Тот же родитель, но разные leaf_name = переименование
+            if (oldParent === newParent && oldLeafName !== newLeafName) {
+                // Проверяем что это не просто совпадение - 
+                // старый leaf_name должен отсутствовать в новых, новый - в старых
+                if (!newLeafNames.has(oldLeafName) && !existingLeafNames.has(newLeafName)) {
+                    result.modified.push({
+                        full_path: newPath,
+                        old_path: oldPath,
+                        leaf_name: newLeafName,
+                        old_leaf_name: oldLeafName,
+                        items_count: newFolders[newPath].items_count,
+                        level: newFolders[newPath].level
+                    });
+                }
+            }
+        });
+    });
+    
+    // Убираем из added/deleted папки, которые попали в modified
+    const modifiedOldPaths = new Set(result.modified.map(m => m.old_path));
+    const modifiedNewPaths = new Set(result.modified.map(m => m.full_path));
+    
+    // 3. Удалённые папки - только действительно УДАЛЁННЫЕ (leaf_name нет в новых)
+    existingPaths.forEach(path => {
+        if (!newPaths.has(path) && !modifiedOldPaths.has(path)) {
+            const leafName = existingFolders[path].leaf_name || path.split(' → ').pop();
+            
+            // Проверяем: есть ли папка с таким leaf_name в новых?
+            // Если есть - значит папка просто "переехала"
+            if (!newLeafNames.has(leafName)) {
+                result.deleted.push({
+                    full_path: path,
+                    leaf_name: leafName,
+                    items_count: existingFolders[path].items_count || 0
+                });
+            }
+        }
+    });
+    
+    // Фильтруем added - убираем те, что в modified
+    result.added = result.added.filter(a => !modifiedNewPaths.has(a.full_path));
+    
+    // Сортируем
+    result.added.sort((a, b) => a.level - b.level || a.full_path.localeCompare(b.full_path));
+    result.modified.sort((a, b) => (a.level || 0) - (b.level || 0) || a.full_path.localeCompare(b.full_path));
+    result.deleted.sort((a, b) => a.full_path.localeCompare(b.full_path));
+    
+    return result;
+}
+
+/**
  * Выполнение diff-анализа: загрузка текущих записей и сравнение.
  */
 async function performDiffAnalysis() {
@@ -1773,7 +2747,7 @@ async function performDiffAnalysis() {
     els.diffEmpty.classList.add('hidden');
     
     try {
-        // Загружаем все текущие записи из коллекции
+        // === ШАГ 1: Загружаем все текущие записи (материалы) из коллекции ===
         console.log(`📥 Загрузка текущих записей из коллекции '${state.activeCollection}'...`);
         
         const res = await fetch(`/get_all_codes?database=${state.activeCollection}`);
@@ -1786,16 +2760,35 @@ async function performDiffAnalysis() {
         
         console.log(`✅ Загружено ${Object.keys(state.diffData.existingRecords).length} записей из базы`);
         
+        // === ШАГ 2: Загружаем все текущие папки из коллекции ===
+        console.log(`📁 Загрузка текущих папок из коллекции '${state.activeCollection}'...`);
+        
+        const foldersRes = await fetch(`/get_all_folders?database=${state.activeCollection}`);
+        if (foldersRes.ok) {
+            const foldersData = await foldersRes.json();
+            state.diffData.existingFolders = foldersData.folders || {};
+            console.log(`✅ Загружено ${Object.keys(state.diffData.existingFolders).length} папок из базы`);
+        } else {
+            console.warn('⚠️ Не удалось загрузить папки, продолжаем без анализа папок');
+            state.diffData.existingFolders = {};
+        }
+        
         // Формируем записи из импортируемых данных
         const newRecords = buildRecordsFromMapping();
         
-        // Выполняем анализ
+        // === ШАГ 3: Выполняем анализ материалов ===
         const diff = analyzeChanges(newRecords, state.diffData.existingRecords);
         
         state.diffData.added = diff.added;
         state.diffData.modified = diff.modified;
         state.diffData.deleted = diff.deleted;
         state.diffData.unchanged = diff.unchanged;
+        
+        // === ШАГ 4: Выполняем анализ папок ===
+        const folderDiff = analyzeFolderChanges(newRecords, state.diffData.existingFolders);
+        state.diffData.folderChanges = folderDiff;
+        
+        console.log(`📊 Анализ папок: +${folderDiff.added.length} новых, ~${folderDiff.modified.length} изменённых, -${folderDiff.deleted.length} удалённых`);
         
         // Обновляем UI
         updateDiffUI();
@@ -1813,17 +2806,26 @@ async function performDiffAnalysis() {
  * Обновление UI diff-шага на основе результатов анализа.
  */
 function updateDiffUI() {
-    const { added, modified, deleted, unchanged } = state.diffData;
+    const { added, modified, deleted, unchanged, folderChanges } = state.diffData;
     
-    // Обновляем счётчики
+    // === СЧЁТЧИКИ МАТЕРИАЛОВ ===
     els.diffAddedCount.textContent = added.length;
     els.diffModifiedCount.textContent = modified.length;
     els.diffDeletedCount.textContent = deleted.length;
     
-    // Обновляем badges в табах
+    // Обновляем badges в табах материалов
     els.diffAddedBadge.textContent = added.length;
     els.diffModifiedBadge.textContent = modified.length;
     els.diffDeletedBadge.textContent = deleted.length;
+    
+    // === СЧЁТЧИКИ ПАПОК ===
+    const totalFolderChanges = folderChanges.added.length + folderChanges.modified.length + folderChanges.deleted.length;
+    if (els.diffFoldersCount) {
+        els.diffFoldersCount.textContent = totalFolderChanges;
+    }
+    if (els.diffFoldersBadge) {
+        els.diffFoldersBadge.textContent = totalFolderChanges;
+    }
     
     // Показываем/скрываем предупреждение об удалениях
     if (deleted.length > 0) {
@@ -1832,13 +2834,15 @@ function updateDiffUI() {
         els.diffDeleteWarning.classList.add('hidden');
     }
     
-    // Показываем первый таб с данными
+    // Показываем первый таб с данными (приоритет: added > modified > deleted > folders)
     if (added.length > 0) {
         state.diffActiveTab = 'added';
     } else if (modified.length > 0) {
         state.diffActiveTab = 'modified';
     } else if (deleted.length > 0) {
         state.diffActiveTab = 'deleted';
+    } else if (totalFolderChanges > 0) {
+        state.diffActiveTab = 'folders';
     } else {
         state.diffActiveTab = 'added';
     }
@@ -1878,7 +2882,15 @@ function updateDiffTabUI() {
  * Рендеринг таблицы diff для активного таба.
  */
 function renderDiffTable() {
-    const { added, modified, deleted } = state.diffData;
+    const { added, modified, deleted, folderChanges } = state.diffData;
+    
+    // === ВКЛАДКА ПАПКИ ===
+    if (state.diffActiveTab === 'folders') {
+        renderFoldersDiffTable();
+        return;
+    }
+    
+    // === ВКЛАДКИ МАТЕРИАЛОВ ===
     let data = [];
     
     switch (state.diffActiveTab) {
@@ -1939,6 +2951,137 @@ function renderDiffTable() {
             </tr>
         `;
     }
+}
+
+/**
+ * Рендеринг таблицы папок в diff.
+ * 
+ * Понятная структура с чёткими колонками:
+ * - Название папки (крупно) + путь (мелко)
+ * - Статус: что изменилось
+ * - Материалов: было → стало
+ */
+function renderFoldersDiffTable() {
+    const { folderChanges } = state.diffData;
+    const { added, modified, deleted } = folderChanges;
+    
+    const totalChanges = added.length + modified.length + deleted.length;
+    
+    if (totalChanges === 0) {
+        els.diffTableBody.innerHTML = '';
+        els.diffEmpty.classList.remove('hidden');
+        return;
+    }
+    
+    els.diffEmpty.classList.add('hidden');
+    
+    let html = '';
+    
+    // === ДОБАВЛЕННЫЕ ПАПКИ (зелёный) ===
+    if (added.length > 0) {
+        html += `
+            <tr class="folder-section-header">
+                <td colspan="3" style="background: var(--adm-success-bg); color: var(--adm-success); font-weight: 600; padding: 10px 15px;">
+                    <i class="fas fa-plus-circle"></i> Новые папки — ${added.length} шт.
+                </td>
+            </tr>
+            <tr class="folder-table-subheader">
+                <th style="width: 40%;">Название папки</th>
+                <th style="width: 40%;">Статус</th>
+                <th style="width: 20%;">Материалов</th>
+            </tr>
+        `;
+        added.slice(0, 50).forEach(folder => {
+            html += `
+                <tr class="folder-added">
+                    <td>
+                        <div class="folder-name-cell">
+                            <span class="folder-leaf-name">${escapeHtml(folder.leaf_name)}</span>
+                            <span class="folder-full-path"><i class="fas fa-folder-open"></i> ${escapeHtml(folder.full_path)}</span>
+                        </div>
+                    </td>
+                    <td><span class="status-badge status-new">Новая папка</span></td>
+                    <td class="folder-count-cell">${folder.items_count}</td>
+                </tr>
+            `;
+        });
+        if (added.length > 50) {
+            html += `<tr><td colspan="3" class="folder-more-row">... и ещё ${added.length - 50} папок</td></tr>`;
+        }
+    }
+    
+    // === ПЕРЕИМЕНОВАННЫЕ ПАПКИ (жёлтый) - изменилось название папки ===
+    if (modified.length > 0) {
+        html += `
+            <tr class="folder-section-header">
+                <td colspan="3" style="background: #fef3c7; color: #d97706; font-weight: 600; padding: 10px 15px;">
+                    <i class="fas fa-pen"></i> Переименованные папки — ${modified.length} шт.
+                </td>
+            </tr>
+            <tr class="folder-table-subheader">
+                <th style="width: 40%;">Новое название</th>
+                <th style="width: 40%;">Было</th>
+                <th style="width: 20%;">Материалов</th>
+            </tr>
+        `;
+        modified.slice(0, 50).forEach(folder => {
+            html += `
+                <tr class="folder-modified">
+                    <td>
+                        <div class="folder-name-cell">
+                            <span class="folder-leaf-name">${escapeHtml(folder.leaf_name)}</span>
+                            <span class="folder-full-path"><i class="fas fa-folder-open"></i> ${escapeHtml(folder.full_path)}</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="folder-name-cell">
+                            <span class="folder-leaf-name" style="text-decoration: line-through; opacity: 0.7;">${escapeHtml(folder.old_leaf_name || '')}</span>
+                            <span class="folder-full-path" style="opacity: 0.5;"><i class="fas fa-folder-open"></i> ${escapeHtml(folder.old_path || '')}</span>
+                        </div>
+                    </td>
+                    <td class="folder-count-cell">${folder.items_count}</td>
+                </tr>
+            `;
+        });
+        if (modified.length > 50) {
+            html += `<tr><td colspan="3" class="folder-more-row">... и ещё ${modified.length - 50} папок</td></tr>`;
+        }
+    }
+    
+    // === УДАЛЁННЫЕ ПАПКИ (красный) - осиротевшие, без материалов ===
+    if (deleted.length > 0) {
+        html += `
+            <tr class="folder-section-header">
+                <td colspan="3" style="background: var(--adm-danger-bg); color: var(--adm-danger); font-weight: 600; padding: 10px 15px;">
+                    <i class="fas fa-trash-alt"></i> Удаляемые папки — ${deleted.length} шт. (нет материалов)
+                </td>
+            </tr>
+            <tr class="folder-table-subheader">
+                <th style="width: 40%;">Название папки</th>
+                <th style="width: 40%;">Причина</th>
+                <th style="width: 20%;">Было мат.</th>
+            </tr>
+        `;
+        deleted.slice(0, 50).forEach(folder => {
+            html += `
+                <tr class="folder-deleted">
+                    <td>
+                        <div class="folder-name-cell">
+                            <span class="folder-leaf-name">${escapeHtml(folder.leaf_name)}</span>
+                            <span class="folder-full-path"><i class="fas fa-folder-open"></i> ${escapeHtml(folder.full_path)}</span>
+                        </div>
+                    </td>
+                    <td><span class="status-badge status-deleted">Папка осиротела — нет материалов</span></td>
+                    <td class="folder-count-cell"><span class="count-old">${folder.items_count}</span></td>
+                </tr>
+            `;
+        });
+        if (deleted.length > 50) {
+            html += `<tr><td colspan="3" class="folder-more-row">... и ещё ${deleted.length - 50} папок</td></tr>`;
+        }
+    }
+    
+    els.diffTableBody.innerHTML = html;
 }
 
 /**
@@ -2010,10 +3153,21 @@ async function performFullUpload() {
 /**
  * Применение точечных изменений (diff-режим).
  * Использует /admin/import для корректной генерации path_level_N (иерархии каталога).
+ * 
+ * ВАЖНО: Учитывает изменения как материалов, так и папок.
+ * Папки обновляются автоматически при импорте материалов.
  */
 async function applyDiffChanges() {
-    const { added, modified, deleted } = state.diffData;
-    const totalChanges = added.length + modified.length + deleted.length;
+    const { added, modified, deleted, folderChanges } = state.diffData;
+    
+    // Подсчёт изменений материалов
+    const materialChanges = added.length + modified.length + deleted.length;
+    
+    // Подсчёт изменений папок
+    const folderChangesCount = folderChanges.added.length + folderChanges.modified.length + folderChanges.deleted.length;
+    
+    // Общее количество изменений
+    const totalChanges = materialChanges + folderChangesCount;
     
     if (totalChanges === 0) {
         alert('Нет изменений для применения.\n\nБаза данных уже актуальна!');
@@ -2021,19 +3175,31 @@ async function applyDiffChanges() {
         return;
     }
     
-    // Подтверждение удалений
-    if (deleted.length > 0) {
-        const confirmDelete = confirm(
-            `⚠️ ВНИМАНИЕ!\n\n` +
-            `Будет удалено ${deleted.length} записей из базы.\n\n` +
-            `Добавлено: ${added.length}\n` +
-            `Изменено: ${modified.length}\n` +
-            `Удалено: ${deleted.length}\n\n` +
-            `Продолжить?`
-        );
-        
-        if (!confirmDelete) return;
+    // Формируем сообщение подтверждения
+    let confirmMsg = '📋 Будут применены следующие изменения:\n\n';
+    
+    if (materialChanges > 0) {
+        confirmMsg += `МАТЕРИАЛЫ:\n`;
+        confirmMsg += `  + Добавлено: ${added.length}\n`;
+        confirmMsg += `  ~ Изменено: ${modified.length}\n`;
+        confirmMsg += `  - Удалено: ${deleted.length}\n\n`;
     }
+    
+    if (folderChangesCount > 0) {
+        confirmMsg += `ПАПКИ (автоматически):\n`;
+        confirmMsg += `  + Новых: ${folderChanges.added.length}\n`;
+        confirmMsg += `  ~ Изменённых: ${folderChanges.modified.length}\n`;
+        confirmMsg += `  - Удаляемых: ${folderChanges.deleted.length}\n\n`;
+    }
+    
+    // Предупреждение об удалениях
+    if (deleted.length > 0 || folderChanges.deleted.length > 0) {
+        confirmMsg += `⚠️ ВНИМАНИЕ: Некоторые записи будут удалены!\n\n`;
+    }
+    
+    confirmMsg += `Продолжить?`;
+    
+    if (!confirm(confirmMsg)) return;
     
     showImportStep('progress');
     els.importProgress.style.width = '0%';
@@ -2094,7 +3260,44 @@ async function applyDiffChanges() {
             }))
         ];
         
-        if (recordsToUpsert.length > 0) {
+        // Если есть только изменения папок (нет изменений материалов),
+        // нужно запустить полный импорт всех материалов из CSV для пересоздания папок
+        const folderOnlyChanges = recordsToUpsert.length === 0 && 
+            (folderChanges.added.length > 0 || folderChanges.modified.length > 0 || folderChanges.deleted.length > 0);
+        
+        if (folderOnlyChanges) {
+            els.importStatusText.innerText = `Обновление папок: загрузка всех материалов...`;
+            
+            // Загружаем ВСЕ материалы из текущего маппинга для пересоздания папок
+            const allRecords = buildRecordsFromMapping();
+            
+            const payload = {
+                collection_name: state.activeCollection,
+                records: allRecords.map(r => ({
+                    code: r.code,
+                    description: r.description,
+                    hierarchy: hierarchyCols.length > 0 ? r.hierarchy : undefined,
+                    meta: r.meta
+                })),
+                recreate: false
+            };
+            
+            const res = await authFetch('/admin/import', {
+                method: 'POST',
+                body: JSON.stringify(payload)
+            });
+            
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.detail || 'Ошибка импорта записей');
+            }
+            
+            const json = await res.json();
+            
+            els.importStatusText.innerText = 'Пересоздание папок каталога...';
+            await pollJobUntilComplete(json.job_id, 20, 95);
+            
+        } else if (recordsToUpsert.length > 0) {
             els.importStatusText.innerText = `Загрузка ${recordsToUpsert.length} записей через импорт...`;
             
             // Используем /admin/import для корректной генерации path_level_N
@@ -2137,13 +3340,25 @@ async function applyDiffChanges() {
         els.importStatusText.innerText = 'Завершено!';
         
         setTimeout(() => {
-            alert(
-                `✅ Изменения применены!\n\n` +
-                `Добавлено: ${added.length}\n` +
-                `Обновлено: ${modified.length}\n` +
-                `Удалено: ${deleted.length}\n\n` +
-                `Поля path_level_N сгенерированы для иерархического каталога.`
-            );
+            let msg = `✅ Изменения применены!\n\n`;
+            
+            if (materialChanges > 0) {
+                msg += `МАТЕРИАЛЫ:\n`;
+                msg += `  Добавлено: ${added.length}\n`;
+                msg += `  Обновлено: ${modified.length}\n`;
+                msg += `  Удалено: ${deleted.length}\n\n`;
+            }
+            
+            if (folderChangesCount > 0) {
+                msg += `ПАПКИ (автоматически):\n`;
+                msg += `  Новых: ${folderChanges.added.length}\n`;
+                msg += `  Обновлено: ${folderChanges.modified.length}\n`;
+                msg += `  Удалено: ${folderChanges.deleted.length}\n\n`;
+            }
+            
+            msg += `Поля path_level_N сгенерированы для иерархического каталога.`;
+            
+            alert(msg);
             closeModal('import');
             loadCollections();
         }, 500);

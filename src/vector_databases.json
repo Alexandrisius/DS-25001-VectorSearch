@@ -13,8 +13,8 @@
     "visible": true,
     "locked": true
   },
-  "ksr_4": {
-    "description": "Тестовая",
+  "ksr_6": {
+    "description": "Тест Климович",
     "columns": {
       "code": "code",
       "description": "description"
@@ -23,8 +23,8 @@
       "cosine": 0.45,
       "rerank": 0.6
     },
-    "last_updated": "03.12.2025",
-    "visible": true,
+    "last_updated": "04.12.2025",
+    "visible": false,
     "locked": false
   }
 }

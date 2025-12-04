@@ -436,16 +436,19 @@ th {
     border-right: none;
 }
 
-/* Колонки иерархии (уровни категорий) - ИСПРАВЛЕНО: убрана прозрачность */
+/* Колонки иерархии (уровни категорий) - МНОГОСТРОЧНЫЙ РЕЖИМ */
 .data-table-full .col-hierarchy {
-    /* Теперь используется сплошной фон как у остальных ячеек */
+    /* Сплошной фон как у остальных ячеек */
     background: var(--adm-surface);
     font-size: 0.85rem;
     color: var(--adm-text);
     min-width: 100px;
-    max-width: 200px;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    max-width: 250px;
+    /* Многострочный режим вместо обрезки */
+    white-space: normal !important;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    line-height: 1.4;
     cursor: pointer;
     transition: background-color 0.2s;
 }
@@ -473,16 +476,31 @@ th {
     background: rgba(99, 102, 241, 0.08);
 }
 
-/* Колонка кода */
+/* Колонка кода - ВЫРАВНИВАНИЕ ПО ЦЕНТРУ */
 .data-table-full .col-code {
     font-family: monospace;
     font-weight: 600;
     color: var(--adm-primary);
     cursor: pointer;
+    text-align: center;
 }
 
 .data-table-full .col-code:hover {
     background: rgba(99, 102, 241, 0.08);
+}
+
+/* Заголовок колонки Код - по центру */
+.data-table-full th[data-sort="code"] {
+    text-align: center;
+}
+
+/* Колонка Действия - по центру */
+.data-table-full .col-actions {
+    text-align: center;
+}
+
+.data-table-full th.col-actions-header {
+    text-align: center;
 }
 
 th.sortable {
@@ -1155,6 +1173,12 @@ tr:hover td {
     color: var(--adm-danger);
 }
 
+/* Статистика папок */
+.diff-stat.folders {
+    background: rgba(99, 102, 241, 0.1);
+    color: var(--adm-primary);
+}
+
 .diff-stat .count {
     font-size: 1.25rem;
     font-weight: 700;
@@ -1329,6 +1353,207 @@ tr:hover td {
     font-size: 1.2rem;
 }
 
+/* === СТИЛИ ДЛЯ ПАПОК В DIFF === */
+
+/* Строка папки - добавленная (зелёный) */
+.diff-table tr.folder-added {
+    background: rgba(16, 185, 129, 0.08);
+}
+
+.diff-table tr.folder-added td:first-child::before {
+    content: "+";
+    display: inline-block;
+    width: 18px;
+    height: 18px;
+    line-height: 18px;
+    text-align: center;
+    background: var(--adm-success);
+    color: white;
+    border-radius: 50%;
+    font-weight: bold;
+    font-size: 0.75rem;
+    margin-right: 8px;
+}
+
+/* Строка папки - изменённая (жёлтый) */
+.diff-table tr.folder-modified {
+    background: rgba(217, 119, 6, 0.08);
+}
+
+.diff-table tr.folder-modified td:first-child::before {
+    content: "~";
+    display: inline-block;
+    width: 18px;
+    height: 18px;
+    line-height: 18px;
+    text-align: center;
+    background: #d97706;
+    color: white;
+    border-radius: 50%;
+    font-weight: bold;
+    font-size: 0.75rem;
+    margin-right: 8px;
+}
+
+/* Строка папки - удалённая (красный) */
+.diff-table tr.folder-deleted {
+    background: rgba(239, 68, 68, 0.08);
+}
+
+.diff-table tr.folder-deleted td:first-child::before {
+    content: "−";
+    display: inline-block;
+    width: 18px;
+    height: 18px;
+    line-height: 18px;
+    text-align: center;
+    background: var(--adm-danger);
+    color: white;
+    border-radius: 50%;
+    font-weight: bold;
+    font-size: 0.75rem;
+    margin-right: 8px;
+}
+
+/* Иконка папки в таблице */
+.folder-icon {
+    color: var(--adm-primary);
+    margin-right: 6px;
+}
+
+/* === НОВЫЕ СТИЛИ ТАБЛИЦЫ ПАПОК === */
+
+/* Подзаголовок таблицы папок */
+.folder-table-subheader th {
+    background: var(--adm-bg);
+    padding: 8px 12px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--adm-text-sec);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--adm-border);
+}
+
+/* Ячейка с названием папки */
+.folder-name-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+/* Название папки (leaf_name) - крупно */
+.folder-leaf-name {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--adm-text);
+}
+
+/* Полный путь папки - мелко, серым */
+.folder-full-path {
+    font-size: 0.75rem;
+    color: var(--adm-text-sec);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.folder-full-path i {
+    font-size: 0.65rem;
+    opacity: 0.7;
+}
+
+/* Ячейка со счётчиком материалов */
+.folder-count-cell {
+    text-align: center;
+    font-weight: 600;
+    font-size: 0.95rem;
+}
+
+/* Стрелка между было/стало */
+.count-arrow {
+    color: var(--adm-text-sec);
+    font-size: 0.7rem;
+    margin: 0 6px;
+}
+
+/* Старое значение */
+.count-old {
+    color: var(--adm-danger);
+    text-decoration: line-through;
+    opacity: 0.8;
+}
+
+/* Новое значение */
+.count-new {
+    color: var(--adm-success);
+    font-weight: 700;
+}
+
+/* Увеличение/уменьшение */
+.count-up {
+    color: var(--adm-success);
+}
+
+.count-down {
+    color: var(--adm-danger);
+}
+
+/* Статус-бейджи */
+.status-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+.status-badge.status-new {
+    background: var(--adm-success-bg);
+    color: var(--adm-success);
+}
+
+.status-badge.status-modified {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.status-badge.status-deleted {
+    background: var(--adm-danger-bg);
+    color: var(--adm-danger);
+}
+
+/* Строка "и ещё N папок" */
+.folder-more-row {
+    text-align: center;
+    color: var(--adm-text-sec);
+    font-style: italic;
+    padding: 12px !important;
+}
+
+/* Убираем старые ::before иконки для строк папок */
+.diff-table tr.folder-added td:first-child::before,
+.diff-table tr.folder-modified td:first-child::before,
+.diff-table tr.folder-deleted td:first-child::before {
+    display: none;
+}
+
+/* Обновлённые стили строк папок */
+.diff-table tr.folder-added td {
+    padding: 10px 12px;
+    vertical-align: middle;
+}
+
+.diff-table tr.folder-modified td {
+    padding: 10px 12px;
+    vertical-align: middle;
+}
+
+.diff-table tr.folder-deleted td {
+    padding: 10px 12px;
+    vertical-align: middle;
+}
+
 /* === SUCCESS BUTTON (Зеленая кнопка) === */
 .btn-success {
     background-color: var(--adm-success);
@@ -1427,4 +1652,721 @@ tr:hover td {
     width: 100%;
     margin-top: 10px;
     justify-content: center;
+}
+
+/* === COLUMN RESIZER (Изменение ширины колонок) === */
+/* Заголовки таблицы с возможностью изменения ширины */
+.data-table-full th {
+    position: relative;
+}
+
+/* Контейнер для названия колонки (для отделения от resizer) */
+.th-content {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding-right: 12px; /* Отступ для resizer */
+}
+
+/* Триггер сортировки - кликабельная область */
+.sort-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    padding: 4px 8px;
+    margin: -4px -8px;
+    border-radius: 6px;
+    transition: background-color 0.2s, color 0.2s;
+    user-select: none;
+}
+
+.sort-trigger:hover {
+    background: rgba(99, 102, 241, 0.1);
+    color: var(--adm-primary);
+}
+
+.sort-trigger:active {
+    background: rgba(99, 102, 241, 0.2);
+}
+
+/* Ручка для изменения ширины колонки - СОВРЕМЕННЫЙ СТИЛЬ */
+.th-resizer {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 12px; /* Увеличенная область для удобства */
+    height: 100%;
+    cursor: col-resize;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Визуальная ручка resize - 3 точки */
+.th-resizer::before {
+    content: '';
+    width: 4px;
+    height: 24px;
+    border-radius: 2px;
+    background: linear-gradient(
+        to bottom,
+        var(--adm-border) 0%,
+        var(--adm-border) 20%,
+        transparent 20%,
+        transparent 40%,
+        var(--adm-border) 40%,
+        var(--adm-border) 60%,
+        transparent 60%,
+        transparent 80%,
+        var(--adm-border) 80%,
+        var(--adm-border) 100%
+    );
+    opacity: 0;
+    transition: opacity 0.2s, background 0.2s;
+}
+
+/* Показываем ручку при наведении на заголовок */
+.data-table-full th:hover .th-resizer::before {
+    opacity: 1;
+}
+
+/* Активное состояние resize */
+.th-resizer:hover::before,
+.th-resizer.active::before {
+    opacity: 1;
+    background: linear-gradient(
+        to bottom,
+        var(--adm-primary) 0%,
+        var(--adm-primary) 20%,
+        transparent 20%,
+        transparent 40%,
+        var(--adm-primary) 40%,
+        var(--adm-primary) 60%,
+        transparent 60%,
+        transparent 80%,
+        var(--adm-primary) 80%,
+        var(--adm-primary) 100%
+    );
+}
+
+/* Линия-индикатор при перетаскивании */
+.resize-line {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: var(--adm-primary);
+    box-shadow: 0 0 8px var(--adm-primary);
+    z-index: 9999;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+
+.resize-line.visible {
+    opacity: 1;
+}
+
+/* Во время изменения размера отключаем выделение */
+body.resizing-columns {
+    cursor: col-resize !important;
+    user-select: none !important;
+}
+
+body.resizing-columns * {
+    cursor: col-resize !important;
+}
+
+/* Подсветка границы при resize */
+body.resizing-columns .data-table-full th {
+    transition: none;
+}
+
+/* === INFINITE SCROLL LOADING (Индикатор загрузки) === */
+.infinite-scroll-loader {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    gap: 10px;
+    color: var(--adm-text-sec);
+}
+
+.infinite-scroll-loader i {
+    font-size: 1.2rem;
+    animation: spin 1s linear infinite;
+}
+
+.infinite-scroll-loader.hidden {
+    display: none;
+}
+
+/* Sentinel элемент для IntersectionObserver */
+.scroll-sentinel {
+    height: 1px;
+    width: 100%;
+}
+
+/* === НОВЫЕ КОЛОНКИ: Дата, Версия, Статус === */
+
+/* Колонка даты */
+.data-table-full .col-date {
+    min-width: 130px;
+    font-size: 0.85rem;
+    color: var(--adm-text-sec);
+    white-space: nowrap;
+    text-align: center;
+}
+
+/* Колонка версии */
+.data-table-full .col-version {
+    min-width: 70px;
+    text-align: center;
+}
+
+.version-badge {
+    display: inline-block;
+    padding: 2px 10px;
+    background: var(--adm-bg);
+    border: 1px solid var(--adm-border);
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--adm-text-sec);
+}
+
+/* Колонка статуса */
+.data-table-full .col-status {
+    min-width: 130px;
+    text-align: center;
+}
+
+/* === КАСТОМНЫЙ DROPDOWN СТАТУСОВ === */
+
+/* Контейнер для кастомного dropdown */
+.status-dropdown {
+    position: relative;
+    display: inline-block;
+    min-width: 130px;
+}
+
+/* Триггер dropdown - отображает текущий статус */
+.status-dropdown-trigger {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    background: var(--adm-surface);
+    border: 1px solid var(--adm-border);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    user-select: none;
+}
+
+.status-dropdown-trigger:hover {
+    border-color: var(--adm-primary);
+    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.15);
+}
+
+.status-dropdown.open .status-dropdown-trigger {
+    border-color: var(--adm-primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+}
+
+/* Цветной индикатор статуса */
+.status-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.8);
+}
+
+/* Название статуса */
+.status-label {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--adm-text);
+    flex: 1;
+    white-space: nowrap;
+}
+
+/* Стрелка dropdown */
+.status-arrow {
+    font-size: 0.7rem;
+    color: var(--adm-text-sec);
+    transition: transform 0.2s;
+    margin-left: auto;
+}
+
+.status-dropdown.open .status-arrow {
+    transform: rotate(180deg);
+}
+
+/* Выпадающий список опций */
+.status-dropdown-options {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--adm-surface);
+    border: 1px solid var(--adm-primary);
+    border-top: none;
+    border-radius: 0 0 8px 8px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+    z-index: 100;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-8px);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    overflow: hidden;
+}
+
+.status-dropdown.open .status-dropdown-options {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+/* Опция в dropdown */
+.status-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: background-color 0.15s;
+}
+
+.status-option:hover {
+    background: rgba(99, 102, 241, 0.08);
+}
+
+.status-option.selected {
+    background: rgba(99, 102, 241, 0.12);
+}
+
+.status-option:last-child {
+    border-radius: 0 0 8px 8px;
+}
+
+.status-option .status-dot {
+    box-shadow: none;
+}
+
+.status-option .status-label {
+    font-weight: 400;
+}
+
+.status-option.selected .status-label {
+    font-weight: 600;
+    color: var(--adm-primary);
+}
+
+/* Галочка для выбранной опции */
+.status-check {
+    margin-left: auto;
+    color: var(--adm-primary);
+    font-size: 0.8rem;
+    opacity: 0;
+    transform: scale(0.5);
+    transition: all 0.2s;
+}
+
+.status-option.selected .status-check {
+    opacity: 1;
+    transform: scale(1);
+}
+
+/* Цветовые индикаторы статусов - старый стиль для совместимости */
+.status-indicator {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 6px;
+}
+
+/* Старый select скрыт, но доступен для формы */
+.status-select-hidden {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* === УПРАВЛЕНИЕ СТАТУСАМИ (Современный дизайн) === */
+
+/* Список статусов */
+.status-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 24px;
+}
+
+/* Карточка отдельного статуса */
+.status-item {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px 20px;
+    background: var(--adm-bg);
+    border: 1px solid var(--adm-border);
+    border-radius: 12px;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+}
+
+.status-item:hover {
+    border-color: var(--adm-primary);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.1);
+    transform: translateY(-1px);
+}
+
+/* Цветная полоса слева */
+.status-item::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    border-radius: 12px 0 0 12px;
+    background: var(--status-color, var(--adm-primary));
+}
+
+/* Превью цвета - большой круг */
+.status-color-preview {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: var(--status-color, var(--adm-primary));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    position: relative;
+    transition: transform 0.2s, box-shadow 0.2s;
+    flex-shrink: 0;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.status-color-preview:hover {
+    transform: scale(1.05);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.status-color-preview i {
+    color: white;
+    font-size: 1rem;
+    opacity: 0;
+    transition: opacity 0.2s;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.status-color-preview:hover i {
+    opacity: 1;
+}
+
+/* Скрытый input цвета */
+.status-item .status-color-picker {
+    position: absolute;
+    width: 44px;
+    height: 44px;
+    opacity: 0;
+    cursor: pointer;
+}
+
+/* Контент статуса */
+.status-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+
+/* ID статуса (badge) */
+.status-id-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    background: var(--adm-surface);
+    border: 1px solid var(--adm-border);
+    border-radius: 6px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 0.75rem;
+    color: var(--adm-text-sec);
+    width: fit-content;
+}
+
+.status-id-badge i {
+    font-size: 0.65rem;
+    opacity: 0.6;
+}
+
+/* Поле ввода названия */
+.status-item .status-label-input {
+    padding: 10px 14px;
+    border: 2px solid var(--adm-border);
+    border-radius: 10px;
+    background: var(--adm-surface);
+    color: var(--adm-text);
+    font-size: 0.95rem;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.status-item .status-label-input:focus {
+    border-color: var(--adm-primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+    outline: none;
+}
+
+/* Кнопка удаления */
+.status-item .btn-remove-status {
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 2px solid var(--adm-border);
+    color: var(--adm-text-sec);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+    flex-shrink: 0;
+}
+
+.status-item .btn-remove-status:hover {
+    border-color: var(--adm-danger);
+    background: var(--adm-danger-bg);
+    color: var(--adm-danger);
+    transform: scale(1.05);
+}
+
+/* === ФОРМА ДОБАВЛЕНИЯ НОВОГО СТАТУСА === */
+.add-status-section {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.05) 0%, rgba(99, 102, 241, 0.02) 100%);
+    border: 2px dashed var(--adm-border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 24px;
+    transition: all 0.2s;
+}
+
+.add-status-section:hover {
+    border-color: var(--adm-primary);
+}
+
+.add-status-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--adm-text);
+}
+
+.add-status-header i {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--adm-primary);
+    color: white;
+    border-radius: 8px;
+    font-size: 0.8rem;
+}
+
+.add-status-row {
+    display: grid;
+    grid-template-columns: 1fr 1.5fr 50px 44px;
+    gap: 12px;
+    align-items: center;
+}
+
+.add-status-row input[type="text"] {
+    padding: 12px 14px;
+    border: 2px solid var(--adm-border);
+    border-radius: 10px;
+    background: var(--adm-surface);
+    color: var(--adm-text);
+    font-size: 0.9rem;
+    transition: all 0.2s;
+}
+
+.add-status-row input[type="text"]:focus {
+    border-color: var(--adm-primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+    outline: none;
+}
+
+.add-status-row input[type="text"]::placeholder {
+    color: var(--adm-text-sec);
+}
+
+/* Picker цвета для нового статуса */
+.new-status-color-wrapper {
+    position: relative;
+    width: 50px;
+    height: 44px;
+}
+
+.new-status-color-preview {
+    width: 100%;
+    height: 100%;
+    border-radius: 10px;
+    cursor: pointer;
+    border: 2px solid var(--adm-border);
+    transition: all 0.2s;
+}
+
+.new-status-color-preview:hover {
+    border-color: var(--adm-primary);
+    transform: scale(1.05);
+}
+
+.new-status-color-wrapper input[type="color"] {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+}
+
+/* Кнопка добавления */
+#addStatusBtn {
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    font-size: 1.1rem;
+}
+
+/* === СЕКЦИЯ СТАТУСА ПО УМОЛЧАНИЮ === */
+.default-status-section {
+    background: var(--adm-bg);
+    border: 1px solid var(--adm-border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 24px;
+}
+
+.default-status-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+    font-weight: 600;
+    color: var(--adm-text);
+}
+
+.default-status-header i {
+    color: var(--adm-primary);
+}
+
+.default-status-description {
+    font-size: 0.85rem;
+    color: var(--adm-text-sec);
+    margin-bottom: 16px;
+    line-height: 1.5;
+}
+
+/* Улучшенный select для статуса по умолчанию */
+#defaultStatusSelect {
+    padding: 12px 16px;
+    border: 2px solid var(--adm-border);
+    border-radius: 10px;
+    font-size: 0.95rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+#defaultStatusSelect:hover {
+    border-color: var(--adm-primary);
+}
+
+#defaultStatusSelect:focus {
+    border-color: var(--adm-primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+    outline: none;
+}
+
+/* === КНОПКА СОХРАНЕНИЯ СТАТУСОВ === */
+.save-statuses-section {
+    display: flex;
+    justify-content: flex-end;
+    padding-top: 8px;
+    border-top: 1px solid var(--adm-border);
+    margin-top: 8px;
+}
+
+#saveStatusesBtn {
+    padding: 12px 24px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    border-radius: 10px;
+    transition: all 0.2s;
+}
+
+#saveStatusesBtn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+}
+
+/* === SETTINGS PAGE (Страница настроек) === */
+.settings-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+    gap: 25px;
+}
+
+.settings-card {
+    background: var(--adm-surface);
+    border: 1px solid var(--adm-border);
+    border-radius: var(--radius-lg);
+    padding: 25px;
+    box-shadow: var(--shadow-sm);
+}
+
+.settings-card-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 15px;
+}
+
+.settings-card-header i {
+    font-size: 1.3rem;
+    color: var(--adm-primary);
+}
+
+.settings-card-header h3 {
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin: 0;
+}
+
+.settings-card-desc {
+    color: var(--adm-text-sec);
+    font-size: 0.9rem;
+    margin-bottom: 20px;
+    line-height: 1.5;
 }

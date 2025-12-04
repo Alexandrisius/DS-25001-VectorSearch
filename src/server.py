@@ -188,6 +188,410 @@ def generate_path_levels_combined(hierarchy: str, description: str, separator: s
     
     return result
 
+
+def extract_folders_from_records(all_path_levels: list, separator: str = "→") -> list:
+    """
+    Извлекает уникальные папки (категории) из списка path_levels материалов.
+    
+    Для каждого уникального пути категории создаётся запись с:
+    - full_path: полный путь категории (для генерации эмбеддинга)
+    - leaf_name: название конечной папки (для rerank)
+    - level: уровень вложенности
+    - items_count: количество материалов в этой категории
+    
+    Пример:
+        Input: [
+            {"path_level_1": "Арматура", "path_level_2": "Краны", "path_depth": 2, ...},
+            {"path_level_1": "Арматура", "path_level_2": "Задвижки", "path_depth": 2, ...},
+            {"path_level_1": "Арматура", "path_level_2": "Краны", "path_depth": 2, ...},
+        ]
+        
+        Output: [
+            {"full_path": "Арматура", "leaf_name": "Арматура", "level": 1, "items_count": 3, 
+             "path_levels": {"path_level_1": "Арматура"}},
+            {"full_path": "Арматура → Краны", "leaf_name": "Краны", "level": 2, "items_count": 2,
+             "path_levels": {"path_level_1": "Арматура", "path_level_2": "Краны"}},
+            {"full_path": "Арматура → Задвижки", "leaf_name": "Задвижки", "level": 2, "items_count": 1,
+             "path_levels": {"path_level_1": "Арматура", "path_level_2": "Задвижки"}},
+        ]
+    
+    Args:
+        all_path_levels (list): Список словарей path_levels из материалов.
+        separator (str): Разделитель для формирования full_path (по умолчанию "→").
+    
+    Returns:
+        list: Список уникальных папок с метаданными.
+    """
+    # Словарь для подсчёта уникальных путей категорий
+    # Ключ: tuple путей (для хеширования), Значение: {count, path_parts}
+    folder_counts = {}
+    
+    for path_data in all_path_levels:
+        path_depth = path_data.get("path_depth", 0)
+        
+        # Пропускаем записи без категорий
+        if path_depth == 0:
+            continue
+        
+        # Собираем все уровни категорий
+        path_parts = []
+        for level in range(1, path_depth + 1):
+            level_key = f"path_level_{level}"
+            if level_key in path_data and path_data[level_key]:
+                path_parts.append(path_data[level_key])
+            else:
+                break  # Прерываем, если уровень отсутствует
+        
+        # Для каждого уровня вложенности создаём отдельную папку
+        # Например, для "Арматура → Краны → Шаровые" создаём:
+        # - "Арматура" (level 1)
+        # - "Арматура → Краны" (level 2)
+        # - "Арматура → Краны → Шаровые" (level 3)
+        # 
+        # ВАЖНО: items_count увеличиваем только для КОНЕЧНОЙ папки материала!
+        # Родительские папки не содержат материал напрямую.
+        total_levels = len(path_parts)
+        
+        for level in range(1, total_levels + 1):
+            current_parts = tuple(path_parts[:level])
+            
+            if current_parts not in folder_counts:
+                folder_counts[current_parts] = {
+                    "count": 0,
+                    "parts": list(current_parts)
+                }
+            
+            # Увеличиваем count ТОЛЬКО для конечной папки (последний уровень)
+            # Родительские папки не содержат материал напрямую
+            if level == total_levels:
+                folder_counts[current_parts]["count"] += 1
+    
+    # Формируем результат
+    folders = []
+    for path_tuple, data in folder_counts.items():
+        parts = data["parts"]
+        level = len(parts)
+        
+        # full_path - полный путь для эмбеддинга (с контекстом)
+        full_path = f" {separator} ".join(parts)
+        
+        # leaf_name - название конечной папки (для rerank)
+        leaf_name = parts[-1] if parts else ""
+        
+        # Формируем path_levels для записи в Qdrant
+        path_levels_dict = {}
+        for i, part in enumerate(parts):
+            path_levels_dict[f"path_level_{i + 1}"] = part
+        
+        folders.append({
+            "full_path": full_path,
+            "leaf_name": leaf_name,
+            "level": level,
+            "items_count": data["count"],
+            "path_levels": path_levels_dict
+        })
+    
+    # Сортируем по уровню и затем по имени
+    folders.sort(key=lambda x: (x["level"], x["full_path"]))
+    
+    logger.info(f"📁 Извлечено {len(folders)} уникальных папок из {len(all_path_levels)} материалов")
+    
+    return folders
+
+
+def build_full_path_from_payload(payload: dict, separator: str = " → ") -> str:
+    """
+    Восстанавливает полный путь папки из path_level_N полей в payload.
+    
+    Пример:
+        payload = {"path_level_1": "Приборы", "path_level_2": "Аннотации", "path_depth": 2}
+        → "Приборы → Аннотации"
+    
+    Args:
+        payload: Словарь с path_level_N и path_depth
+        separator: Разделитель уровней (по умолчанию " → ")
+    
+    Returns:
+        Полный путь или пустая строка
+    """
+    path_depth = payload.get("path_depth", 0)
+    if not path_depth:
+        return ""
+    
+    parts = []
+    for i in range(1, path_depth + 1):
+        part = payload.get(f"path_level_{i}", "")
+        if part:
+            parts.append(part)
+        else:
+            break  # Прерываем если уровень пустой
+    
+    return separator.join(parts)
+
+
+async def sync_folders_after_material_edit(
+    db_manager,
+    collection_name: str,
+    old_folder_ids: list,
+    new_folder_ids: list,
+    old_paths: list,
+    new_paths: list
+) -> dict:
+    """
+    Синхронизация записей папок после редактирования материала.
+    
+    УЛУЧШЕННАЯ ЛОГИКА:
+    1. Если leaf_name папки тот же, но путь изменился (родитель переименован) - ОБНОВЛЯЕМ папку
+    2. Если папка осиротела (нет материалов) - удаляем
+    3. Если действительно новая папка (новый leaf_name) - создаём
+    
+    Args:
+        db_manager: Менеджер базы данных
+        collection_name: Имя коллекции
+        old_folder_ids: Список ID папок ДО изменения
+        new_folder_ids: Список ID папок ПОСЛЕ изменения
+        old_paths: Список путей папок ДО изменения
+        new_paths: Список путей папок ПОСЛЕ изменения
+    
+    Returns:
+        Словарь с результатами {created: [], deleted: [], updated: []}
+    """
+    result = {"created": [], "deleted": [], "updated": []}
+    
+    if old_folder_ids == new_folder_ids and old_paths == new_paths:
+        return result  # Ничего не изменилось
+    
+    columns = db_manager.collections_metadata[collection_name]["columns"]
+    code_field = columns["code"]
+    
+    # Создаём маппинг: leaf_name -> (old_id, old_path) и (new_id, new_path)
+    old_leaves = {}  # {leaf_name: (id, full_path, index)}
+    new_leaves = {}  # {leaf_name: (id, full_path, index)}
+    
+    for i, (fid, path) in enumerate(zip(old_folder_ids or [], old_paths or [])):
+        leaf = path.split(" → ")[-1] if path else ""
+        old_leaves[leaf] = (fid, path, i)
+    
+    for i, (fid, path) in enumerate(zip(new_folder_ids or [], new_paths or [])):
+        leaf = path.split(" → ")[-1] if path else ""
+        new_leaves[leaf] = (fid, path, i)
+    
+    # === ОПРЕДЕЛЯЕМ ТИПЫ ИЗМЕНЕНИЙ ПО LEAF_NAME ===
+    old_leaf_names = set(old_leaves.keys())
+    new_leaf_names = set(new_leaves.keys())
+    
+    # Папки с тем же leaf_name - нужно ОБНОВИТЬ (путь изменился из-за родителя)
+    leaves_to_update = old_leaf_names & new_leaf_names
+    # Новые leaf_name - создать
+    leaves_to_create = new_leaf_names - old_leaf_names
+    # Удалённые leaf_name - проверить на осиротевшие
+    leaves_to_delete = old_leaf_names - new_leaf_names
+    
+    # === 1. ОБНОВЛЯЕМ ПАПКИ, ГДЕ ИЗМЕНИЛСЯ ПУТЬ (родитель переименован) ===
+    for leaf in leaves_to_update:
+        old_id, old_path, _ = old_leaves[leaf]
+        new_id, new_path, _ = new_leaves[leaf]
+        
+        if old_id == new_id:
+            continue  # Путь не изменился
+        
+        # Путь изменился - нужно переместить папку
+        # Получаем старую папку
+        old_folder = db_manager.client.retrieve(
+            collection_name=collection_name,
+            ids=[old_id],
+            with_payload=True,
+            with_vectors=False
+        )
+        
+        if old_folder:
+            old_payload = dict(old_folder[0].payload)
+            new_parts = new_path.split(" → ")
+            new_folder_code = f"folder::{new_path.replace(' → ', '::')}"
+            
+            # Генерируем новый эмбеддинг для нового пути
+            async with db_manager.gpu_lock:
+                emb = await db_manager.get_embedding_cached(new_path)
+                vector = emb.tolist() if isinstance(emb, np.ndarray) else emb
+            
+            # Формируем новый path_levels
+            path_levels = {}
+            for i, part in enumerate(new_parts):
+                path_levels[f"path_level_{i + 1}"] = part
+            
+            # Обновляем payload
+            new_payload = {
+                **old_payload,
+                code_field: new_folder_code,
+                columns["description"]: new_path,
+                "full_path": new_path,
+                "timestamp": time.time(),
+                "source": "material_edit_path_update",
+                **path_levels
+            }
+            
+            # Удаляем старую папку
+            db_manager.client.delete(
+                collection_name=collection_name,
+                points_selector=[old_id]
+            )
+            
+            # Создаём с новым ID и обновлённым путём
+            db_manager.client.upsert(
+                collection_name=collection_name,
+                points=[
+                    PointStruct(
+                        id=new_id,
+                        vector=vector,
+                        payload=new_payload
+                    )
+                ]
+            )
+            result["updated"].append({"old_path": old_path, "new_path": new_path, "leaf_name": leaf})
+            logger.info(f"📁 Обновлён путь папки '{leaf}': {old_path} → {new_path}")
+    
+    # === 2. ПРОВЕРЯЕМ И УДАЛЯЕМ ОСИРОТЕВШИЕ ПАПКИ ===
+    for leaf in leaves_to_delete:
+        old_id, old_path, _ = old_leaves[leaf]
+        old_parts = old_path.split(" → ")
+        
+        # Подсчитываем материалы с этим путём
+        filter_conditions = []
+        for i, part in enumerate(old_parts):
+            filter_conditions.append(
+                FieldCondition(
+                    key=f"path_level_{i + 1}",
+                    match=MatchValue(value=part)
+                )
+            )
+        
+        try:
+            count_result = db_manager.client.count(
+                collection_name=collection_name,
+                count_filter=Filter(
+                    must=filter_conditions,
+                    must_not=[
+                        FieldCondition(
+                            key="is_folder",
+                            match=MatchValue(value=True)
+                        )
+                    ]
+                )
+            )
+            materials_count = count_result.count
+        except Exception as e:
+            logger.warning(f"⚠️ Не удалось подсчитать материалы для '{old_path}': {e}")
+            materials_count = 1
+        
+        if materials_count == 0:
+            # Папка осиротела - удаляем
+            try:
+                db_manager.client.delete(
+                    collection_name=collection_name,
+                    points_selector=[old_id]
+                )
+                result["deleted"].append(old_path)
+                logger.info(f"🗑️ Удалена осиротевшая папка: {old_path}")
+            except Exception as e:
+                logger.warning(f"⚠️ Не удалось удалить папку '{old_path}': {e}")
+    
+    # === 3. СОЗДАЁМ НОВЫЕ ПАПКИ (только действительно новые leaf_name) ===
+    for leaf in leaves_to_create:
+        new_id, new_path, _ = new_leaves[leaf]
+        new_parts = new_path.split(" → ")
+        
+        # Проверяем существование
+        existing = db_manager.client.retrieve(
+            collection_name=collection_name,
+            ids=[new_id],
+            with_payload=True,
+            with_vectors=False
+        )
+        
+        if not existing:
+            new_leaf_name = new_parts[-1] if new_parts else ""
+            folder_code = f"folder::{new_path.replace(' → ', '::')}"
+            
+            # Генерируем эмбеддинг
+            async with db_manager.gpu_lock:
+                emb = await db_manager.get_embedding_cached(new_path)
+                vector = emb.tolist() if isinstance(emb, np.ndarray) else emb
+            
+            path_levels = {}
+            for i, part in enumerate(new_parts):
+                path_levels[f"path_level_{i + 1}"] = part
+            
+            payload = {
+                code_field: folder_code,
+                columns["description"]: new_path,
+                "full_path": new_path,
+                "leaf_name": new_leaf_name,
+                "path_depth": len(new_parts),
+                "items_count": 1,
+                "is_folder": True,
+                "timestamp": time.time(),
+                "source": "material_edit_sync",
+                **path_levels
+            }
+            
+            db_manager.client.upsert(
+                collection_name=collection_name,
+                points=[
+                    PointStruct(
+                        id=new_id,
+                        vector=vector,
+                        payload=payload
+                    )
+                ]
+            )
+            result["created"].append(new_path)
+            logger.info(f"📁 Создана новая папка: {new_path}")
+    
+    return result
+
+
+# Старая функция для обратной совместимости
+async def sync_folder_after_material_edit(
+    db_manager,
+    collection_name: str,
+    old_path: str,
+    new_path: str
+) -> dict:
+    """
+    DEPRECATED: Используйте sync_folders_after_material_edit вместо этой функции.
+    Оставлена для обратной совместимости.
+    """
+    # Вычисляем folder_ids и paths для новой функции
+    old_folder_ids = []
+    old_paths = []
+    new_folder_ids = []
+    new_paths = []
+    
+    if old_path:
+        old_parts = old_path.split(" → ")
+        for i in range(1, len(old_parts) + 1):
+            path = " → ".join(old_parts[:i])
+            folder_code = f"folder::{path.replace(' → ', '::')}"
+            folder_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, folder_code))
+            old_folder_ids.append(folder_id)
+            old_paths.append(path)
+    
+    if new_path:
+        new_parts = new_path.split(" → ")
+        for i in range(1, len(new_parts) + 1):
+            path = " → ".join(new_parts[:i])
+            folder_code = f"folder::{path.replace(' → ', '::')}"
+            folder_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, folder_code))
+            new_folder_ids.append(folder_id)
+            new_paths.append(path)
+    
+    return await sync_folders_after_material_edit(
+        db_manager, collection_name, 
+        old_folder_ids, new_folder_ids,
+        old_paths, new_paths
+    )
+
+
 # === Импорт конфигурации ===
 # Все пути и настройки вынесены в отдельный файл config.py
 from config import (
@@ -1288,17 +1692,24 @@ class QdrantVectorDatabaseManager:
         """
         Сохранение текущей конфигурации в JSON файл.
         Вызывается после любых изменений в настройках или списке баз.
+        
+        Поддерживает секцию _settings для глобальных настроек (статусы и др.)
         """
         try:
             config = {}
             for name, meta in self.collections_metadata.items():
+                # Специальная обработка секции _settings
+                if name == "_settings":
+                    config["_settings"] = meta
+                    continue
+                    
                 config[name] = {
                     "description": meta.get("description", f"База {name}"),
                     "columns": meta.get("columns", {"code": "code", "description": "description"}),
                     "thresholds": meta.get("thresholds", {"cosine": 0.45, "rerank": 0.6}),
                     "last_updated": meta.get("last_updated", ""),
-                    "visible": meta.get("visible", True), # New field
-                    "locked": meta.get("locked", False)   # New field
+                    "visible": meta.get("visible", True),
+                    "locked": meta.get("locked", False)
                 }
             
             with open(self.config_path, "w", encoding="utf-8") as f:
@@ -1832,6 +2243,32 @@ class QdrantVectorDatabaseManager:
                 qdrant_filter = Filter(must=conditions)
                 logger.info(f"🔍 Фильтр иерархии: {' AND '.join([f'path_level_{i+1}={c.match.value}' for i, c in enumerate(conditions)])}")
 
+        # === ВАЖНО: Исключаем папки из поиска материалов ===
+        # Основной поиск /match предназначен ТОЛЬКО для материалов.
+        # Папки (is_folder=true) используются только в /hierarchy/{db}/search
+        exclude_folders_condition = FieldCondition(
+            key="is_folder",
+            match=MatchValue(value=True)
+        )
+        
+        if qdrant_filter is None:
+            # Фильтра не было - создаём новый только с исключением папок
+            qdrant_filter = Filter(must_not=[exclude_folders_condition])
+        else:
+            # Фильтр уже есть - добавляем must_not к существующему
+            existing_must = qdrant_filter.must or []
+            existing_must_not = qdrant_filter.must_not or []
+            existing_should = qdrant_filter.should or []
+            
+            # Добавляем исключение папок
+            existing_must_not.append(exclude_folders_condition)
+            
+            qdrant_filter = Filter(
+                must=existing_must if existing_must else None,
+                must_not=existing_must_not,
+                should=existing_should if existing_should else None
+            )
+
         def _search():
             # ИСПРАВЛЕНО: search заменен на query_points в новых версиях qdrant-client
             # ОПТИМИЗАЦИЯ: score_threshold передается в запрос для фильтрации на стороне Qdrant
@@ -2323,10 +2760,19 @@ class ColumnMapping(BaseModel):
 
 
 class UpdatePointRequest(BaseModel):
-    """Запрос на обновление одной ячейки"""
-    code: str
-    field: str # 'description' or 'code'
-    value: str
+    """
+    Запрос на обновление одной ячейки.
+    
+    Поддерживаемые поля:
+    - code: код записи
+    - description: полное описание (legacy)
+    - full_description: описание материала
+    - path_level_N: уровни категорий
+    - status: статус записи (active, draft, deprecated и др.)
+    """
+    code: str = None  # Теперь опциональный
+    field: str  # Имя поля для обновления
+    value: str  # Новое значение
 
 
 class CollectionConfig(BaseModel):
@@ -2523,6 +2969,10 @@ class BackgroundJobManager:
         1. Из description (по умолчанию) - если hierarchy не указан
         2. Из отдельного поля hierarchy - если указано в записях
         
+        НОВАЯ ЛОГИКА v3: Автоматическое создание записей для папок (категорий).
+        После импорта материалов извлекаются уникальные папки и индексируются
+        с флагом is_folder=true и полем leaf_name для rerank.
+        
         data: {
             "collection_name": str,
             "records": List[dict], # [{"code": "...", "description": "...", "hierarchy": "..." (опционально)}]
@@ -2554,6 +3004,10 @@ class BackgroundJobManager:
         BATCH_SIZE = 32
         processed = 0
         
+        # === НАКОПЛЕНИЕ path_levels ДЛЯ ИЗВЛЕЧЕНИЯ ПАПОК ===
+        # Собираем все path_levels для последующего извлечения уникальных папок
+        all_path_levels_for_folders = []
+        
         # Итерируемся батчами
         for i in range(0, total, BATCH_SIZE):
             batch = records[i : i + BATCH_SIZE]
@@ -2583,6 +3037,9 @@ class BackgroundJobManager:
                 # Используем context_description для эмбеддингов
                 context_texts.append(path_levels.get("context_description", desc))
             
+            # Накапливаем path_levels для извлечения папок
+            all_path_levels_for_folders.extend(batch_path_levels)
+            
             # === CRITICAL: GPU LOCK ===
             # Защищаем вызов тяжелой модели
             # Теперь эмбеддинги генерируются из context_description!
@@ -2606,12 +3063,43 @@ class BackgroundJobManager:
                 # - full_description (полное описание материала)
                 # - context_description (контекст для эмбеддингов)
                 
+                # === НОВОЕ: Вычисляем folder_ids для связи материал → папки ===
+                # Это позволяет при редактировании материала сразу знать связанные папки
+                folder_ids = []
+                path_depth = path_levels.get("path_depth", 0)
+                if path_depth > 0:
+                    # Собираем путь из path_level_N
+                    parts = []
+                    for lvl in range(1, path_depth + 1):
+                        part = path_levels.get(f"path_level_{lvl}", "")
+                        if part:
+                            parts.append(part)
+                            # Вычисляем ID папки для каждого уровня
+                            folder_full_path = " → ".join(parts)
+                            folder_code_str = f"folder::{folder_full_path.replace(' → ', '::')}"
+                            folder_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, folder_code_str))
+                            folder_ids.append(folder_id)
+                
+                # Получаем настройки статусов для default_status
+                settings = db_manager.collections_metadata.get("_settings", {})
+                default_status = settings.get("default_status", "active")
+                
+                # ISO timestamp для updated_at
+                from datetime import datetime
+                iso_timestamp = datetime.utcnow().isoformat() + "Z"
+                
                 payload = {
                     columns["code"]: code,
                     columns["description"]: desc,  # Legacy: сохраняем исходное описание
                     **path_levels,  # path_level_N, path_depth, full_description, context_description
+                    "folder_ids": folder_ids,  # Массив ID всех папок в иерархии
                     "timestamp": timestamp,
                     "source": "import_job",
+                    "is_folder": False,  # Материал, не папка
+                    # === НОВЫЕ ПОЛЯ v3: версионирование и статусы ===
+                    "updated_at": iso_timestamp,  # Дата создания/обновления
+                    "version": 1,                 # Начальная версия
+                    "status": default_status,     # Статус по умолчанию
                     **meta
                 }
                 
@@ -2628,7 +3116,8 @@ class BackgroundJobManager:
             )
             
             processed += len(batch)
-            job.progress = int((processed / total) * 100)
+            # Прогресс материалов: 0-80%
+            job.progress = int((processed / total) * 80)
             
             # Обновляем счетчик
             if collection_name in db_manager.collections_metadata:
@@ -2636,6 +3125,140 @@ class BackgroundJobManager:
             
             # Даем передышку event loop
             await asyncio.sleep(0.01)
+        
+        # === ЭТАП 2: ИНДЕКСАЦИЯ ПАПОК (КАТЕГОРИЙ) ===
+        # Извлекаем уникальные папки из накопленных path_levels
+        logger.info(f"📁 Начинаем извлечение и индексацию папок для коллекции '{collection_name}'...")
+        job.details = "Извлечение папок из иерархии..."
+        
+        folders = extract_folders_from_records(all_path_levels_for_folders, separator="→")
+        
+        if folders:
+            logger.info(f"📁 Найдено {len(folders)} уникальных папок для индексации")
+            job.details = f"Индексация {len(folders)} папок..."
+            
+            # Генерируем эмбеддинги для папок батчами
+            FOLDER_BATCH_SIZE = 32
+            folder_points = []
+            timestamp = time.time()
+            columns = db_manager.collections_metadata.get(collection_name, {}).get("columns", {"code": "code", "description": "description"})
+            
+            for i in range(0, len(folders), FOLDER_BATCH_SIZE):
+                folder_batch = folders[i : i + FOLDER_BATCH_SIZE]
+                
+                # Тексты для генерации эмбеддингов - full_path папок
+                folder_texts = [f["full_path"] for f in folder_batch]
+                
+                # Генерация эмбеддингов для папок
+                async with db_manager.gpu_lock:
+                    folder_embeddings = await asyncio.get_event_loop().run_in_executor(
+                        db_manager.executor,
+                        lambda texts=folder_texts: db_manager.get_embeddings_batch(texts, batch_size=FOLDER_BATCH_SIZE)
+                    )
+                
+                # Формирование точек для папок
+                for folder, emb in zip(folder_batch, folder_embeddings):
+                    # Уникальный ID папки: folder::{full_path}
+                    folder_code = f"folder::{folder['full_path'].replace(' → ', '::')}"
+                    folder_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, folder_code))
+                    
+                    # Payload папки с ключевыми полями для поиска
+                    payload = {
+                        columns["code"]: folder_code,
+                        columns["description"]: folder["full_path"],  # full_path для совместимости
+                        "full_path": folder["full_path"],              # Полный путь (контекст)
+                        "leaf_name": folder["leaf_name"],              # Название папки (для rerank!)
+                        "path_depth": folder["level"],                 # Уровень вложенности
+                        "items_count": folder["items_count"],          # Количество материалов
+                        "is_folder": True,                             # Флаг папки
+                        "timestamp": timestamp,
+                        "source": "import_job_folders",
+                        **folder["path_levels"]  # path_level_1, path_level_2, ...
+                    }
+                    
+                    folder_points.append(PointStruct(
+                        id=folder_id,
+                        vector=emb.tolist(),
+                        payload=payload
+                    ))
+                
+                # Прогресс папок: 80-95%
+                folder_progress = 80 + int((min(i + FOLDER_BATCH_SIZE, len(folders)) / len(folders)) * 15)
+                job.progress = folder_progress
+                
+                await asyncio.sleep(0.01)
+            
+            # Запись папок в Qdrant
+            if folder_points:
+                db_manager.client.upsert(
+                    collection_name=collection_name,
+                    points=folder_points
+                )
+                logger.info(f"✅ Индексировано {len(folder_points)} папок в коллекцию '{collection_name}'")
+            
+            # === УДАЛЕНИЕ ОСИРОТЕВШИХ ПАПОК ===
+            # Папки, которые были в базе, но больше не нужны (нет материалов с таким путём)
+            job.details = "Удаление осиротевших папок..."
+            
+            # Получаем все текущие пути папок из базы
+            existing_folder_paths = set()
+            scroll_offset = None
+            
+            folder_filter = Filter(
+                must=[
+                    FieldCondition(
+                        key="is_folder",
+                        match=MatchValue(value=True)
+                    )
+                ]
+            )
+            
+            while True:
+                points, scroll_offset = db_manager.client.scroll(
+                    collection_name=collection_name,
+                    limit=1000,
+                    offset=scroll_offset,
+                    with_payload=["full_path"],
+                    with_vectors=False,
+                    scroll_filter=folder_filter
+                )
+                
+                for p in points:
+                    full_path = p.payload.get("full_path")
+                    if full_path:
+                        existing_folder_paths.add(full_path)
+                
+                if scroll_offset is None:
+                    break
+            
+            # Новые пути папок (из импортируемых данных)
+            new_folder_paths = {f["full_path"] for f in folders}
+            
+            # Осиротевшие папки = существующие - новые
+            orphan_paths = existing_folder_paths - new_folder_paths
+            
+            if orphan_paths:
+                # Генерируем ID для удаления
+                orphan_ids = []
+                for path in orphan_paths:
+                    folder_code = f"folder::{path.replace(' → ', '::')}"
+                    folder_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, folder_code))
+                    orphan_ids.append(folder_id)
+                
+                # Удаляем осиротевшие папки
+                db_manager.client.delete(
+                    collection_name=collection_name,
+                    points_selector=orphan_ids
+                )
+                logger.info(f"🗑️ Удалено {len(orphan_ids)} осиротевших папок")
+            else:
+                logger.info(f"✅ Осиротевших папок нет")
+                
+        else:
+            logger.info(f"📁 Папки не найдены (записи без иерархии)")
+        
+        job.progress = 95
+        job.details = "Финализация..."
             
         # Финальное обновление счетчика и даты
         info = db_manager.client.get_collection(collection_name)
@@ -2643,6 +3266,8 @@ class BackgroundJobManager:
             db_manager.collections_metadata[collection_name]["record_count"] = info.points_count
             db_manager.collections_metadata[collection_name]["last_updated"] = datetime.now().strftime("%d.%m.%Y")
             db_manager.save_configuration()
+        
+        logger.info(f"✅ Импорт завершён: {processed} материалов + {len(folders) if folders else 0} папок")
 
 # Инициализация менеджера задач (после определения классов)
 job_manager = BackgroundJobManager()
@@ -3131,15 +3756,18 @@ class HierarchySearchRequest(BaseModel):
 @app.post("/hierarchy/{database_name}/search")
 async def search_hierarchy_categories(database_name: str, request: HierarchySearchRequest):
     """
-    Семантический поиск по каталогу категорий.
+    Семантический поиск по каталогу категорий (папок).
     
-    Использует векторный поиск для нахождения релевантных категорий.
-    Алгоритм:
-    1. Выполняет поиск по коллекции через embedding + Qdrant
-    2. Группирует результаты по категориям (path_level_N)
-    3. Ранжирует категории по среднему score и количеству попаданий
-    4. Применяет rerank для финального ранжирования
-    5. Возвращает топ-N категорий с путями для навигации
+    ЛОГИКА "Contextual Path with Leaf Focus":
+    1. Векторный поиск ТОЛЬКО по папкам (is_folder=true)
+    2. Эмбеддинги папок построены по full_path (контекст)
+    3. Rerank по leaf_name (название папки) - КЛЮЧЕВОЕ!
+    
+    ВАЖНО: Поиск ведётся ТОЛЬКО по папкам. Материалы НЕ участвуют в поиске каталога.
+    Если папок нет - возвращается пустой результат.
+    
+    Это позволяет находить папки по короткому запросу (например, "Задвижки"),
+    даже если полный путь длинный ("Трубопроводная арматура → Задвижки").
     
     Args:
         database_name: Имя коллекции в Qdrant.
@@ -3149,12 +3777,12 @@ async def search_hierarchy_categories(database_name: str, request: HierarchySear
         {
             "categories": [
                 {
-                    "path": "Арматура → Краны",
+                    "path": "Арматура → Задвижки",
                     "level": 2,
-                    "name": "Краны",
-                    "hits": 15,
-                    "avg_score": 0.78,
-                    "best_score": 0.92
+                    "name": "Задвижки",
+                    "items_count": 150,
+                    "cosine_score": 0.65,
+                    "rerank_score": 0.92
                 }
             ],
             "query": "...",
@@ -3176,141 +3804,103 @@ async def search_hierarchy_categories(database_name: str, request: HierarchySear
         # Получаем пороги из конфигурации коллекции
         meta = db_manager.collections_metadata.get(database_name, {})
         thresholds = meta.get("thresholds", {})
-        cosine_threshold = thresholds.get("cosine", 0.3)  # Для категорий - чуть ниже порог
+        # Для папок используем более низкий порог cosine (папки имеют более короткие тексты)
+        cosine_threshold = thresholds.get("cosine", 0.3) * 0.7  # 30% снижение порога для папок
         
-        # === ШАГ 1: Генерация эмбеддинга (используем кэшированный метод) ===
+        # === ШАГ 1: Генерация эмбеддинга запроса ===
         query_embedding = await db_manager.get_embedding_cached(query_text)
         
-        # === ШАГ 2: Поиск в Qdrant (больше кандидатов для группировки) ===
+        # === ШАГ 2: Поиск ТОЛЬКО по папкам (is_folder=true) ===
         original_collection = db_manager.current_collection
         db_manager.set_active_collection(database_name)
         
-        # Используем search_similar - правильный метод для поиска
-        candidates = await db_manager.search_similar(
-            collection_name=database_name,
-            query_embedding=query_embedding,
-            top_k=500,  # Много кандидатов для группировки по категориям
-            score_threshold=cosine_threshold
+        # Формируем фильтр для поиска ТОЛЬКО папок (материалы исключены)
+        folder_filter = Filter(
+            must=[
+                FieldCondition(
+                    key="is_folder",
+                    match=MatchValue(value=True)
+                )
+            ]
         )
+        
+        # Поиск папок в Qdrant
+        loop = asyncio.get_event_loop()
+        
+        def _search_folders():
+            return db_manager.client.query_points(
+                collection_name=database_name,
+                query=query_embedding,
+                limit=50,  # Топ-50 папок для rerank
+                with_payload=True,
+                score_threshold=cosine_threshold,
+                query_filter=folder_filter
+            ).points
+        
+        folder_candidates = await loop.run_in_executor(db_manager.executor, _search_folders)
         
         # Восстанавливаем коллекцию
         if original_collection:
             db_manager.set_active_collection(original_collection)
         
-        if not candidates:
+        # === ШАГ 3: Обработка результатов ===
+        # Если папок нет - возвращаем пустой результат (без fallback на материалы!)
+        if not folder_candidates:
+            logger.info(f"📁 Папки не найдены для запроса '{query_text[:30]}...'")
             return {
                 "categories": [],
                 "query": query_text,
                 "total_found": 0
             }
         
-        # === ШАГ 3: Группировка по КАТЕГОРИЯМ (исключаем последний уровень - материалы) ===
-        # Собираем статистику по всем уровням path_level_N кроме самого глубокого
-        # ВАЖНО: search_similar возвращает metadata вместо payload!
-        category_stats = {}  # {path: {level, hits, scores, name}}
+        logger.info(f"📁 Найдено {len(folder_candidates)} папок для запроса '{query_text[:30]}...'")
         
-        logger.info(f"📊 Обработка {len(candidates)} кандидатов для группировки по категориям")
-        
-        for candidate in candidates:
-            # metadata содержит все поля из payload Qdrant
-            metadata = candidate.get("metadata", {})
-            score = candidate.get("score", 0)
-            
-            # Определяем максимальный уровень для этого кандидата (это материал)
-            max_level = 0
-            for level in range(1, 11):
-                if f"path_level_{level}" in metadata and metadata[f"path_level_{level}"]:
-                    max_level = level
-            
-            # Собираем статистику по ВСЕМ уровням 1...max_level - это все категории в иерархии
-            # path_level_N содержит категории, а не материалы (материал - это сама запись)
-            for level in range(1, max_level + 1):  # Включая последний уровень категорий
-                # Проверяем наличие уровня
-                if not (f"path_level_{level}" in metadata and metadata[f"path_level_{level}"]):
-                    continue
-                
-                # Формируем ПОЛНЫЙ путь для категории этого уровня
-                # Собираем все части от 1 до level
-                path_parts = []
-                for i in range(1, level + 1):
-                    part_key = f"path_level_{i}"
-                    if part_key in metadata and metadata[part_key]:
-                        path_parts.append(metadata[part_key])
-                
-                # Склеиваем путь через разделитель
-                full_path = " → ".join(path_parts)
-                
-                if full_path not in category_stats:
-                    # Название - это последняя часть пути (значение текущего уровня)
-                    name = metadata[f"path_level_{level}"]
-                    category_stats[full_path] = {
-                        "path": full_path,
-                        "level": level,
-                        "name": name,
-                        "hits": 0,
-                        "scores": []
-                    }
-                
-                category_stats[full_path]["hits"] += 1
-                category_stats[full_path]["scores"].append(score)
-        
-        logger.info(f"📊 Найдено {len(category_stats)} уникальных категорий")
-        
-        # === ШАГ 4: Ранжирование категорий ===
-        # Вычисляем метрики для каждой категории
-        ranked_categories = []
-        for path, stats in category_stats.items():
-            scores = stats["scores"]
-            avg_score = sum(scores) / len(scores) if scores else 0
-            best_score = max(scores) if scores else 0
-            
-            # Комбинированный score: учитываем и качество, и количество
-            # Формула: avg_score * log(1 + hits) - баланс качества и популярности
-            import math
-            combined_score = avg_score * math.log(1 + stats["hits"])
-            
-            ranked_categories.append({
-                "path": stats["path"],
-                "level": stats["level"],
-                "name": stats["name"],
-                "hits": stats["hits"],
-                "avg_score": round(avg_score, 4),
-                "best_score": round(best_score, 4),
-                "combined_score": round(combined_score, 4)
+        # Подготовка кандидатов для rerank
+        candidates_for_rerank = []
+        for hit in folder_candidates:
+            payload = hit.payload
+            candidates_for_rerank.append({
+                "path": payload.get("full_path", payload.get("description", "")),
+                "level": payload.get("path_depth", 0),
+                "name": payload.get("leaf_name", ""),  # КЛЮЧЕВОЕ: leaf_name для rerank
+                "items_count": payload.get("items_count", 0),
+                "cosine_score": round(hit.score, 4),
+                "metadata": payload
             })
         
-        # Сортируем по комбинированному score
-        ranked_categories.sort(key=lambda x: x["combined_score"], reverse=True)
-        
-        # === ШАГ 5: Rerank топ кандидатов (опционально) ===
-        # Для категорий можно применить rerank по названиям
-        top_categories = ranked_categories[:request.top_k * 2]  # Берём с запасом
-        
-        if reranker and len(top_categories) > 0:
-            # Формируем пары для rerank
+        # === ШАГ 4: Rerank по leaf_name (НЕ по full_path!) ===
+        if reranker and len(candidates_for_rerank) > 0:
             normalized_query = query_text.lower().strip()
+            
+            # КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: rerank по leaf_name (название папки)
             rerank_pairs = [
-                (normalized_query, cat["name"]) for cat in top_categories
+                (normalized_query, cat["name"].lower()) for cat in candidates_for_rerank
             ]
             
-            loop = asyncio.get_event_loop()
             rerank_scores = await loop.run_in_executor(
                 db_manager.executor, lambda: reranker.predict(rerank_pairs)
             )
             
-            # Добавляем rerank score и пересортировываем
-            for i, cat in enumerate(top_categories):
+            # Добавляем rerank score
+            for i, cat in enumerate(candidates_for_rerank):
                 cat["rerank_score"] = round(float(rerank_scores[i]), 4)
             
-            # Сортируем по rerank score
-            top_categories.sort(key=lambda x: x.get("rerank_score", 0), reverse=True)
+            # Сортируем по rerank score (ГЛАВНЫЙ критерий для папок)
+            candidates_for_rerank.sort(key=lambda x: x.get("rerank_score", 0), reverse=True)
+        else:
+            # Если reranker недоступен, сортируем по cosine
+            candidates_for_rerank.sort(key=lambda x: x.get("cosine_score", 0), reverse=True)
         
-        # Берём финальный топ
-        final_categories = top_categories[:request.top_k]
+        # Берём топ результатов
+        final_categories = candidates_for_rerank[:request.top_k]
+        
+        # Удаляем metadata из ответа (он был нужен только для обработки)
+        for cat in final_categories:
+            cat.pop("metadata", None)
         
         logger.info(
             f"🔍 Поиск категорий: '{query_text[:30]}...' | "
-            f"Найдено: {len(final_categories)} категорий из {len(category_stats)}"
+            f"Найдено: {len(final_categories)} папок"
         )
         
         return {
@@ -3771,6 +4361,109 @@ async def admin_delete_collection(name: str, admin: dict = Depends(admin_require
         logger.error(f"❌ Ошибка удаления коллекции {name}: {e}")
         raise HTTPException(500, str(e))
 
+
+# === УПРАВЛЕНИЕ СТАТУСАМИ ЗАПИСЕЙ ===
+
+@app.get("/admin/statuses")
+async def admin_get_statuses():
+    """
+    Получить список доступных статусов для записей.
+    
+    Статусы хранятся в секции _settings файла vector_databases.json.
+    Этот эндпоинт публичный (без авторизации) для загрузки в UI.
+    
+    Returns:
+        {
+            "statuses": [{"id": "active", "label": "Активная", "color": "#10b981"}, ...],
+            "default_status": "active"
+        }
+    """
+    try:
+        # Читаем секцию _settings из конфигурации
+        settings = db_manager.collections_metadata.get("_settings", {})
+        
+        # Возвращаем статусы с дефолтными значениями если не настроены
+        return {
+            "statuses": settings.get("statuses", [
+                {"id": "active", "label": "Активная", "color": "#10b981"},
+                {"id": "draft", "label": "Черновик", "color": "#f59e0b"},
+                {"id": "deprecated", "label": "Устаревшая", "color": "#ef4444"}
+            ]),
+            "default_status": settings.get("default_status", "active")
+        }
+    except Exception as e:
+        logger.error(f"❌ Ошибка получения статусов: {e}")
+        # Возвращаем дефолтные статусы при ошибке
+        return {
+            "statuses": [
+                {"id": "active", "label": "Активная", "color": "#10b981"},
+                {"id": "draft", "label": "Черновик", "color": "#f59e0b"},
+                {"id": "deprecated", "label": "Устаревшая", "color": "#ef4444"}
+            ],
+            "default_status": "active"
+        }
+
+
+class StatusConfig(BaseModel):
+    """Конфигурация одного статуса"""
+    id: str
+    label: str
+    color: str
+
+
+class StatusesUpdateRequest(BaseModel):
+    """Запрос на обновление списка статусов"""
+    statuses: List[StatusConfig]
+    default_status: str = "active"
+
+
+@app.put("/admin/statuses")
+async def admin_update_statuses(req: StatusesUpdateRequest, admin: dict = Depends(admin_required)):
+    """
+    Обновить список статусов для записей.
+    
+    Требует JWT авторизации.
+    
+    Args:
+        req: Новый список статусов и статус по умолчанию
+    
+    Returns:
+        {"status": "success", "statuses": [...], "default_status": "..."}
+    """
+    try:
+        # Преобразуем статусы в словари
+        statuses_list = [{"id": s.id, "label": s.label, "color": s.color} for s in req.statuses]
+        
+        # Проверяем что default_status есть в списке
+        status_ids = [s.id for s in req.statuses]
+        if req.default_status not in status_ids:
+            raise HTTPException(400, f"default_status '{req.default_status}' не найден в списке статусов")
+        
+        # Обновляем секцию _settings
+        if "_settings" not in db_manager.collections_metadata:
+            db_manager.collections_metadata["_settings"] = {}
+        
+        db_manager.collections_metadata["_settings"]["statuses"] = statuses_list
+        db_manager.collections_metadata["_settings"]["default_status"] = req.default_status
+        
+        # Сохраняем конфигурацию
+        db_manager.save_configuration()
+        
+        logger.info(f"✅ Статусы обновлены: {len(statuses_list)} шт., default={req.default_status}")
+        
+        return {
+            "status": "success",
+            "statuses": statuses_list,
+            "default_status": req.default_status
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Ошибка обновления статусов: {e}")
+        raise HTTPException(500, str(e))
+
+
 @app.get("/admin/collections/{name}/data")
 async def admin_get_data(name: str, limit: int = 50, offset: str = None, admin: dict = Depends(admin_required)):
     """
@@ -3796,13 +4489,26 @@ async def admin_get_data(name: str, limit: int = 50, offset: str = None, admin: 
         raise HTTPException(404, "Collection not found")
         
     try:
-        # Используем scroll api
+        # === ФИЛЬТР: Исключаем записи папок (is_folder=true) ===
+        # Папки - это технические записи для векторного поиска по каталогу
+        # Они не должны отображаться в таблице "Данные"
+        folder_exclusion_filter = Filter(
+            must_not=[
+                FieldCondition(
+                    key="is_folder",
+                    match=MatchValue(value=True)
+                )
+            ]
+        )
+        
+        # Используем scroll api с фильтром исключения папок
         points, next_offset = db_manager.client.scroll(
             collection_name=name,
             limit=limit,
             offset=offset,
             with_payload=True,
-            with_vectors=False
+            with_vectors=False,
+            scroll_filter=folder_exclusion_filter
         )
         
         columns = db_manager.collections_metadata[name]["columns"]
@@ -3912,6 +4618,23 @@ async def admin_update_point(name: str, id: str, req: UpdatePointRequest, admin:
     vector = point.vector
     need_reembed = False  # Флаг: нужно ли пересчитать эмбеддинг
     need_cache_invalidate = False  # Флаг: нужно ли инвалидировать кэш иерархии
+    need_folder_sync = False  # Флаг: нужно ли синхронизировать папки
+    
+    # Запоминаем старый путь папки ДО изменений (для синхронизации папок)
+    old_folder_path = build_full_path_from_payload(payload)
+    
+    # Запоминаем folder_ids и пути ДО изменений (для корректной синхронизации всех уровней)
+    old_folder_ids = payload.get("folder_ids", [])
+    old_folder_paths = []
+    # Вычисляем пути для каждого уровня
+    path_depth = payload.get("path_depth", 0)
+    if path_depth > 0:
+        parts = []
+        for lvl in range(1, path_depth + 1):
+            part = payload.get(f"path_level_{lvl}", "")
+            if part:
+                parts.append(part)
+                old_folder_paths.append(" → ".join(parts))
     
     # Обновляем поле
     if req.field == "description":
@@ -3948,17 +4671,49 @@ async def admin_update_point(name: str, id: str, req: UpdatePointRequest, admin:
         payload["context_description"] = rebuild_context_description(payload)
         # Обновляем legacy description
         payload[columns["description"]] = payload["context_description"]
+        
+        # === ПЕРЕСЧЁТ folder_ids ===
+        # При изменении path_level_N нужно обновить массив ID связанных папок
+        path_depth = payload.get("path_depth", 0)
+        folder_ids = []
+        if path_depth > 0:
+            parts = []
+            for lvl in range(1, path_depth + 1):
+                part = payload.get(f"path_level_{lvl}", "")
+                if part:
+                    parts.append(part)
+                    folder_full_path = " → ".join(parts)
+                    folder_code_str = f"folder::{folder_full_path.replace(' → ', '::')}"
+                    folder_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, folder_code_str))
+                    folder_ids.append(folder_id)
+        payload["folder_ids"] = folder_ids
+        
         need_reembed = True
         need_cache_invalidate = True
+        need_folder_sync = True  # Нужна синхронизация папок!
         
     elif req.field == "code":
         payload[columns["code"]] = req.value
         # Вектор не меняется, но кэш нужно инвалидировать (код в каталоге)
         need_cache_invalidate = True
         
+    elif req.field == "status":
+        # Изменение статуса записи - только обновляем метаданные
+        payload["status"] = req.value
+        # Статус не влияет на эмбеддинги и кэш иерархии
+        
     else:
         # Произвольное поле меты
         payload[req.field] = req.value
+    
+    # === ОБНОВЛЕНИЕ МЕТАДАННЫХ ВЕРСИОНИРОВАНИЯ ===
+    # При ЛЮБОМ изменении обновляем дату и инкрементируем версию
+    from datetime import datetime
+    payload["updated_at"] = datetime.utcnow().isoformat() + "Z"
+    # Для записей без версии (старые записи) считаем что текущая версия = 1
+    # При первом изменении версия станет 2
+    current_version = payload.get("version") or 1
+    payload["version"] = current_version + 1
     
     # Пересчитываем эмбеддинг если нужно
     if need_reembed:
@@ -3984,14 +4739,52 @@ async def admin_update_point(name: str, id: str, req: UpdatePointRequest, admin:
         hierarchy_service.invalidate_cache(name)
         logger.info(f"🗑️ Hierarchy cache invalidated after edit: {name}")
     
-    return {"status": "success", "context_description": payload.get("context_description")}
+    # === СИНХРОНИЗАЦИЯ ПАПОК ===
+    # При изменении path_level_N нужно проверить и обновить записи папок
+    folder_sync_result = None
+    if need_folder_sync:
+        # Получаем новые folder_ids и пути из обновлённого payload
+        new_folder_ids = payload.get("folder_ids", [])
+        new_folder_paths = []
+        new_path_depth = payload.get("path_depth", 0)
+        if new_path_depth > 0:
+            parts = []
+            for lvl in range(1, new_path_depth + 1):
+                part = payload.get(f"path_level_{lvl}", "")
+                if part:
+                    parts.append(part)
+                    new_folder_paths.append(" → ".join(parts))
+        
+        # Вызываем новую функцию с folder_ids для ВСЕХ уровней иерархии
+        if old_folder_ids != new_folder_ids or old_folder_paths != new_folder_paths:
+            logger.info(f"📁 Синхронизация папок: {len(old_folder_ids)} → {len(new_folder_ids)} уровней")
+            folder_sync_result = await sync_folders_after_material_edit(
+                db_manager, name,
+                old_folder_ids, new_folder_ids,
+                old_folder_paths, new_folder_paths
+            )
+    
+    response = {
+        "status": "success", 
+        "context_description": payload.get("context_description"),
+        # === НОВОЕ: Возвращаем обновлённые метаданные версионирования ===
+        "updated_at": payload.get("updated_at"),
+        "version": payload.get("version"),
+        "id": id  # ID записи для точного сопоставления на клиенте
+    }
+    
+    if folder_sync_result:
+        response["folder_sync"] = folder_sync_result
+    
+    return response
 
 @app.delete("/admin/collections/{name}/data/{id}")
 async def admin_delete_point(name: str, id: str, admin: dict = Depends(admin_required)):
     """
     Удаление точки из коллекции Qdrant.
     
-    ИСПРАВЛЕНО: Добавлено логирование и проверка успешности удаления.
+    НОВАЯ ЛОГИКА: После удаления материала проверяем и удаляем осиротевшие папки.
+    Используем folder_ids из payload материала для быстрого поиска связанных папок.
     
     Args:
         name: Имя коллекции
@@ -4002,7 +4795,35 @@ async def admin_delete_point(name: str, id: str, admin: dict = Depends(admin_req
     try:
         logger.info(f"🗑️ Удаление точки id={id} из коллекции '{name}'")
         
-        # Удаляем точку из Qdrant
+        # === ШАГ 1: Получаем payload материала ПЕРЕД удалением ===
+        # Нужен для получения folder_ids и path_levels
+        points = db_manager.client.retrieve(
+            collection_name=name,
+            ids=[id],
+            with_payload=True,
+            with_vectors=False
+        )
+        
+        folder_ids_to_check = []
+        path_levels_to_check = []
+        
+        if points:
+            payload = points[0].payload
+            folder_ids_to_check = payload.get("folder_ids", [])
+            
+            # Собираем path_levels для проверки (fallback если нет folder_ids)
+            path_depth = payload.get("path_depth", 0)
+            if path_depth > 0:
+                parts = []
+                for lvl in range(1, path_depth + 1):
+                    part = payload.get(f"path_level_{lvl}", "")
+                    if part:
+                        parts.append(part)
+                        path_levels_to_check.append(" → ".join(parts))
+            
+            logger.info(f"📁 Связанные папки материала: {len(folder_ids_to_check)} шт.")
+        
+        # === ШАГ 2: Удаляем сам материал ===
         db_manager.client.delete(
             collection_name=name,
             points_selector=[id]
@@ -4013,15 +4834,68 @@ async def admin_delete_point(name: str, id: str, admin: dict = Depends(admin_req
             db_manager.collections_metadata[name]["record_count"] -= 1
             logger.info(f"✅ Точка {id} удалена, осталось записей: {db_manager.collections_metadata[name]['record_count']}")
         
+        # === ШАГ 3: Проверяем и удаляем осиротевшие папки ===
+        deleted_folders = []
+        
+        # Проверяем каждую папку из path_levels (от самой глубокой к корневой)
+        for full_path in reversed(path_levels_to_check):
+            parts = full_path.split(" → ")
+            
+            # Строим фильтр для подсчёта материалов в этой папке
+            filter_conditions = []
+            for i, part in enumerate(parts):
+                filter_conditions.append(
+                    FieldCondition(
+                        key=f"path_level_{i + 1}",
+                        match=MatchValue(value=part)
+                    )
+                )
+            
+            try:
+                count_result = db_manager.client.count(
+                    collection_name=name,
+                    count_filter=Filter(
+                        must=filter_conditions,
+                        must_not=[
+                            FieldCondition(
+                                key="is_folder",
+                                match=MatchValue(value=True)
+                            )
+                        ]
+                    )
+                )
+                materials_count = count_result.count
+                
+                if materials_count == 0:
+                    # Папка осиротела - удаляем
+                    folder_code = f"folder::{full_path.replace(' → ', '::')}"
+                    folder_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, folder_code))
+                    
+                    db_manager.client.delete(
+                        collection_name=name,
+                        points_selector=[folder_id]
+                    )
+                    deleted_folders.append(full_path)
+                    logger.info(f"🗑️ Удалена осиротевшая папка: {full_path}")
+                else:
+                    # Если папка не пустая, родительские тоже не пустые - прекращаем
+                    break
+                    
+            except Exception as e:
+                logger.warning(f"⚠️ Ошибка проверки папки '{full_path}': {e}")
+        
         # Инвалидируем кэш иерархии для этой коллекции
         if name in hierarchy_service.children_cache:
-            # Очищаем все ключи кэша для этой коллекции
             keys_to_delete = [k for k in hierarchy_service.children_cache.keys() if k.startswith(name)]
             for key in keys_to_delete:
                 del hierarchy_service.children_cache[key]
             logger.info(f"🧹 Очищен кэш иерархии ({len(keys_to_delete)} ключей)")
         
-        return {"status": "success", "deleted_id": id}
+        return {
+            "status": "success", 
+            "deleted_id": id,
+            "deleted_folders": deleted_folders
+        }
         
     except Exception as e:
         logger.error(f"❌ Ошибка удаления точки {id}: {str(e)}")
@@ -4102,7 +4976,21 @@ async def get_all_codes(database: Optional[str] = None):
         while True:
             batch_count += 1
 
-            # Запрашиваем батч записей из Qdrant
+            # === ФИЛЬТР: Исключаем записи папок (is_folder=true) ===
+            # При сравнении с базой папки не должны учитываться,
+            # так как они управляются автоматически на основе материалов
+            folder_exclusion_filter = Filter(
+                must_not=[
+                    FieldCondition(
+                        key="is_folder",
+                        match=MatchValue(value=True)
+                    )
+                ]
+            )
+            
+            # Запрашиваем батч записей из Qdrant (без папок)
+            # ВАЖНО: Для сравнения используем full_description (короткое имя материала),
+            # а не description (полный контекстный путь для эмбеддингов)
             scroll_result = await loop.run_in_executor(
                 db_manager.executor,
                 lambda: db_manager.client.scroll(
@@ -4111,21 +4999,26 @@ async def get_all_codes(database: Optional[str] = None):
                     offset=offset,
                     with_payload=[
                         "code",
-                        "description",
-                    ],  # Только нужные поля из Qdrant
+                        "full_description",  # Короткое имя материала для сравнения
+                        "description",       # Fallback для старых записей
+                    ],
                     with_vectors=False,  # Векторы не нужны (экономия памяти)
+                    scroll_filter=folder_exclusion_filter,  # Исключаем папки
                 ),
             )
 
             points, offset = scroll_result
 
             # Извлекаем код и описание из каждой точки
+            # Приоритет: full_description > description (для обратной совместимости)
             for point in points:
                 code = point.payload.get("code")
-                description = point.payload.get("description")
+                # Используем full_description (короткое имя материала) для сравнения
+                # Fallback на description для старых записей без full_description
+                material_name = point.payload.get("full_description") or point.payload.get("description")
 
-                if code and description:
-                    all_records[code] = description
+                if code and material_name:
+                    all_records[code] = material_name
 
             # Если offset None - достигли конца коллекции
             if offset is None:
@@ -4153,6 +5046,121 @@ async def get_all_codes(database: Optional[str] = None):
         logger.error(traceback.format_exc())
         raise HTTPException(
             status_code=500, detail=f"Ошибка получения записей: {str(e)}"
+        )
+
+
+@app.get("/get_all_folders")
+async def get_all_folders(database: Optional[str] = None):
+    """
+    Получение списка ВСЕХ папок (записей с is_folder=true) из коллекции.
+    
+    Возвращает словарь {full_path: {leaf_name, items_count, path_levels}} для отображения
+    в diff-анализе и для сравнения изменений папок.
+    
+    Args:
+        database: Название коллекции (если не указано - используется текущая активная)
+    
+    Returns:
+        {
+            "status": "success",
+            "collection": "ksr_main",
+            "folders": {
+                "Приборы → Аннотации": {"leaf_name": "Аннотации", "items_count": 42, "id": "uuid"},
+                ...
+            },
+            "total": 1205,
+            "elapsed_seconds": 1.24
+        }
+    """
+    try:
+        collection_name = database or db_manager.current_collection
+        
+        if not collection_name:
+            raise HTTPException(status_code=400, detail="Коллекция не указана")
+        
+        logger.info(f"📁 Запрос ВСЕХ папок из '{collection_name}'...")
+        start_time = time.time()
+        
+        loop = asyncio.get_event_loop()
+        
+        # === ФИЛЬТР: Выбираем ТОЛЬКО записи папок (is_folder=true) ===
+        folder_filter = Filter(
+            must=[
+                FieldCondition(
+                    key="is_folder",
+                    match=MatchValue(value=True)
+                )
+            ]
+        )
+        
+        # Собираем все папки в словарь {full_path: данные}
+        all_folders = {}
+        offset = None
+        batch_count = 0
+        
+        # Цикл по всей коллекции батчами
+        while True:
+            batch_count += 1
+            
+            # Запрашиваем батч папок из Qdrant
+            scroll_result = await loop.run_in_executor(
+                db_manager.executor,
+                lambda: db_manager.client.scroll(
+                    collection_name=collection_name,
+                    limit=10000,  # Внутренний батч для производительности
+                    offset=offset,
+                    with_payload=[
+                        "full_path",
+                        "leaf_name", 
+                        "items_count",
+                        "path_depth",
+                        "code",
+                    ],
+                    with_vectors=False,
+                    scroll_filter=folder_filter,
+                ),
+            )
+            
+            points, offset = scroll_result
+            
+            # Извлекаем данные папки из каждой точки
+            for point in points:
+                full_path = point.payload.get("full_path")
+                
+                if full_path:
+                    all_folders[full_path] = {
+                        "id": str(point.id),
+                        "leaf_name": point.payload.get("leaf_name", ""),
+                        "items_count": point.payload.get("items_count", 0),
+                        "path_depth": point.payload.get("path_depth", 1),
+                        "code": point.payload.get("code", ""),
+                    }
+            
+            # Если offset None - достигли конца коллекции
+            if offset is None:
+                break
+        
+        elapsed = time.time() - start_time
+        
+        logger.info(
+            f"✅ Собрано {len(all_folders)} папок за {elapsed:.2f}с "
+            f"({batch_count} батчей)"
+        )
+        
+        return {
+            "status": "success",
+            "collection": collection_name,
+            "folders": all_folders,  # Словарь {full_path: данные}
+            "total": len(all_folders),
+            "elapsed_seconds": round(elapsed, 2),
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Ошибка получения папок: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        raise HTTPException(
+            status_code=500, detail=f"Ошибка получения папок: {str(e)}"
         )
 
 
