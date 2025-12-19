@@ -79,8 +79,12 @@ const state = {
     defaultStatus: 'active',
     /** @type {boolean} Флаг загрузки данных (для infinite scroll) */
     isLoadingData: false,
+    /** @type {boolean} Флаг загрузки данных (для infinite scroll) */
+    isLoadingData: false,
     /** @type {IntersectionObserver|null} Observer для infinite scroll */
-    scrollObserver: null
+    scrollObserver: null,
+    /** @type {Array} Правила очистки данных */
+    cleaningRules: []
 };
 
 // === DOM ELEMENTS ===
@@ -229,6 +233,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initSettingsPage(); // Инициализация страницы настроек
     initOpenRouterSettings(); // Инициализация настроек OpenRouter
     loadOpenRouterSettings(); // Загрузка настроек OpenRouter
+    loadCleaningRules();      // Загрузка правил очистки
 });
 
 /**
@@ -340,6 +345,77 @@ function renderStatusesSettings() {
             }, 200);
         });
     });
+}
+
+// === CLEANING RULES (Правила очистки) ===
+
+/**
+ * Загрузка правил очистки с сервера
+ */
+async function loadCleaningRules() {
+    try {
+        // Используем authFetch если возможно, или обычный fetch
+        const fetchFunc = typeof authFetch === 'function' ? authFetch : fetch;
+
+        const res = await fetchFunc('/admin/cleaning_rules');
+
+        if (res.ok) {
+            const data = await res.json();
+            state.cleaningRules = data.rules || [];
+            console.log(`🧹 Загружено ${state.cleaningRules.length} правил очистки`);
+        } else {
+            console.error(`❌ Ошибка загрузки правил: ${res.status}`);
+        }
+    } catch (e) {
+        console.error('❌ Исключение при загрузке правил очистки:', e);
+    }
+}
+
+/**
+ * Применение правил очистки к строке
+ * @param {string} text - Исходный текст
+ * @param {string} columnType - Тип колонки ('hierarchy' | 'description' | 'code')
+ * @returns {string} Очищенный текст
+ */
+function applyCleaningRules(text, columnType = null) {
+    if (!text || typeof text !== 'string') return text;
+
+    let result = text;
+
+    // Применяем правила
+    if (state.cleaningRules && state.cleaningRules.length > 0) {
+        for (const rule of state.cleaningRules) {
+            if (!rule.enabled) continue;
+
+            // Проверка apply_to_columns
+            // В JS логике мы используем типы колонок ('hierarchy', 'description') вместо имен
+            // Если правило применяется ко всем ("*") или к конкретному типу
+            const applyTo = rule.apply_to_columns || ["*"];
+
+            // Если правило глобальное ("*") или тип колонок совпадает с одним из разрешенных
+            // (можно расширить логику, если apply_to_columns содержит конкретные имена колонок из Excel,
+            // но здесь мы знаем только семантический тип: иерархия или описание)
+            const isApplicable = applyTo.includes("*") ||
+                (columnType && applyTo.some(col => col.toLowerCase() === columnType.toLowerCase()));
+
+            if (!isApplicable) continue;
+
+            try {
+                // ПРОВЕРКА REGEX
+                // Сервер передает паттерн как строку. В JSON слэши экранированы.
+                // new RegExp создаст правильный регекс.
+                const regex = new RegExp(rule.pattern, 'g');
+
+                if (regex.test(result)) {
+                    result = result.replace(regex, rule.replacement || '');
+                }
+            } catch (e) {
+                console.warn(`❌ Invalid regex in rule '${rule.name}':`, e);
+            }
+        }
+    }
+
+    return result.trim();
 }
 
 /**
@@ -2679,24 +2755,8 @@ async function uploadExcelFile(file, sheet = null) {
 
 // === ПРАВИЛА ОЧИСТКИ ДАННЫХ ===
 
-/** Локальное хранилище правил очистки */
-let cleaningRules = [];
-
-/**
- * Загрузка правил очистки с сервера.
- */
-async function loadCleaningRules() {
-    try {
-        const response = await fetch('/admin/cleaning_rules');
-        if (response.ok) {
-            const data = await response.json();
-            cleaningRules = data.rules || [];
-            renderCleaningRules();
-        }
-    } catch (error) {
-        console.error('Ошибка загрузки правил очистки:', error);
-    }
-}
+// ПРИМЕЧАНИЕ: Функции загрузки и применения правил вынесены в начало файла (state.cleaningRules)
+// Здесь остаются функции рендеринга и управления UI.
 
 /**
  * Рендер списка правил очистки.
@@ -2705,12 +2765,13 @@ function renderCleaningRules() {
     const container = document.getElementById('cleaningRulesList');
     if (!container) return;
 
-    if (cleaningRules.length === 0) {
+    // Используем глобальный state
+    if (!state.cleaningRules || state.cleaningRules.length === 0) {
         container.innerHTML = '<p style="color: var(--adm-text-sec); text-align: center; padding: 20px;">Нет правил очистки</p>';
         return;
     }
 
-    container.innerHTML = cleaningRules.map((rule, idx) => `
+    container.innerHTML = state.cleaningRules.map((rule, idx) => `
         <div class="cleaning-rule-item ${rule.enabled ? '' : 'disabled'}" data-rule-id="${rule.id}">
             <div class="rule-toggle">
                 <label class="toggle-switch">
@@ -2737,7 +2798,7 @@ function renderCleaningRules() {
  * @param {string} ruleId - ID правила
  */
 function toggleCleaningRule(ruleId) {
-    const rule = cleaningRules.find(r => r.id === ruleId);
+    const rule = state.cleaningRules.find(r => r.id === ruleId);
     if (rule) {
         rule.enabled = !rule.enabled;
         renderCleaningRules();
@@ -2750,7 +2811,7 @@ function toggleCleaningRule(ruleId) {
  */
 function deleteCleaningRule(ruleId) {
     if (!confirm('Удалить это правило очистки?')) return;
-    cleaningRules = cleaningRules.filter(r => r.id !== ruleId);
+    state.cleaningRules = state.cleaningRules.filter(r => r.id !== ruleId);
     renderCleaningRules();
 }
 
@@ -2956,12 +3017,22 @@ function buildRecordsFromMapping() {
         const code = codeCols.map(c => cleanValue(row[c])).filter(Boolean).join(codeSeparator);
 
         // Склеиваем описание через кастомный разделитель (обрезаем кавычки)
-        const description = descCols.map(c => cleanValue(row[c])).filter(Boolean).join(descSeparator);
+        let description = descCols.map(c => cleanValue(row[c])).filter(Boolean).join(descSeparator);
+        // User requested NOT to clean description for materials, only folders
+        // description = applyCleaningRules(description, 'description');
 
         // Склеиваем иерархию через " → " (фиксированный разделитель для категорий каталога)
-        const hierarchy = hierarchyCols.length > 0
-            ? hierarchyCols.map(c => cleanValue(row[c])).filter(Boolean).join(' → ')
-            : null;  // null = будет использоваться description на сервере
+        let hierarchy = null;
+        if (hierarchyCols.length > 0) {
+            // Каждую часть иерархии чистим ОТДЕЛЬНО, чтобы правила (например ^Раздел) работали для каждого уровня
+            const parts = hierarchyCols.map(c => {
+                let val = cleanValue(row[c]);
+                val = applyCleaningRules(val, 'hierarchy'); // Чистим каждый уровень!
+                return val;
+            }).filter(Boolean);
+
+            hierarchy = parts.join(' → ');
+        }
 
         return {
             code,
@@ -3676,6 +3747,12 @@ async function performDiffAnalysis() {
     try {
         // === ШАГ 1: Загружаем все текущие записи (материалы) из коллекции ===
         console.log(`📥 Загрузка текущих записей из коллекции '${state.activeCollection}'...`);
+
+        // Гарантируем наличие правил очистки
+        if (!state.cleaningRules || state.cleaningRules.length === 0) {
+            console.log('⚠️ Правила очистки не загружены, загружаем...');
+            await loadCleaningRules();
+        }
 
         const res = await fetch(`/get_all_codes?database=${state.activeCollection}`);
         if (!res.ok) {
