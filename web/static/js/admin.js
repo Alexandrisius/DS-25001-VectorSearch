@@ -3496,7 +3496,7 @@ function normalizeText(text) {
  * Порт из Python скрипта 03_update_qdrant_collection.py
  * 
  * @param {Array<Object>} newRecords - Новые записи [{code, description}]
- * @param {Object} existingRecords - Существующие записи {code: description}
+ * @param {Object} existingRecords - Существующие записи {code: {description, path_depth, path_level_N}}
  * @returns {Object} Результат анализа {added, modified, deleted, unchanged}
  */
 function analyzeChanges(newRecords, existingRecords) {
@@ -3510,6 +3510,12 @@ function analyzeChanges(newRecords, existingRecords) {
     const newCodes = new Set(newRecords.map(r => r.code));
     const existingCodes = new Set(Object.keys(existingRecords));
 
+    // Хелпер: извлечь описание из записи (поддержка нового формата объектов и старого строкового)
+    const getDescription = (record) => {
+        if (typeof record === 'string') return record;
+        return record?.description || record?.full_description || '';
+    };
+
     // 1. Новые записи (код есть в новых, но нет в существующих)
     newRecords.forEach(record => {
         if (!existingCodes.has(record.code)) {
@@ -3520,7 +3526,7 @@ function analyzeChanges(newRecords, existingRecords) {
     // 2. Изменённые записи (код есть в обоих, но описание отличается после нормализации)
     newRecords.forEach(record => {
         if (existingCodes.has(record.code)) {
-            const oldDesc = existingRecords[record.code] || '';
+            const oldDesc = getDescription(existingRecords[record.code]);
             const newDesc = record.description || '';
 
             const oldNormalized = normalizeText(oldDesc);
@@ -3544,7 +3550,7 @@ function analyzeChanges(newRecords, existingRecords) {
         if (!newCodes.has(code)) {
             result.deleted.push({
                 code: code,
-                description: existingRecords[code]
+                description: getDescription(existingRecords[code])
             });
         }
     });
@@ -3570,29 +3576,24 @@ function extractFoldersFromRecords(records) {
     const folderMap = {};  // {full_path: {leaf_name, items_count}}
 
     records.forEach(record => {
-        // Получаем путь иерархии из записи
         const hierarchy = record.hierarchy || '';
         if (!hierarchy) return;
 
-        // Разбиваем путь на части
         const parts = hierarchy.split(' → ').map(p => p.trim()).filter(Boolean);
 
-        // Создаём записи для каждого уровня папки
         let currentPath = '';
         parts.forEach((part, idx) => {
-            // Формируем полный путь до текущего уровня
             currentPath = idx === 0 ? part : currentPath + ' → ' + part;
 
             if (!folderMap[currentPath]) {
                 folderMap[currentPath] = {
                     full_path: currentPath,
-                    leaf_name: part,  // Название текущей папки
+                    leaf_name: part,
                     items_count: 0,
                     level: idx + 1
                 };
             }
 
-            // Увеличиваем счётчик только для конечной папки (полный путь материала)
             if (idx === parts.length - 1) {
                 folderMap[currentPath].items_count++;
             }
@@ -3600,6 +3601,18 @@ function extractFoldersFromRecords(records) {
     });
 
     return folderMap;
+}
+
+/**
+ * Нормализация пути для корректного сравнения.
+ * Убирает лишние пробелы и стандартизирует разделители.
+ */
+function normalizePath(path) {
+    if (!path) return '';
+    return path.split(' → ')
+        .map(p => p.trim())
+        .filter(Boolean)
+        .join(' → ');
 }
 
 /**
@@ -3618,111 +3631,55 @@ function extractFoldersFromRecords(records) {
 function analyzeFolderChanges(newRecords, existingFolders) {
     const result = {
         added: [],
-        modified: [],  // Для переименований
+        modified: [],
         deleted: []
     };
 
     // Извлекаем папки из новых записей
     const newFolders = extractFoldersFromRecords(newRecords);
 
-    const newPaths = new Set(Object.keys(newFolders));
-    const existingPaths = new Set(Object.keys(existingFolders));
+    // Нормализованные пути для сравнения
+    const existingPaths = new Set(Object.keys(existingFolders).map(normalizePath));
+    const newPaths = Object.keys(newFolders);
 
-    // Собираем leaf_names для фильтрации "переехавших" папок
-    const newLeafNames = new Set();
-    const existingLeafNames = new Set();
+    // Фильтруем: только папки с материалами (items_count > 0)
+    const leafFolderPaths = newPaths.filter(p => newFolders[p].items_count > 0);
 
-    newPaths.forEach(path => {
-        newLeafNames.add(newFolders[path].leaf_name);
-    });
-    existingPaths.forEach(path => {
-        existingLeafNames.add(existingFolders[path].leaf_name || path.split(' → ').pop());
-    });
+    // 1. Новые папки - путь НЕ существует в базе И содержит материалы
+    leafFolderPaths.forEach(rawPath => {
+        const path = normalizePath(rawPath);
 
-    // === ЛОГИКА СРАВНЕНИЯ ===
-    // Папка считается "новой" только если её leaf_name вообще НЕ существует в базе.
-    // Если leaf_name есть, но путь изменился - это "перенос" из-за переименования родителя.
-    // Такие папки НЕ показываем, они обновятся автоматически при импорте.
-
-    // 1. Новые папки - только действительно НОВЫЕ названия (leaf_name не было в базе)
-    newPaths.forEach(path => {
         if (!existingPaths.has(path)) {
-            const leafName = newFolders[path].leaf_name;
-
-            // Проверяем: есть ли папка с таким leaf_name в базе?
-            // Если есть - значит папка просто "переехала" из-за переименования родителя
-            if (!existingLeafNames.has(leafName)) {
-                result.added.push({
-                    full_path: path,
-                    leaf_name: leafName,
-                    items_count: newFolders[path].items_count,
-                    level: newFolders[path].level
-                });
-            }
+            const folderData = newFolders[rawPath];
+            result.added.push({
+                full_path: rawPath,
+                leaf_name: folderData.leaf_name,
+                items_count: folderData.items_count,
+                level: folderData.level
+            });
         }
     });
 
-    // 2. Переименованные папки - где leaf_name изменился на том же уровне
-    // Ищем пары: (старый путь без последнего элемента) == (новый путь без последнего элемента)
-    // но сам leaf_name разный
-    existingPaths.forEach(oldPath => {
-        if (newPaths.has(oldPath)) return; // Путь не изменился
+    // 2. Удалённые папки
+    const newPathsSet = new Set(newPaths.map(normalizePath));
 
-        const oldLeafName = existingFolders[oldPath].leaf_name || oldPath.split(' → ').pop();
-        const oldParent = oldPath.split(' → ').slice(0, -1).join(' → ');
+    Object.keys(existingFolders).forEach(rawExistingPath => {
+        const path = normalizePath(rawExistingPath);
 
-        // Ищем в новых папках с тем же родителем, но другим leaf_name
-        newPaths.forEach(newPath => {
-            if (existingPaths.has(newPath)) return; // Уже есть в базе
+        if (!newPathsSet.has(path)) {
+            const folderData = existingFolders[rawExistingPath];
+            const leafName = folderData.leaf_name || path.split(' → ').pop();
 
-            const newLeafName = newFolders[newPath].leaf_name;
-            const newParent = newPath.split(' → ').slice(0, -1).join(' → ');
-
-            // Тот же родитель, но разные leaf_name = переименование
-            if (oldParent === newParent && oldLeafName !== newLeafName) {
-                // Проверяем что это не просто совпадение - 
-                // старый leaf_name должен отсутствовать в новых, новый - в старых
-                if (!newLeafNames.has(oldLeafName) && !existingLeafNames.has(newLeafName)) {
-                    result.modified.push({
-                        full_path: newPath,
-                        old_path: oldPath,
-                        leaf_name: newLeafName,
-                        old_leaf_name: oldLeafName,
-                        items_count: newFolders[newPath].items_count,
-                        level: newFolders[newPath].level
-                    });
-                }
-            }
-        });
-    });
-
-    // Убираем из added/deleted папки, которые попали в modified
-    const modifiedOldPaths = new Set(result.modified.map(m => m.old_path));
-    const modifiedNewPaths = new Set(result.modified.map(m => m.full_path));
-
-    // 3. Удалённые папки - только действительно УДАЛЁННЫЕ (leaf_name нет в новых)
-    existingPaths.forEach(path => {
-        if (!newPaths.has(path) && !modifiedOldPaths.has(path)) {
-            const leafName = existingFolders[path].leaf_name || path.split(' → ').pop();
-
-            // Проверяем: есть ли папка с таким leaf_name в новых?
-            // Если есть - значит папка просто "переехала"
-            if (!newLeafNames.has(leafName)) {
-                result.deleted.push({
-                    full_path: path,
-                    leaf_name: leafName,
-                    items_count: existingFolders[path].items_count || 0
-                });
-            }
+            result.deleted.push({
+                full_path: rawExistingPath,
+                leaf_name: leafName,
+                items_count: folderData.items_count || 0
+            });
         }
     });
-
-    // Фильтруем added - убираем те, что в modified
-    result.added = result.added.filter(a => !modifiedNewPaths.has(a.full_path));
 
     // Сортируем
     result.added.sort((a, b) => a.level - b.level || a.full_path.localeCompare(b.full_path));
-    result.modified.sort((a, b) => (a.level || 0) - (b.level || 0) || a.full_path.localeCompare(b.full_path));
     result.deleted.sort((a, b) => a.full_path.localeCompare(b.full_path));
 
     return result;
@@ -3764,18 +3721,36 @@ async function performDiffAnalysis() {
 
         console.log(`✅ Загружено ${Object.keys(state.diffData.existingRecords).length} записей из базы`);
 
-        // === ШАГ 2: Загружаем все текущие папки из коллекции ===
-        console.log(`📁 Загрузка текущих папок из коллекции '${state.activeCollection}'...`);
+        // === ШАГ 2: ИЗВЛЕКАЕМ папки из существующих записей (НЕ из отдельного API) ===
+        // ИСПРАВЛЕНИЕ: API /get_all_folders возвращает только записи с is_folder=true,
+        // но в базе папки могут не иметь этот флаг (старый импорт).
+        // Каталог на главной строит папки динамически из path_level_N полей материалов.
+        // Поэтому для корректного сравнения извлекаем папки ИЗ МАТЕРИАЛОВ так же,
+        // как это делается для импортируемых данных.
 
-        const foldersRes = await fetch(`/get_all_folders?database=${state.activeCollection}`);
-        if (foldersRes.ok) {
-            const foldersData = await foldersRes.json();
-            state.diffData.existingFolders = foldersData.folders || {};
-            console.log(`✅ Загружено ${Object.keys(state.diffData.existingFolders).length} папок из базы`);
-        } else {
-            console.warn('⚠️ Не удалось загрузить папки, продолжаем без анализа папок');
-            state.diffData.existingFolders = {};
-        }
+        console.log(`📁 Извлечение папок из существующих материалов...`);
+
+        // Преобразуем существующие записи в формат для extractFoldersFromRecords
+        const existingRecordsArray = Object.values(state.diffData.existingRecords).map(record => {
+            // Восстанавливаем hierarchy из path_level_N
+            let hierarchy = '';
+            if (record.path_depth && record.path_depth > 0) {
+                const parts = [];
+                for (let i = 1; i <= record.path_depth; i++) {
+                    const part = record[`path_level_${i}`];
+                    if (part) parts.push(part);
+                }
+                hierarchy = parts.join(' → ');
+            }
+            return {
+                code: record.code,
+                description: record.full_description || record.description,
+                hierarchy: hierarchy
+            };
+        });
+
+        // Извлекаем папки из существующих записей (та же логика что для новых)
+        state.diffData.existingFolders = extractFoldersFromRecords(existingRecordsArray);
 
         // Формируем записи из импортируемых данных
         const newRecords = buildRecordsFromMapping();
@@ -3792,23 +3767,7 @@ async function performDiffAnalysis() {
         const folderDiff = analyzeFolderChanges(newRecords, state.diffData.existingFolders);
         state.diffData.folderChanges = folderDiff;
 
-        console.log(`📊 Анализ папок: +${folderDiff.added.length} новых, ~${folderDiff.modified.length} изменённых, -${folderDiff.deleted.length} удалённых`);
-
-        // === ДИАГНОСТИКА: Показываем первые 5 записей из каждой категории ===
-        if (diff.added.length > 0) {
-            console.log('🔍 Первые 5 ДОБАВЛЕННЫХ записей:', diff.added.slice(0, 5).map(r => ({
-                code: r.code,
-                description: r.description?.substring(0, 50) + '...',
-                hierarchy: r.hierarchy?.substring(0, 30) + '...'
-            })));
-        }
-        if (diff.modified.length > 0) {
-            console.log('🔍 Первые 5 ИЗМЕНЁННЫХ записей:', diff.modified.slice(0, 5).map(r => ({
-                code: r.code,
-                old: r.oldDescription?.substring(0, 40) + '...',
-                new: r.newDescription?.substring(0, 40) + '...'
-            })));
-        }
+        console.log(`📊 Анализ: +${diff.added.length} добавлено, ~${diff.modified.length} изменено, -${diff.deleted.length} удалено | Папки: +${folderDiff.added.length} новых`);
 
         // Обновляем UI
         updateDiffUI();
@@ -4286,6 +4245,7 @@ async function applyDiffChanges() {
             }))
         ];
 
+
         // Если есть только изменения папок (нет изменений материалов),
         // нужно запустить полный импорт всех материалов из CSV для пересоздания папок
         const folderOnlyChanges = recordsToUpsert.length === 0 &&
@@ -4305,7 +4265,9 @@ async function applyDiffChanges() {
                     hierarchy: hierarchyCols.length > 0 ? r.hierarchy : undefined,
                     meta: r.meta
                 })),
-                recreate: false
+                recreate: false,
+                // Передаём список папок к удалению (вместо сканирования всей базы)
+                folders_to_delete: folderChanges.deleted.map(f => f.full_path)
             };
 
             const res = await authFetch('/admin/import', {
@@ -4330,7 +4292,9 @@ async function applyDiffChanges() {
             const payload = {
                 collection_name: state.activeCollection,
                 records: recordsToUpsert,
-                recreate: false
+                recreate: false,
+                // Передаём список папок к удалению (вместо сканирования всей базы)
+                folders_to_delete: folderChanges.deleted.map(f => f.full_path)
             };
 
             const res = await authFetch('/admin/import', {

@@ -3598,8 +3598,8 @@ class BackgroundJobManager:
             context_texts = []  # Тексты для эмбеддингов (context_description)
             
             for desc, hierarchy in zip(descriptions, hierarchies):
-                # === НОВОЕ: Применяем правила очистки ===
-                desc = apply_cleaning_rules(desc, "description")
+                # === Правила очистки применяются ТОЛЬКО к иерархии (папкам) ===
+                # Описания материалов НЕ очищаем — они хранятся как есть
                 if hierarchy:
                     hierarchy = apply_cleaning_rules(hierarchy, "hierarchy")
                 
@@ -3697,7 +3697,23 @@ class BackgroundJobManager:
                     payload=payload
                 ))
             
-            # Запись в Qdrant (не требует GPU lock)
+            # === КРИТИЧНО: Удаляем старые записи по коду перед upsert ===
+            # Это решает проблему дубликатов от старых миграций с random UUID
+            # (новый импорт использует детерминированный UUID5 из кода)
+            if codes:
+                db_manager.client.delete(
+                    collection_name=collection_name,
+                    points_selector=Filter(
+                        must=[
+                            FieldCondition(
+                                key="code",
+                                match=MatchAny(any=codes)
+                            )
+                        ]
+                    )
+                )
+            
+            # Запись в Qdrant
             db_manager.client.upsert(
                 collection_name=collection_name,
                 points=points
@@ -3789,63 +3805,40 @@ class BackgroundJobManager:
                 )
                 logger.info(f"✅ Индексировано {len(folder_points)} папок в коллекцию '{collection_name}'")
             
-            # === УДАЛЕНИЕ ОСИРОТЕВШИХ ПАПОК ===
-            # Папки, которые были в базе, но больше не нужны (нет материалов с таким путём)
-            job.details = "Удаление осиротевших папок..."
+            # === УДАЛЕНИЕ УКАЗАННЫХ ПАПОК (из списка фронтенда) ===
+            # НОВАЯ ЛОГИКА: Фронтенд анализирует diff и передаёт список папок для удаления.
+            # Вместо сканирования всей базы (135k+ материалов) удаляем только указанные папки.
+            # Это ускоряет частичный импорт с минут до секунд.
             
-            # Получаем все текущие пути папок из базы
-            existing_folder_paths = set()
-            scroll_offset = None
+            folders_to_delete = data.get("folders_to_delete", [])
             
-            folder_filter = Filter(
-                must=[
-                    FieldCondition(
-                        key="is_folder",
-                        match=MatchValue(value=True)
-                    )
-                ]
-            )
-            
-            while True:
-                points, scroll_offset = db_manager.client.scroll(
-                    collection_name=collection_name,
-                    limit=1000,
-                    offset=scroll_offset,
-                    with_payload=["full_path"],
-                    with_vectors=False,
-                    scroll_filter=folder_filter
-                )
+            if folders_to_delete:
+                job.details = f"Удаление {len(folders_to_delete)} папок..."
+                logger.info(f"🗑️ Получен запрос на удаление {len(folders_to_delete)} папок от фронтенда")
                 
-                for p in points:
-                    full_path = p.payload.get("full_path")
-                    if full_path:
-                        existing_folder_paths.add(full_path)
-                
-                if scroll_offset is None:
-                    break
-            
-            # Новые пути папок (из импортируемых данных)
-            new_folder_paths = {f["full_path"] for f in folders}
-            
-            # Осиротевшие папки = существующие - новые
-            orphan_paths = existing_folder_paths - new_folder_paths
-            
-            if orphan_paths:
                 # Генерируем ID для удаления
-                orphan_ids = []
-                for path in orphan_paths:
-                    folder_code = f"folder::{path.replace(' → ', '::')}"
-                    folder_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, folder_code))
-                    orphan_ids.append(folder_id)
+                folder_ids_to_delete = []
+                for folder_path in folders_to_delete:
+                    # folder_path может быть строкой (full_path) или объектом {full_path: ...}
+                    if isinstance(folder_path, dict):
+                        path = folder_path.get("full_path", "")
+                    else:
+                        path = str(folder_path)
+                    
+                    if path:
+                        folder_code = f"folder::{path.replace(' → ', '::')}"
+                        folder_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, folder_code))
+                        folder_ids_to_delete.append(folder_id)
                 
-                # Удаляем осиротевшие папки
-                db_manager.client.delete(
-                    collection_name=collection_name,
-                    points_selector=orphan_ids
-                )
-                logger.info(f"🗑️ Удалено {len(orphan_ids)} осиротевших папок")
+                if folder_ids_to_delete:
+                    db_manager.client.delete(
+                        collection_name=collection_name,
+                        points_selector=folder_ids_to_delete
+                    )
+                    logger.info(f"🗑️ Удалено {len(folder_ids_to_delete)} папок по запросу")
             else:
-                logger.info(f"✅ Осиротевших папок нет")
+                # Если список папок к удалению не передан — это частичный импорт без удалений
+                logger.info(f"✅ Удаление папок не требуется (частичный импорт)")
                 
         else:
             logger.info(f"📁 Папки не найдены (записи без иерархии)")
@@ -6213,19 +6206,14 @@ async def get_all_codes(database: Optional[str] = None):
             )
             
             # Запрашиваем батч записей из Qdrant (без папок)
-            # ВАЖНО: Для сравнения используем full_description (короткое имя материала),
-            # а не description (полный контекстный путь для эмбеддингов)
+            # ВАЖНО: Загружаем ВСЕ поля payload, включая path_level_N для извлечения папок
             scroll_result = await loop.run_in_executor(
                 db_manager.executor,
                 lambda: db_manager.client.scroll(
                     collection_name=collection_name,
                     limit=10000,  # Внутренний батч для производительности
                     offset=offset,
-                    with_payload=[
-                        "code",
-                        "full_description",  # Короткое имя материала для сравнения
-                        "description",       # Fallback для старых записей
-                    ],
+                    with_payload=True,  # ВСЕ поля, включая path_level_N и path_depth
                     with_vectors=False,  # Векторы не нужны (экономия памяти)
                     scroll_filter=folder_exclusion_filter,  # Исключаем папки
                 ),
@@ -6242,7 +6230,21 @@ async def get_all_codes(database: Optional[str] = None):
                 material_name = point.payload.get("full_description") or point.payload.get("description")
 
                 if code and material_name:
-                    all_records[code] = material_name
+                    # РАСШИРЕНО: Возвращаем объект с path_level_N для извлечения папок
+                    record_data = {
+                        "description": material_name,
+                        "full_description": material_name,
+                        "code": code,
+                        "path_depth": point.payload.get("path_depth", 0),
+                    }
+                    
+                    # Добавляем path_level_N поля
+                    path_depth = point.payload.get("path_depth", 0)
+                    for i in range(1, path_depth + 1):
+                        level_key = f"path_level_{i}"
+                        record_data[level_key] = point.payload.get(level_key, "")
+                    
+                    all_records[code] = record_data
 
             # Если offset None - достигли конца коллекции
             if offset is None:
@@ -6590,6 +6592,46 @@ def clean_text_for_json(text):
     )
 
     return text
+
+
+@app.get("/debug/check_code/{code}")
+async def debug_check_code(code: str, database: Optional[str] = None):
+    """DEBUG: Проверка записей по коду на дубликаты"""
+    try:
+        collection_name = database or db_manager.current_collection
+        logger.info(f"🔍 DEBUG: Поиск дубликатов для '{code}' в '{collection_name}'")
+        
+        # Получаем записи с payload
+        scroll_result = db_manager.client.scroll(
+            collection_name=collection_name,
+            scroll_filter=Filter(
+                must=[FieldCondition(key="code", match=MatchValue(value=code))]
+            ),
+            with_payload=True,
+            limit=100
+        )
+        
+        points, _ = scroll_result
+        
+        results = []
+        for p in points:
+            results.append({
+                "id": p.id,
+                "code": p.payload.get("code"),
+                "description": p.payload.get("description"),
+                "full_description": p.payload.get("full_description"),
+                "is_folder": p.payload.get("is_folder"),
+                "source": p.payload.get("source"),
+                "timestamp": p.payload.get("timestamp")
+            })
+            
+        return {
+            "status": "success",
+            "count": len(results),
+            "records": results
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 
 @app.post("/feedback/copy")
