@@ -127,6 +127,7 @@
                                     <th>Статус</th>
                                     <th>Прогресс</th>
                                     <th>Создано</th>
+                                    <th>Действия</th>
                                 </tr>
                             </thead>
                             <tbody id="jobsTableBody"></tbody>
@@ -191,6 +192,135 @@
                             <div class="save-statuses-section">
                                 <button id="saveStatusesBtn" class="btn btn-primary">
                                     <i class="fas fa-save"></i> Сохранить изменения
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Карточка: Настройки OpenRouter (генерация эмбеддингов) -->
+                        <div class="settings-card">
+                            <div class="settings-card-header">
+                                <i class="fas fa-cloud"></i>
+                                <h3>OpenRouter API</h3>
+                            </div>
+                            <p class="settings-card-desc">
+                                Настройте OpenRouter для генерации эмбеддингов через облачный API.
+                                При включении все эмбеддинги будут генерироваться через API вместо локальной модели.
+                            </p>
+
+                            <!-- Toggle включения OpenRouter -->
+                            <div class="openrouter-toggle-section">
+                                <div class="toggle-row">
+                                    <div class="toggle-info">
+                                        <span class="toggle-label">Использовать OpenRouter</span>
+                                        <span class="toggle-hint">Переключает генерацию эмбеддингов на облачный
+                                            API</span>
+                                    </div>
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" id="openrouterEnabled">
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- API Key -->
+                            <div class="openrouter-field-section">
+                                <label class="field-label">
+                                    <i class="fas fa-key"></i>
+                                    API Key
+                                </label>
+                                <div class="api-key-input-wrapper">
+                                    <input type="password" id="openrouterApiKey" placeholder="sk-or-v1-..."
+                                        autocomplete="off">
+                                    <button type="button" class="toggle-visibility-btn" id="toggleApiKeyVisibility"
+                                        title="Показать/скрыть">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                </div>
+                                <p class="field-hint">
+                                    Получите API ключ на <a href="https://openrouter.ai/keys" target="_blank"
+                                        rel="noopener">openrouter.ai/keys</a>
+                                </p>
+                            </div>
+
+                            <!-- Выбор модели -->
+                            <div class="openrouter-field-section">
+                                <label class="field-label">
+                                    <i class="fas fa-brain"></i>
+                                    Модель эмбеддингов
+                                </label>
+                                <select id="openrouterModel" class="form-select-modern">
+                                    <option value="qwen/qwen3-embedding-4b">qwen/qwen3-embedding-4b (рекомендуется)
+                                    </option>
+                                </select>
+                                <p class="field-hint">
+                                    Модель для генерации векторных представлений текста
+                                </p>
+                            </div>
+
+                            <!-- Статус подключения -->
+                            <div class="openrouter-status-section" id="openrouterStatus">
+                                <div class="status-indicator" id="openrouterStatusIndicator">
+                                    <i class="fas fa-circle"></i>
+                                    <span id="openrouterStatusText">Не настроено</span>
+                                </div>
+                            </div>
+
+                            <!-- Кнопки действий -->
+                            <div class="openrouter-actions">
+                                <button id="testOpenrouterBtn" class="btn btn-outline">
+                                    <i class="fas fa-plug"></i> Проверить подключение
+                                </button>
+                                <button id="saveOpenrouterBtn" class="btn btn-primary">
+                                    <i class="fas fa-save"></i> Сохранить
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Карточка: Правила очистки данных -->
+                        <div class="settings-card">
+                            <div class="settings-card-header">
+                                <i class="fas fa-broom"></i>
+                                <h3>Правила очистки данных</h3>
+                            </div>
+                            <p class="settings-card-desc">
+                                Regex-правила для автоматической очистки текстовых данных при импорте.
+                                Правила применяются ко всем текстовым полям (описание, иерархия).
+                            </p>
+
+                            <!-- Список правил очистки -->
+                            <div id="cleaningRulesList" class="cleaning-rules-list">
+                                <!-- Заполняется через JS -->
+                            </div>
+
+                            <!-- Форма добавления нового правила -->
+                            <div class="add-rule-section">
+                                <div class="add-rule-header">
+                                    <i class="fas fa-plus"></i>
+                                    <span>Добавить правило</span>
+                                </div>
+                                <div class="add-rule-form">
+                                    <div class="form-row">
+                                        <input type="text" id="newRuleName" placeholder="Название правила">
+                                    </div>
+                                    <div class="form-row">
+                                        <input type="text" id="newRulePattern" placeholder="Regex паттерн"
+                                            style="font-family: monospace;">
+                                    </div>
+                                    <div class="form-row">
+                                        <input type="text" id="newRuleReplacement"
+                                            placeholder="Замена (оставьте пустым для удаления)">
+                                        <button id="addCleaningRuleBtn" class="btn btn-primary"
+                                            title="Добавить правило">
+                                            <i class="fas fa-plus"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Кнопка сохранения -->
+                            <div class="save-rules-section">
+                                <button id="saveCleaningRulesBtn" class="btn btn-primary">
+                                    <i class="fas fa-save"></i> Сохранить правила
                                 </button>
                             </div>
                         </div>
@@ -356,37 +486,94 @@
 
                 <!-- Шаг 1: Вставка данных -->
                 <div id="importStep1" class="step-content active">
-                    <p style="margin-bottom: 15px; color: var(--adm-text-sec);">
-                        Скопируйте данные из Excel или CSV (включая заголовки) и вставьте ниже.
-                    </p>
 
-                    <!-- Выбор разделителя -->
-                    <div class="delimiter-selector" style="margin-bottom: 15px;">
-                        <label style="font-weight: 600; margin-bottom: 8px; display: block;">
-                            <i class="fas fa-columns"></i> Разделитель колонок:
-                        </label>
-                        <div class="delimiter-options">
-                            <label class="delimiter-option">
-                                <input type="radio" name="delimiter" value="tab" checked>
-                                <span class="delimiter-btn">Tab (Excel)</span>
+                    <!-- Вкладки: CSV / Excel -->
+                    <div class="import-source-tabs">
+                        <button class="source-tab active" data-source="paste">
+                            <i class="fas fa-paste"></i> Вставить CSV/TSV
+                        </button>
+                        <button class="source-tab" data-source="excel">
+                            <i class="fas fa-file-excel"></i> Загрузить Excel
+                        </button>
+                    </div>
+
+                    <!-- === ВКЛАДКА: Вставка CSV/TSV === -->
+                    <div id="importSourcePaste" class="import-source-content active">
+                        <p style="margin-bottom: 15px; color: var(--adm-text-sec);">
+                            Скопируйте данные из Excel или CSV (включая заголовки) и вставьте ниже.
+                        </p>
+
+                        <!-- Выбор разделителя -->
+                        <div class="delimiter-selector" style="margin-bottom: 15px;">
+                            <label style="font-weight: 600; margin-bottom: 8px; display: block;">
+                                <i class="fas fa-columns"></i> Разделитель колонок:
                             </label>
-                            <label class="delimiter-option">
-                                <input type="radio" name="delimiter" value=";">
-                                <span class="delimiter-btn">; (CSV RU)</span>
+                            <div class="delimiter-options">
+                                <label class="delimiter-option">
+                                    <input type="radio" name="delimiter" value="tab" checked>
+                                    <span class="delimiter-btn">Tab (Excel)</span>
+                                </label>
+                                <label class="delimiter-option">
+                                    <input type="radio" name="delimiter" value=";">
+                                    <span class="delimiter-btn">; (CSV RU)</span>
+                                </label>
+                                <label class="delimiter-option">
+                                    <input type="radio" name="delimiter" value=",">
+                                    <span class="delimiter-btn">, (CSV EN)</span>
+                                </label>
+                                <label class="delimiter-option">
+                                    <input type="radio" name="delimiter" value="auto">
+                                    <span class="delimiter-btn">Авто</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <textarea id="pasteArea" style="height: 180px; font-family: monospace;"
+                            placeholder="Вставьте данные TSV/CSV сюда..."></textarea>
+                    </div>
+
+                    <!-- === ВКЛАДКА: Загрузка Excel === -->
+                    <div id="importSourceExcel" class="import-source-content">
+                        <p style="margin-bottom: 15px; color: var(--adm-text-sec);">
+                            Загрузите Excel файл (.xlsx) напрямую — данные будут обработаны автоматически.
+                        </p>
+
+                        <!-- Зона drag-and-drop для Excel -->
+                        <div class="excel-drop-zone" id="excelDropZone">
+                            <i class="fas fa-file-excel"></i>
+                            <p>Перетащите Excel файл сюда</p>
+                            <span>или</span>
+                            <label for="excelFileInput" class="btn btn-outline" style="cursor: pointer;">
+                                <i class="fas fa-folder-open"></i> Выбрать файл
                             </label>
-                            <label class="delimiter-option">
-                                <input type="radio" name="delimiter" value=",">
-                                <span class="delimiter-btn">, (CSV EN)</span>
+                            <input type="file" id="excelFileInput" accept=".xlsx,.xls" hidden>
+                        </div>
+
+                        <!-- Информация о загруженном файле -->
+                        <div id="excelFileInfo" class="excel-file-info hidden">
+                            <div class="file-info-card">
+                                <i class="fas fa-file-excel"></i>
+                                <div class="file-details">
+                                    <span id="excelFileName" class="file-name">—</span>
+                                    <span id="excelFileStats" class="file-stats">—</span>
+                                </div>
+                                <button id="excelFileClear" class="btn btn-sm btn-outline" title="Очистить">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Выбор листа (если несколько) -->
+                        <div id="excelSheetSelector" class="excel-sheet-selector hidden">
+                            <label style="font-weight: 600; margin-bottom: 8px; display: block;">
+                                <i class="fas fa-layer-group"></i> Выберите лист:
                             </label>
-                            <label class="delimiter-option">
-                                <input type="radio" name="delimiter" value="auto">
-                                <span class="delimiter-btn">Авто</span>
-                            </label>
+                            <select id="excelSheetSelect" class="form-select-modern">
+                                <!-- Заполняется через JS -->
+                            </select>
                         </div>
                     </div>
 
-                    <textarea id="pasteArea" style="height: 180px; font-family: monospace;"
-                        placeholder="Вставьте данные TSV/CSV сюда..."></textarea>
                 </div>
 
                 <!-- Шаг 2: Маппинг колонок (3 панели) -->

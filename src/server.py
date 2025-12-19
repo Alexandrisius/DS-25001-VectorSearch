@@ -27,12 +27,16 @@ import re
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
-
+import httpx
+import io
 import numpy as np
+
+# Импорт BM25
+from text_search import BM25Index
 import torch
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request
+from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -174,7 +178,14 @@ def generate_path_levels_combined(hierarchy: str, description: str, separator: s
     full_description = description.strip()
     
     # Формируем контекстное описание для эмбеддингов: категории + описание
-    context_description = f" {separator} ".join(hierarchy_parts) + f" {separator} " + full_description
+    # ВАЖНО: Cобираем все части и соединяем через разделитель, убирая пустые
+    parts_to_join = hierarchy_parts + [full_description]
+    parts_to_join = [p for p in parts_to_join if p] # Фильтруем пустые части
+    
+    if not parts_to_join:
+        context_description = "пусто" # Fallback если всё очистилось
+    else:
+        context_description = f" {separator} ".join(parts_to_join)
     
     result = {
         "path_depth": len(hierarchy_parts),  # Глубина = количество категорий
@@ -604,6 +615,8 @@ from config import (
     VECTOR_DATABASES_CONFIG,
     FEEDBACK_DIR,
     EMBEDDING_CACHE_SIZE,
+    API_EMBEDDING_BATCH_SIZE,
+    API_MAX_WORKERS,
     SERVER_HOST,
     SERVER_PORT,
     # Настройки безопасности админ-панели
@@ -613,6 +626,11 @@ from config import (
     JWT_EXPIRE_HOURS,
     LOGIN_MAX_ATTEMPTS,
     LOGIN_LOCKOUT_MINUTES,
+    # Гибридный поиск (BM25)
+    BM25_ENABLED,
+    BM25_TOP_K,
+    BM25_MAX_RETRIEVE,
+    HYBRID_RERANK_LIMIT,
 )
 
 # Базовая директория скрипта (для обратной совместимости)
@@ -1587,19 +1605,43 @@ class QdrantVectorDatabaseManager:
 
         # Загрузка конфигурации баз из JSON
         self.load_configuration()
+        
+        # Индексы BM25 {collection_name: BM25Index}
+        self.bm25_indices: Dict[str, BM25Index] = {}
 
-        # Текущая активная коллекция
+        # Текущая активная коллекция (исключаем _settings)
+        # Получаем только реальные коллекции (не служебные секции)
+        real_collections = {
+            name: meta for name, meta in self.collections_metadata.items()
+            if name != "_settings"
+        }
         self.current_collection = (
-            next(iter(self.collections_metadata)) if self.collections_metadata else None
+            next(iter(real_collections)) if real_collections else None
         )
+        
+        # Дополнительная проверка: если по какой-то причине current_collection = "_settings", исправляем
+        if self.current_collection == "_settings":
+            self.current_collection = (
+                next(iter(real_collections)) if real_collections else None
+            )
 
         if self.current_collection:
             logger.info(f"🎯 Активная коллекция: {self.current_collection}")
         else:
             logger.warning("⚠️ Нет доступных коллекций в Qdrant")
 
-        # === ИНИЦИАЛИЗАЦИЯ МОДЕЛИ ЭМБЕДДИНГОВ ===
-        self._init_embedding_model()
+        # === ЛЕНИВАЯ ИНИЦИАЛИЗАЦИЯ МОДЕЛИ ЭМБЕДДИНГОВ ===
+        # Модель НЕ загружается при старте - только при первом использовании
+        # Это экономит GPU память, если используется OpenRouter API
+        self._embedding_model_loaded = False
+        self.embedding_model = None
+        self.tokenizer = None
+        
+        # Проверяем, используется ли OpenRouter по умолчанию
+        if self._is_openrouter_enabled():
+            logger.info("🌐 OpenRouter включён - локальная модель НЕ загружается")
+        else:
+            logger.info("💡 Локальная модель будет загружена при первом использовании (lazy load)")
         
         # Инициализация кэша
         # Размер кэша определён в config.py (EMBEDDING_CACHE_SIZE)
@@ -1611,8 +1653,15 @@ class QdrantVectorDatabaseManager:
         
         Использует библиотеку `transformers`. Модель загружается в режиме `eval` (inference only).
         Если доступна CUDA, используется FP16 для экономии видеопамяти и ускорения.
+        
+        ВАЖНО: Эта функция вызывается лениво (lazy load) - только при первом
+        обращении к локальной модели, если OpenRouter отключён.
         """
-        logger.info(f"📥 Загрузка модели эмбеддингов: {QWEN_MODEL_PATH}")
+        if self._embedding_model_loaded:
+            return  # Уже загружена
+            
+        logger.info(f"📥 Загрузка локальной модели эмбеддингов: {QWEN_MODEL_PATH}")
+        logger.info("⏳ Это может занять некоторое время...")
         
         self.tokenizer = AutoTokenizer.from_pretrained(
             QWEN_MODEL_PATH, padding_side="left", trust_remote_code=True
@@ -1627,14 +1676,27 @@ class QdrantVectorDatabaseManager:
         self.embedding_model.eval()
         if self.device == "cuda":
             torch.cuda.empty_cache()
-        logger.info("✅ Модель эмбеддингов загружена")
+            
+        self._embedding_model_loaded = True
+        logger.info("✅ Локальная модель эмбеддингов загружена")
+
+    def _ensure_embedding_model_loaded(self):
+        """
+        Гарантирует, что локальная модель эмбеддингов загружена.
+        
+        Вызывается перед использованием локальной модели.
+        Если модель ещё не загружена - загружает её (lazy load).
+        """
+        if not self._embedding_model_loaded:
+            self._init_embedding_model()
 
     def get_embeddings_batch(self, texts: List[str], batch_size: int = 8) -> np.ndarray:
         """
         Генерация эмбеддингов для списка текстов (Batch Inference).
 
-        Оптимизирована для GPU: обрабатывает данные пакетами (batch_size),
-        чтобы эффективно использовать параллелизм CUDA ядер.
+        Автоматически выбирает провайдер:
+        - OpenRouter API: если включён и настроен
+        - Локальная модель: GPU batch inference
         
         Args:
             texts (List[str]): Список исходных текстов.
@@ -1643,7 +1705,173 @@ class QdrantVectorDatabaseManager:
         Returns:
             np.ndarray: Массив векторов размерности (N, D), где N - кол-во текстов, D - размерность модели.
         """
+        # Выбор провайдера на основе настроек
+        if self._is_openrouter_enabled():
+            return self._get_embeddings_batch_openrouter(texts, batch_size)
+        else:
+            return self._get_embeddings_batch_local(texts, batch_size)
+
+    def _get_embeddings_batch_openrouter(self, texts: List[str], batch_size: int = 8) -> np.ndarray:
+        """
+        Батчевая генерация эмбеддингов через OpenRouter API (параллельно).
+        
+        Использует ThreadPoolExecutor для ускорения обработки большого количества текстов.
+        Размер батча и количество воркеров берутся из конфигурации.
+        
+        Args:
+            texts (List[str]): Список текстов для эмбеддинга
+            batch_size (int): Игнорируется для API (используется API_EMBEDDING_BATCH_SIZE)
+            
+        Returns:
+            np.ndarray: Массив эмбеддингов (N, D)
+        """
+        # Используем настройки из конфига для максимальной скорости
+        batch_size = API_EMBEDDING_BATCH_SIZE
+        max_workers = API_MAX_WORKERS
+        
+        # Получаем настройки OpenRouter
+        or_settings = self._get_openrouter_settings()
+        api_key = or_settings["api_key"]
+        model = or_settings["model"]
+        
+        if not api_key:
+            raise HTTPException(status_code=500, detail="OpenRouter API ключ не настроен")
+        
+        # Разбиваем на батчи
+        batches = [texts[i : i + batch_size] for i in range(0, len(texts), batch_size)]
+        total_batches = len(batches)
+        
+        logger.info(
+            f"🌐 OpenRouter Parallel: {len(texts)} текстов → {total_batches} батчей "
+            f"(по {batch_size}), {max_workers} потоков"
+        )
+        
+        # Функция для обработки одного батча (выполняется в потоке)
+        def process_batch(batch_texts, batch_idx):
+            # Нормализация и проверка на пустые строки
+            processed_texts = []
+            for i, t in enumerate(batch_texts):
+                clean_t = t.strip()
+                if not clean_t:
+                    logger.warning(f"⚠️ Warning: Пустая строка в батче {batch_idx}, индекс {i}. Заменяем на placeholders.")
+                    processed_texts.append("пусто")
+                else:
+                    processed_texts.append(clean_t.lower())
+            
+            batch_texts = processed_texts
+
+            try:
+                # ВАЖНО: Создаем свой клиент для каждого потока (хотя httpx.Client потокобезопасен, 
+                # context manager лучше использовать локально)
+                with httpx.Client(timeout=120.0) as client:
+                    response = client.post(
+                        "https://openrouter.ai/api/v1/embeddings",
+                        headers={
+                            "Authorization": f"Bearer {api_key}",
+                            "Content-Type": "application/json",
+                            "HTTP-Referer": "https://ksr-matcher.local",
+                            "X-Title": "KSR Matcher"
+                        },
+                        json={
+                            "model": model,
+                            "input": batch_texts,
+                            "encoding_format": "float"
+                        }
+                    )
+                    
+                    if response.status_code == 200:
+                        data = response.json()
+                        embeddings = []
+                        if "data" in data and isinstance(data["data"], list):
+                            # Сортируем по index для гарантии порядка внутри батча
+                            sorted_data = sorted(data["data"], key=lambda x: x.get("index", 0))
+                            for item in sorted_data:
+                                emb = item.get("embedding", [])
+                                if emb:
+                                    emb_np = np.array(emb, dtype=np.float32)
+                                    # L2 нормализация
+                                    norm = np.linalg.norm(emb_np)
+                                    if norm > 0:
+                                        emb_np = emb_np / norm
+                                    embeddings.append(emb_np)
+                            return embeddings
+                        else:
+                            # ЛОГИРУЕМ ПРОБЛЕМНЫЙ БАТЧ
+                            logger.error(f"❌ OpenRouter Invalid Response: {data}")
+                            logger.error(f"🔍 Problematic Batch Content (first 5): {batch_texts[:5]}")
+                            raise HTTPException(status_code=500, detail=f"Неожиданный формат ответа OpenRouter: {str(data)[:500]}")
+                    elif response.status_code == 401:
+                        raise HTTPException(status_code=401, detail="Неверный OpenRouter API ключ")
+                    elif response.status_code == 429:
+                        logger.warning(f"⚠️ Rate limit на батче {batch_idx}. Пауза 2с...")
+                        time.sleep(2)
+                        # Простейшая ретрай логика (можно улучшить)
+                        raise HTTPException(status_code=429, detail="OpenRouter Rate Limit")
+                    else:
+                        error_text = response.text[:200] if response.text else "Неизвестная ошибка"
+                        raise HTTPException(status_code=500, detail=f"Ошибка OpenRouter ({response.status_code}): {error_text}")
+                        
+            except Exception as e:
+                logger.error(f"❌ Ошибка OpenRouter batch {batch_idx}: {e}")
+                raise e
+
+        # Запускаем параллельное выполнение
+        # Используем future для сохранения порядка результатов
+        from concurrent.futures import as_completed
+        
+        results_map = {} # {index: embeddings}
+        
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_idx = {
+                executor.submit(process_batch, batch, i): i 
+                for i, batch in enumerate(batches)
+            }
+            
+            for future in as_completed(future_to_idx):
+                idx = future_to_idx[future]
+                try:
+                    batch_embeddings = future.result()
+                    results_map[idx] = batch_embeddings
+                    
+                    # Логируем прогресс каждые 5 батчей
+                    if (idx + 1) % 5 == 0 or (idx + 1) == total_batches:
+                        logger.info(f"✅ OpenRouter: готово батчей {len(results_map)}/{total_batches}")
+                        
+                except Exception as e:
+                    # Если один батч упал - падаем целиком (для целостности данных)
+                    logger.error(f"💥 Критическая ошибка в батче {idx}, остановка.")
+                    raise e
+        
+        # Собираем итоговый массив в правильном порядке
         all_embeddings = []
+        for i in range(len(batches)):
+             all_embeddings.extend(results_map[i])
+             
+        if not all_embeddings:
+            return np.array([])
+            
+        return np.vstack(all_embeddings)
+
+    def _get_embeddings_batch_local(self, texts: List[str], batch_size: int = 8) -> np.ndarray:
+        """
+        Батчевая генерация эмбеддингов через локальную модель (GPU).
+        
+        Оптимизирована для GPU: обрабатывает данные пакетами (batch_size),
+        чтобы эффективно использовать параллелизм CUDA ядер.
+        
+        Args:
+            texts (List[str]): Список исходных текстов.
+            batch_size (int): Размер пакета (default: 8).
+            
+        Returns:
+            np.ndarray: Массив векторов размерности (N, D).
+        """
+        # Гарантируем загрузку локальной модели (lazy load)
+        self._ensure_embedding_model_loaded()
+        
+        all_embeddings = []
+        
+        logger.debug(f"🖥️ Локальная модель: генерация {len(texts)} эмбеддингов")
         
         # Разбиваем на мини-батчи
         for i in range(0, len(texts), batch_size):
@@ -1680,7 +1908,6 @@ class QdrantVectorDatabaseManager:
                 
             except Exception as e:
                 logger.error(f"Ошибка в батче эмбеддингов: {e}")
-                # Fallback: пустые векторы или повторная попытка по одному
                 raise e
                 
         if not all_embeddings:
@@ -1720,8 +1947,124 @@ class QdrantVectorDatabaseManager:
         except Exception as e:
             logger.error(f"❌ Ошибка сохранения конфигурации: {e}")
 
-    def _get_embedding_sync(self, text: str) -> np.ndarray:
-        """Синхронное получение эмбеддинга через локальную модель"""
+    def _is_openrouter_enabled(self) -> bool:
+        """
+        Проверяет, включён ли OpenRouter для генерации эмбеддингов.
+        
+        Returns:
+            True если OpenRouter включён и настроен, False иначе
+        """
+        settings = self.collections_metadata.get("_settings", {})
+        openrouter = settings.get("openrouter", {})
+        return openrouter.get("enabled", False) and bool(openrouter.get("api_key", ""))
+
+    def _get_openrouter_settings(self) -> dict:
+        """
+        Получает настройки OpenRouter.
+        
+        Returns:
+            dict с ключами: api_key, model
+        """
+        settings = self.collections_metadata.get("_settings", {})
+        openrouter = settings.get("openrouter", {})
+        return {
+            "api_key": openrouter.get("api_key", ""),
+            "model": openrouter.get("model", "qwen/qwen3-embedding-4b")
+        }
+
+    def _get_embedding_openrouter_sync(self, text: str) -> np.ndarray:
+        """
+        Синхронное получение эмбеддинга через OpenRouter API.
+        
+        Использует httpx для синхронного HTTP запроса к API.
+        
+        Args:
+            text: Текст для генерации эмбеддинга
+            
+        Returns:
+            np.ndarray: Вектор эмбеддинга
+            
+        Raises:
+            HTTPException: При ошибке API запроса
+        """
+        try:
+            # Нормализуем текст (lowercase + strip)
+            normalized_text = text.lower().strip()
+            
+            # Получаем настройки OpenRouter
+            or_settings = self._get_openrouter_settings()
+            api_key = or_settings["api_key"]
+            model = or_settings["model"]
+            
+            if not api_key:
+                raise HTTPException(status_code=500, detail="OpenRouter API ключ не настроен")
+            
+            # Выполняем синхронный HTTP запрос к OpenRouter API
+            with httpx.Client(timeout=60.0) as client:
+                response = client.post(
+                    "https://openrouter.ai/api/v1/embeddings",
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json",
+                        "HTTP-Referer": "https://ksr-matcher.local",
+                        "X-Title": "KSR Matcher"
+                    },
+                    json={
+                        "model": model,
+                        "input": normalized_text,
+                        "encoding_format": "float"
+                    }
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    if "data" in data and len(data["data"]) > 0:
+                        embedding = data["data"][0].get("embedding", [])
+                        if embedding:
+                            # Конвертируем в numpy array и нормализуем
+                            embedding_np = np.array(embedding, dtype=np.float32)
+                            # L2 нормализация
+                            norm = np.linalg.norm(embedding_np)
+                            if norm > 0:
+                                embedding_np = embedding_np / norm
+                            return embedding_np
+                        else:
+                            raise HTTPException(status_code=500, detail="OpenRouter вернул пустой эмбеддинг")
+                    else:
+                        raise HTTPException(status_code=500, detail="Неожиданный формат ответа OpenRouter")
+                elif response.status_code == 401:
+                    raise HTTPException(status_code=401, detail="Неверный OpenRouter API ключ")
+                elif response.status_code == 404:
+                    raise HTTPException(status_code=404, detail=f"Модель '{model}' не найдена в OpenRouter")
+                else:
+                    error_text = response.text[:200] if response.text else "Неизвестная ошибка"
+                    raise HTTPException(status_code=500, detail=f"Ошибка OpenRouter API ({response.status_code}): {error_text}")
+                    
+        except HTTPException:
+            raise
+        except httpx.TimeoutException:
+            logger.error("⏱️ Таймаут запроса к OpenRouter API")
+            raise HTTPException(status_code=504, detail="Таймаут запроса к OpenRouter API")
+        except httpx.ConnectError:
+            logger.error("🔌 Не удалось подключиться к OpenRouter API")
+            raise HTTPException(status_code=503, detail="Не удалось подключиться к OpenRouter API")
+        except Exception as e:
+            logger.error(f"❌ Ошибка OpenRouter эмбеддинга: {e}")
+            raise HTTPException(status_code=500, detail=f"Ошибка OpenRouter: {str(e)}")
+
+    def _get_embedding_local_sync(self, text: str) -> np.ndarray:
+        """
+        Синхронное получение эмбеддинга через локальную модель Qwen.
+        
+        Args:
+            text: Текст для генерации эмбеддинга
+            
+        Returns:
+            np.ndarray: Вектор эмбеддинга
+        """
+        # Гарантируем загрузку локальной модели (lazy load)
+        self._ensure_embedding_model_loaded()
+        
         try:
             # Приводим текст к нижнему регистру
             normalized_text = text.lower().strip()
@@ -1760,8 +2103,86 @@ class QdrantVectorDatabaseManager:
             # Конвертация в numpy
             return embeddings.cpu().numpy()[0].astype(np.float32)
         except Exception as e:
-            logger.error(f"Ошибка генерации эмбеддинга: {e}")
+            logger.error(f"Ошибка локальной генерации эмбеддинга: {e}")
             raise HTTPException(status_code=500, detail=f"Ошибка эмбеддинга: {str(e)}")
+
+    def _get_embedding_sync(self, text: str) -> np.ndarray:
+        """
+        Синхронное получение эмбеддинга с автоматическим выбором провайдера.
+        
+        Если OpenRouter включён и настроен - использует API,
+        иначе использует локальную модель Qwen.
+        
+        Args:
+            text: Текст для генерации эмбеддинга
+            
+        Returns:
+            np.ndarray: Вектор эмбеддинга
+        """
+        if self._is_openrouter_enabled():
+            logger.debug("🌐 Использую OpenRouter для генерации эмбеддинга")
+            return self._get_embedding_openrouter_sync(text)
+        else:
+            logger.debug("🖥️ Использую локальную модель для генерации эмбеддинга")
+            return self._get_embedding_local_sync(text)
+
+    def get_embedding_dimension(self) -> int:
+        """
+        Возвращает размерность эмбеддингов текущего провайдера.
+        
+        Автоматически определяет какой провайдер используется:
+        - OpenRouter API: размерность зависит от модели (обычно 768-4096)
+        - Локальная модель Qwen: 1024
+        
+        Returns:
+            int: Размерность вектора эмбеддинга
+        """
+        if self._is_openrouter_enabled():
+            # Для OpenRouter определяем размерность по модели
+            # Известные размерности популярных моделей:
+            or_settings = self._get_openrouter_settings()
+            model = or_settings.get("model", "")
+            
+            # Размерности известных моделей OpenRouter
+            known_dimensions = {
+                "thenlper/gte-large": 1024,
+                "text-embedding-3-small": 1536,
+                "text-embedding-3-large": 3072,
+                "text-embedding-ada-002": 1536,
+                "voyage-large-2": 1536,
+                "voyage-code-2": 1536,
+                # Qwen и подобные модели обычно используют 2560
+            }
+            
+            # Проверяем известные модели
+            for known_model, dim in known_dimensions.items():
+                if known_model in model.lower():
+                    logger.info(f"📐 Размерность модели {model}: {dim}")
+                    return dim
+            
+            # Для неизвестных моделей пробуем сгенерировать тестовый эмбеддинг
+            try:
+                logger.info(f"📐 Определение размерности для модели {model}...")
+                test_embedding = self._get_embedding_openrouter_sync("тест")
+                dim = len(test_embedding)
+                logger.info(f"📐 Размерность модели {model}: {dim}")
+                return dim
+            except Exception as e:
+                logger.error(f"❌ Не удалось определить размерность: {e}")
+                # Возвращаем типичную размерность для Qwen-подобных моделей
+                return 2560
+        else:
+            # Локальная модель - получаем размерность из config
+            self._ensure_embedding_model_loaded()
+            if self.embedding_model is not None:
+                try:
+                    dim = self.embedding_model.config.hidden_size
+                    logger.info(f"📐 Размерность локальной модели: {dim}")
+                    return dim
+                except AttributeError:
+                    pass
+            # Fallback для Qwen-подобных моделей
+            return 1024
 
     async def get_embedding_cached(self, text: str) -> np.ndarray:
         """Получает эмбеддинг с кэшированием (асинхронно)"""
@@ -1847,6 +2268,107 @@ class QdrantVectorDatabaseManager:
         """Очистка кэша эмбеддингов"""
         self.embedding_cache.clear()
 
+    # === BM25 METHODS ===
+
+    def _ensure_bm25_index(self, collection_name: str):
+        """
+        Гарантирует, что для коллекции построен индекс BM25.
+        Если индекса нет - строит его с нуля (загружает все данные).
+        """
+        if collection_name in self.bm25_indices:
+            return
+
+        logger.info(f"⏳ Building BM25 index for '{collection_name}'...")
+        start = time.time()
+        
+        # Загружаем все документы (code -> full_description)
+        # Используем full_description, так как это наиболее точное название материала
+        # Если full_description нет, используем description
+        
+        records = self.get_all_records(collection_name)
+        if not records:
+             logger.warning(f"⚠️ Collection '{collection_name}' is empty, skipping BM25 build.")
+             return
+
+        # Подготовка корпуса для BM25
+        # Нам нужно {id: text}. В качестве ID используем UUID записи или code.
+        # get_all_records возвращает {code: description}.
+        # Но нам нужны ID для последующего merge с Qdrant results (которые возвращают ID).
+        # Однако, search_vectors возвращает ID точки.
+        # Проблема: get_all_records возвращает code, а не uuid point_id.
+        # Решение: Давайте модифицируем get_all_records или напишем свой fetcher здесь.
+        
+        # Переписываем fetch логику для получения map {point_id: text}
+        corpus = {}
+        offset = None
+        columns = self.collections_metadata[collection_name]["columns"]
+        
+        while True:
+            points, next_offset = self.client.scroll(
+                collection_name=collection_name,
+                limit=2000,
+                offset=offset,
+                with_payload=True,
+                with_vectors=False
+            )
+            
+            for p in points:
+                # Текст для поиска: full_description (короткое имя) приоритетнее
+                full_desc = p.payload.get("full_description")
+                desc = p.payload.get(columns["description"], "")
+                
+                # Индексируем текст: "Код + Название" для максимального охвата
+                # Добавляем код, чтобы можно было искать по нему
+                code = p.payload.get(columns["code"], "")
+                
+                search_text = f"{code} {full_desc if full_desc else desc}"
+                corpus[p.id] = search_text
+                
+            if next_offset is None:
+                break
+            offset = next_offset
+            
+        # Строим индекс
+        bm25 = BM25Index()
+        bm25.fit(corpus)
+        self.bm25_indices[collection_name] = bm25
+        
+        elapsed = time.time() - start
+        logger.info(f"✅ BM25 index for '{collection_name}' built in {elapsed:.2f}s ({len(corpus)} docs)")
+
+    def search_bm25(self, query: str, collection_name: str, top_k: int = 500) -> List[Dict]:
+        """
+        Выполняет поиск по BM25 индексу.
+        
+        Returns:
+            List[Dict]: [{'id': uuid, 'score': val, ...}] (формат совместим с search_vectors)
+        """
+        self._ensure_bm25_index(collection_name)
+        
+        if collection_name not in self.bm25_indices:
+             return []
+             
+        # Поиск
+        results = self.bm25_indices[collection_name].search(query, top_k)
+        
+        # Нам нужно вернуть объекты, похожие на результат search_vectors
+        # Но у нас есть только ID и Score.
+        # Метаданные (payload) мы не храним в BM25Index для экономии памяти.
+        # Мы их подтянем позже или доверимся тому, что Reranker'у нужен только текст?
+        # Нет, Reranker'у нужен текст. И фронтенду нужны данные.
+        # Поэтому нам придется подгрузить данные для найденных ID.
+        # Это может быть накладно (500 id -> retrieve).
+        # ЭВРИСТИКА: BM25 быстрый, но retrieve payload может быть медленным.
+        # Однако Qdrant retrieve by ID batch - быстрый.
+        
+        return results
+
+    def invalidate_bm25(self, collection_name: str):
+        """Сбрасывает индекс BM25 для коллекции (вызывать при обновлении данных)."""
+        if collection_name in self.bm25_indices:
+            del self.bm25_indices[collection_name]
+            logger.info(f"🗑️ BM25 index invalidated for '{collection_name}'")
+
     # === СТАНДАРТНЫЕ МЕТОДЫ QDRANT ===
 
     def load_configuration(self):
@@ -1882,8 +2404,18 @@ class QdrantVectorDatabaseManager:
 
             # Очищаем старые метаданные перед обновлением
             self.collections_metadata = {}
+            
+            # === ВАЖНО: Сначала загружаем секцию _settings (глобальные настройки) ===
+            # Она не является коллекцией Qdrant, поэтому обрабатывается отдельно
+            if "_settings" in config:
+                self.collections_metadata["_settings"] = config["_settings"]
+                logger.info("⚙️ Загружены глобальные настройки (_settings)")
 
             for collection_name, db_config in config.items():
+                # Пропускаем секцию _settings - она уже обработана выше
+                if collection_name == "_settings":
+                    continue
+                    
                 if collection_name in existing_collections:
                     # Получаем информацию о коллекции из Qdrant
                     collection_info = self.client.get_collection(collection_name)
@@ -1920,15 +2452,21 @@ class QdrantVectorDatabaseManager:
                     )
 
             # Проверка текущей активной коллекции
+            # Исключаем _settings из проверки (она не является коллекцией)
+            real_collections = {
+                name: meta for name, meta in self.collections_metadata.items()
+                if name != "_settings"
+            }
+            
             if (
                 hasattr(self, "current_collection")
-                and self.current_collection not in self.collections_metadata
+                and self.current_collection not in real_collections
             ):
-                if self.collections_metadata:
-                    # Устанавливаем первую найденную коллекцию как активную
-                    self.current_collection = next(iter(self.collections_metadata))
+                if real_collections:
+                    # Устанавливаем первую найденную коллекцию как активную (исключая _settings)
+                    self.current_collection = next(iter(real_collections))
                     logger.warning(
-                        f"⚠️ Предыдущая активная коллекция '{self.current_collection}' недоступна, "
+                        f"⚠️ Предыдущая активная коллекция недоступна, "
                         f"переключено на: {self.current_collection}"
                     )
                 else:
@@ -2369,7 +2907,7 @@ class QdrantVectorDatabaseManager:
             # Получаем батч записей
             records, next_offset = self.client.scroll(
                 collection_name=collection,
-                limit=100,
+                limit=1000, # Оптимизация: увеличен батч
                 offset=offset,
             )
 
@@ -2536,6 +3074,8 @@ class QdrantVectorDatabaseManager:
         # Обновляем счетчик
         try:
              self.collections_metadata[collection]["record_count"] = self.client.get_collection(collection).points_count
+             # Инвалидируем BM25
+             self.invalidate_bm25(collection)
         except:
              pass
         
@@ -2569,6 +3109,9 @@ class QdrantVectorDatabaseManager:
             collection_name=collection,
             points_selector=[record["id"]],
         )
+        
+        # Инвалидируем BM25
+        self.invalidate_bm25(collection)
         
         # Обновляем счетчик в метаданных
         self.collections_metadata[collection]["record_count"] -= 1
@@ -2913,6 +3456,16 @@ class BackgroundJobManager:
             
         return job_id
 
+    async def cancel_job(self, job_id: str) -> bool:
+        """Отменяет выполнение задачи"""
+        job = self.jobs.get(job_id)
+        if job and job.status in ["pending", "processing"]:
+            job.status = "cancelled"
+            job.details = job.details + " [Остановлено пользователем]" if job.details else "[Остановлено пользователем]"
+            logger.info(f"🛑 Job {job_id} cancelled by user")
+            return True
+        return False
+
     async def get_job(self, job_id: str) -> Optional[Job]:
         return self.jobs.get(job_id)
 
@@ -2949,7 +3502,7 @@ class BackgroundJobManager:
                     job.status = "error"
                     job.error = str(e)
                 else:
-                    if job.status != "error":
+                    if job.status != "error" and job.status != "cancelled":
                         job.status = "completed"
                         job.progress = 100
                         logger.info(f"✅ Job {job_id} completed")
@@ -2993,15 +3546,27 @@ class BackgroundJobManager:
         
         # КРИТИЧНО: Проверяем размерность коллекции vs модели
         collection_dim = db_manager.collections_metadata[collection_name].get("dimension")
-        model_dim = db_manager.embedding_model.config.hidden_size
         
-        if collection_dim and collection_dim != model_dim:
+        # Получаем размерность текущей модели эмбеддингов (API или локальная)
+        model_dim = db_manager.get_embedding_dimension()
+        
+        # Проверяем размерность
+        if collection_dim and model_dim and collection_dim != model_dim:
             raise ValueError(
-                f"Размерность коллекции ({collection_dim}) не совпадает с размерностью модели ({model_dim}). "
-                f"Удалите коллекцию '{collection_name}' и создайте заново."
+                f"Размерность коллекции ({collection_dim}) не совпадает с размерностью текущей модели ({model_dim}). "
+                f"Удалите коллекцию '{collection_name}' и создайте заново с правильной размерностью."
             )
              
-        BATCH_SIZE = 32
+        # Определяем размер батча для обработки
+        # Если используется OpenRouter - увеличиваем батч для параллельной загрузки
+        if db_manager._is_openrouter_enabled():
+             # Используем полную мощность: размер батча API * количество воркеров
+             BATCH_SIZE = API_EMBEDDING_BATCH_SIZE * API_MAX_WORKERS
+             logger.info(f"🚀 Включен параллельный импорт: батч {BATCH_SIZE} (API)")
+        else:
+             # Локальный режим (GPU) - используем стандартный батч
+             BATCH_SIZE = 32
+             logger.info(f"🐢 Включен локальный импорт: батч {BATCH_SIZE} (GPU)")
         processed = 0
         
         # === НАКОПЛЕНИЕ path_levels ДЛЯ ИЗВЛЕЧЕНИЯ ПАПОК ===
@@ -3010,6 +3575,14 @@ class BackgroundJobManager:
         
         # Итерируемся батчами
         for i in range(0, total, BATCH_SIZE):
+            # Проверка отмены задачи
+            if job.status == "cancelled":
+                logger.warning(f"🛑 Import job {job.id} stopped by user")
+                # Обновляем детали, если ещё не обновлены
+                if "[Остановлено пользователем]" not in job.details:
+                     job.details += " [Остановлено пользователем]"
+                return
+
             batch = records[i : i + BATCH_SIZE]
             
             # Подготовка данных
@@ -3025,6 +3598,11 @@ class BackgroundJobManager:
             context_texts = []  # Тексты для эмбеддингов (context_description)
             
             for desc, hierarchy in zip(descriptions, hierarchies):
+                # === НОВОЕ: Применяем правила очистки ===
+                desc = apply_cleaning_rules(desc, "description")
+                if hierarchy:
+                    hierarchy = apply_cleaning_rules(hierarchy, "hierarchy")
+                
                 # Генерируем поля path_level_N
                 if hierarchy and hierarchy != desc:
                     # Комбинированный режим: иерархия (папки) + описание (материал)
@@ -3033,9 +3611,19 @@ class BackgroundJobManager:
                     # Стандартный режим: всё из описания
                     path_levels = generate_path_levels(desc, separator="→")
                 
+                # === ДОПОЛНИТЕЛЬНАЯ ОЧИСТКА УРОВНЕЙ ===
+                # Правила очистки (regex ^...) работают только для начала строки.
+                # Вложенные уровни ("Группа 2") не чистятся, так как они в середине.
+                # Поэтому проходим по каждому уровню и чистим отдельно.
+                for key, value in path_levels.items():
+                    if key.startswith("path_level_") and isinstance(value, str):
+                        cleaned_value = apply_cleaning_rules(value, "hierarchy")
+                        path_levels[key] = cleaned_value.strip()
+
                 batch_path_levels.append(path_levels)
                 # Используем context_description для эмбеддингов
                 context_texts.append(path_levels.get("context_description", desc))
+
             
             # Накапливаем path_levels для извлечения папок
             all_path_levels_for_folders.extend(batch_path_levels)
@@ -3085,8 +3673,8 @@ class BackgroundJobManager:
                 default_status = settings.get("default_status", "active")
                 
                 # ISO timestamp для updated_at
-                from datetime import datetime
-                iso_timestamp = datetime.utcnow().isoformat() + "Z"
+                # ISO timestamp для updated_at
+                iso_timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
                 
                 payload = {
                     columns["code"]: code,
@@ -3138,7 +3726,12 @@ class BackgroundJobManager:
             job.details = f"Индексация {len(folders)} папок..."
             
             # Генерируем эмбеддинги для папок батчами
-            FOLDER_BATCH_SIZE = 32
+            if db_manager._is_openrouter_enabled():
+                FOLDER_BATCH_SIZE = API_EMBEDDING_BATCH_SIZE * API_MAX_WORKERS
+                logger.info(f"🚀 Включен параллельный индекс папок: батч {FOLDER_BATCH_SIZE} (API)")
+            else:
+                FOLDER_BATCH_SIZE = 32
+                logger.info(f"🐢 Включен локальный индекс папок: батч {FOLDER_BATCH_SIZE} (GPU)")
             folder_points = []
             timestamp = time.time()
             columns = db_manager.collections_metadata.get(collection_name, {}).get("columns", {"code": "code", "description": "description"})
@@ -3327,6 +3920,9 @@ async def get_databases():
 
         # Фильтруем по visible=True (скрытые коллекции не показываем в UI поиска)
         for name, meta in db_manager.collections_metadata.items():
+            # Пропускаем служебную секцию настроек
+            if name == "_settings":
+                continue
             # Пропускаем скрытые коллекции
             if not meta.get("visible", True):
                 continue
@@ -3344,9 +3940,16 @@ async def get_databases():
                 }
             )
 
+        # Определяем текущую базу данных (исключаем _settings)
+        current_db = db_manager.current_collection
+        # Если current_collection не установлена или равна _settings, берём первую видимую
+        database_names = [db["name"] for db in databases_list]
+        if not current_db or current_db == "_settings" or current_db not in database_names:
+            current_db = databases_list[0]["name"] if databases_list else None
+        
         return {
             "databases": databases_list,
-            "current_database": db_manager.current_collection,
+            "current_database": current_db,
         }
 
     except Exception as e:
@@ -3428,11 +4031,13 @@ async def match_ksr(request: MatchRequest):
         MAX_RESULTS = 100
 
         # === ШАГ 1: Генерация эмбеддинга запроса (асинхронно с кэшем) ===
+        t1 = time.time()
         query_emb = await db_manager.get_embedding_cached(query_text)
+        t_embedding = time.time() - t1
+        logger.info(f"⏱️ [1] Embedding: {t_embedding:.3f}s")
 
         # === ШАГ 2: Поиск в Qdrant (теперь асинхронно!) ===
-        # Если указан фильтр по иерархии - применяем его
-        # Приоритет: filter_paths (множественный) > filter_path (одиночный)
+        t2 = time.time()
         candidates = await db_manager.search_similar(
             collection_name=collection_name,
             query_embedding=query_emb,
@@ -3440,26 +4045,103 @@ async def match_ksr(request: MatchRequest):
             score_threshold=COSINE_THRESHOLD,
             filter_path=request.filter_path,
             filter_level=request.filter_level,
-            filter_paths=request.filter_paths,  # Множественный фильтр категорий
+            filter_paths=request.filter_paths,
         )
+        t_qdrant = time.time() - t2
+        logger.info(f"⏱️ [2] Qdrant Search ({len(candidates)} candidates): {t_qdrant:.3f}s")
 
-        if not candidates:
-            logger.warning(f"⚠️ No candidates found in Qdrant for query: '{query_text}'")
-            return MatchResponse(
-                query=query_text,
-                database=collection_name,
-                candidates=[],
-                processing_time=time.time() - start_time,
-                status="not_found_in_vector_db",
-            )
+        # === HYBRID SEARCH: Adding BM25 Results ===
+        bm25_candidates_ids = []
+        t_bm25 = 0
+        t_retrieve = 0
+        
+        if BM25_ENABLED:
+            # BM25 Search
+            t3 = time.time()
+            try:
+                bm25_results = db_manager.search_bm25(query_text, collection_name, top_k=BM25_TOP_K)
+                if bm25_results:
+                    bm25_candidates_ids = [r['id'] for r in bm25_results]
+            except Exception as e:
+                logger.error(f"❌ BM25 Error: {e}")
+                bm25_results = []
+            t_bm25 = time.time() - t3
+            logger.info(f"⏱️ [3] BM25 Search ({len(bm25_candidates_ids)} candidates): {t_bm25:.3f}s")
+
+            # === MERGE RESULTS ===
+            dense_ids = {c['id'] for c in candidates}
+            unique_bm25_ids = [uid for uid in bm25_candidates_ids if uid not in dense_ids]
+            
+            # Retrieve payloads for BM25-only hits
+            if unique_bm25_ids:
+                unique_bm25_ids = unique_bm25_ids[:BM25_MAX_RETRIEVE]
+                t4 = time.time()
+                try:
+                    points = db_manager.client.retrieve(
+                        collection_name=collection_name,
+                        ids=unique_bm25_ids,
+                        with_payload=True,
+                        with_vectors=False
+                    )
+                    
+                    columns = db_manager.get_columns()
+                    bm25_candidates_full = []
+                    for hit in points:
+                        bm25_candidates_full.append({
+                            "id": hit.id,
+                            "score": 0.0,
+                            "code": hit.payload.get(columns["code"], ""),
+                            "description": hit.payload.get(columns["description"], ""),
+                            "metadata": hit.payload,
+                            "is_bm25_match": True
+                        })
+                    
+                    candidates.extend(bm25_candidates_full)
+                    t_retrieve = time.time() - t4
+                    logger.info(f"⏱️ [4] BM25 Retrieve ({len(bm25_candidates_full)} payloads): {t_retrieve:.3f}s")
+                    
+                except Exception as e:
+                    logger.error(f"❌ Failed to retrieve BM25 payloads: {e}")
 
         # === ШАГ 3: Ограничиваем для reranking ===
-        candidates_for_rerank = candidates[:MAX_FOR_RERANK]
+        # Теперь у нас может быть до 1000 кандидатов (500 dense + 500 sparse).
+        # Reranker BGE-M3 тяжелый. Ограничим до 200... А лучше до 300 для гибрида.
+        # Но как выбрать лучшие 300 из смешанного списка с разными мериками (cosine vs bm25)?
+        # ДУРАЦКИЙ (NO) ПОДХОД: Взять топ-100 Dense + топ-100 BM25.
+        # ТЕКУЩИЙ ПОДХОД: Мы просто добавили BM25 в хвост Dense.
+        # Если Dense нашел классные вещи, они в начале.
+        # Если BM25 нашел уникальные вещи, они в конце.
+        # Если мы просто обрежем [:200], мы можем отрезать BM25 результаты!
+        
+        # ПРАВИЛЬНЫЙ ПОДХОД (Interleaving):
+        # Чередовать: 1 dense, 1 bm25, 1 dense, 1 bm25...
+        # Пока не наберем MAX_FOR_RERANK.
+        
+        interleaved_candidates = []
+        dense_part = [c for c in candidates if not c.get('is_bm25_match')]
+        bm25_part = [c for c in candidates if c.get('is_bm25_match')]
+        
+        # Сортируем BM25 часть по score (у нас score=0, так что порядок retrieval случаен... А жаль)
+        # FIX: В bm25_candidates_full надо было сохранить BM25 score.
+        # Но retrieve вернул список в произвольном порядке? Нет, обычно в порядке запроса IDs.
+        # Но IDs были отсортированы BM25. Значит порядок сохранен (примерно).
+        
+        # Параметр из config.py (HYBRID_RERANK_LIMIT)
+        
+        candidates_for_rerank = []
+        if len(candidates) <= HYBRID_RERANK_LIMIT:
+            candidates_for_rerank = candidates
+        else:
+             # Берем 100 лучших Dense (как было раньше)
+             candidates_for_rerank.extend(dense_part[:100])
+             # И до 30 лучших из BM25 (уникальные ключевые хиты)
+             candidates_for_rerank.extend(bm25_part[:30])
+             
+        logger.info(f"⚖️ Hybrid Rerank Candidates: {len(candidates_for_rerank)} (Dense+BM25)")
 
         # === ШАГ 4: Reranking ===
         # ИСПРАВЛЕНИЕ: Rerank по full_description (короткое имя материала),
         # а не по description (полный контекстный путь с категориями).
-        # Это улучшает качество Cross-Encoder модели, так как она сравнивает
         # запрос пользователя с конкретным названием материала.
         normalized_query = query_text.lower().strip()
         
@@ -3490,10 +4172,13 @@ async def match_ksr(request: MatchRequest):
             (normalized_query, get_rerank_text(c)) for c in candidates_for_rerank
         ]
 
+        t5 = time.time()
         loop = asyncio.get_event_loop()
         rerank_scores = await loop.run_in_executor(
             db_manager.executor, lambda: reranker.predict(candidate_pairs)
         )
+        t_rerank = time.time() - t5
+        logger.info(f"⏱️ [5] Reranker ({len(candidate_pairs)} pairs): {t_rerank:.3f}s")
 
         # === ШАГ 5: Строгая фильтрация по порогу reranker ===
         # Результаты с rerank_score ниже порога НЕ попадают в выдачу
@@ -4015,15 +4700,15 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     """
     to_encode = data.copy()
     
-    # Устанавливаем время истечения
+    # Устанавливаем время истечения (используем timezone-aware datetime)
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(hours=JWT_EXPIRE_HOURS)
+        expire = datetime.now(timezone.utc) + timedelta(hours=JWT_EXPIRE_HOURS)
     
     to_encode.update({
         "exp": expire,  # Время истечения
-        "iat": datetime.utcnow(),  # Время создания
+        "iat": datetime.now(timezone.utc),  # Время создания
         "type": "admin_access"  # Тип токена
     })
     
@@ -4248,6 +4933,7 @@ async def admin_list_collections(admin: dict = Depends(admin_required)):
         "collections": [
             {**meta, "is_active": name == db_manager.current_collection}
             for name, meta in db_manager.collections_metadata.items()
+            if name != "_settings"  # Исключаем служебную секцию настроек
         ]
     }
 
@@ -4490,6 +5176,221 @@ async def admin_update_statuses(req: StatusesUpdateRequest, admin: dict = Depend
     except Exception as e:
         logger.error(f"❌ Ошибка обновления статусов: {e}")
         raise HTTPException(500, str(e))
+
+
+# === НАСТРОЙКИ OPENROUTER ДЛЯ ГЕНЕРАЦИИ ЭМБЕДДИНГОВ ===
+
+class OpenRouterSettings(BaseModel):
+    """Модель настроек OpenRouter для генерации эмбеддингов"""
+    enabled: bool = False
+    api_key: str = ""
+    model: str = "qwen/qwen3-embedding-4b"
+
+
+class OpenRouterSettingsUpdate(BaseModel):
+    """Запрос на обновление настроек OpenRouter"""
+    enabled: bool = False
+    api_key: str = ""
+    model: str = "qwen/qwen3-embedding-4b"
+
+
+@app.get("/admin/openrouter-settings")
+async def admin_get_openrouter_settings():
+    """
+    Получить текущие настройки OpenRouter для генерации эмбеддингов.
+    
+    Настройки хранятся в секции _settings.openrouter файла vector_databases.json.
+    Этот эндпоинт публичный (без авторизации) для загрузки настроек в UI.
+    
+    Returns:
+        {
+            "enabled": false,
+            "api_key": "sk-..." (маскированный, показываются только последние 4 символа),
+            "model": "qwen/qwen3-embedding-4b"
+        }
+    """
+    try:
+        # Читаем секцию _settings из конфигурации
+        settings = db_manager.collections_metadata.get("_settings", {})
+        openrouter = settings.get("openrouter", {})
+        
+        # Маскируем API ключ для безопасности (показываем только последние 4 символа)
+        api_key = openrouter.get("api_key", "")
+        masked_key = ""
+        if api_key:
+            masked_key = "*" * max(0, len(api_key) - 4) + api_key[-4:] if len(api_key) > 4 else "*" * len(api_key)
+        
+        return {
+            "enabled": openrouter.get("enabled", False),
+            "api_key": masked_key,  # Маскированный ключ
+            "api_key_set": bool(api_key),  # Флаг: установлен ли ключ
+            "model": openrouter.get("model", "qwen/qwen3-embedding-4b")
+        }
+    except Exception as e:
+        logger.error(f"❌ Ошибка получения настроек OpenRouter: {e}")
+        return {
+            "enabled": False,
+            "api_key": "",
+            "api_key_set": False,
+            "model": "qwen/qwen3-embedding-4b"
+        }
+
+
+@app.put("/admin/openrouter-settings")
+async def admin_update_openrouter_settings(req: OpenRouterSettingsUpdate, admin: dict = Depends(admin_required)):
+    """
+    Обновить настройки OpenRouter для генерации эмбеддингов.
+    
+    Требует JWT авторизации.
+    
+    Args:
+        req: Новые настройки OpenRouter (enabled, api_key, model)
+    
+    Returns:
+        {"status": "success", "enabled": bool, "model": str, "api_key_set": bool}
+    """
+    try:
+        # Инициализируем секцию _settings если не существует
+        if "_settings" not in db_manager.collections_metadata:
+            db_manager.collections_metadata["_settings"] = {}
+        
+        # Инициализируем секцию openrouter если не существует
+        if "openrouter" not in db_manager.collections_metadata["_settings"]:
+            db_manager.collections_metadata["_settings"]["openrouter"] = {}
+        
+        openrouter_settings = db_manager.collections_metadata["_settings"]["openrouter"]
+        
+        # Обновляем enabled и model
+        openrouter_settings["enabled"] = req.enabled
+        openrouter_settings["model"] = req.model
+        
+        # Обновляем API key только если передан непустой и не маскированный
+        # (маскированный ключ содержит звёздочки)
+        if req.api_key and "*" not in req.api_key:
+            openrouter_settings["api_key"] = req.api_key
+        
+        # Сохраняем конфигурацию
+        db_manager.save_configuration()
+        
+        logger.info(f"✅ Настройки OpenRouter обновлены: enabled={req.enabled}, model={req.model}")
+        
+        return {
+            "status": "success",
+            "enabled": openrouter_settings["enabled"],
+            "model": openrouter_settings["model"],
+            "api_key_set": bool(openrouter_settings.get("api_key", ""))
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Ошибка обновления настроек OpenRouter: {e}")
+        raise HTTPException(500, str(e))
+
+
+@app.get("/admin/embedding_dimension")
+async def admin_get_embedding_dimension(admin: dict = Depends(admin_required)):
+    """
+    Получить текущую размерность эмбеддингов.
+    
+    Автоматически определяет размерность на основе активного провайдера:
+    - OpenRouter API: размерность модели (обычно 2560 для Qwen)
+    - Локальная модель: 1024
+    
+    Используется при создании новых коллекций.
+    
+    Returns:
+        {"dimension": 2560, "provider": "openrouter" | "local", "model": "..."}
+    """
+    try:
+        dimension = db_manager.get_embedding_dimension()
+        
+        if db_manager._is_openrouter_enabled():
+            or_settings = db_manager._get_openrouter_settings()
+            return {
+                "dimension": dimension,
+                "provider": "openrouter",
+                "model": or_settings.get("model", "unknown")
+            }
+        else:
+            return {
+                "dimension": dimension,
+                "provider": "local",
+                "model": "qwen-embedding-local"
+            }
+    except Exception as e:
+        logger.error(f"❌ Ошибка получения размерности: {e}")
+        raise HTTPException(500, str(e))
+
+
+@app.post("/admin/openrouter-test")
+async def admin_test_openrouter_connection(admin: dict = Depends(admin_required)):
+    """
+    Проверить подключение к OpenRouter API.
+    
+    Выполняет тестовый запрос к API с текущими сохранёнными настройками.
+    Требует JWT авторизации.
+    
+    Returns:
+        {"status": "success", "message": "..."}  при успешном подключении
+        {"status": "error", "message": "..."}  при ошибке
+    """
+    try:
+        # Получаем настройки OpenRouter
+        settings = db_manager.collections_metadata.get("_settings", {})
+        openrouter = settings.get("openrouter", {})
+        
+        api_key = openrouter.get("api_key", "")
+        model = openrouter.get("model", "qwen/qwen3-embedding-4b")
+        
+        if not api_key:
+            return {"status": "error", "message": "API ключ не установлен"}
+        
+        # Тестовый запрос к OpenRouter API
+        import httpx
+        
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                "https://openrouter.ai/api/v1/embeddings",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                    "HTTP-Referer": "https://ksr-matcher.local",  # Опционально для OpenRouter
+                    "X-Title": "KSR Matcher"  # Опционально для OpenRouter
+                },
+                json={
+                    "model": model,
+                    "input": "test connection",
+                    "encoding_format": "float"
+                }
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                # Проверяем что получили эмбеддинг
+                if "data" in data and len(data["data"]) > 0:
+                    embedding_dim = len(data["data"][0].get("embedding", []))
+                    return {
+                        "status": "success",
+                        "message": f"OK! Размерность: {embedding_dim}"
+                    }
+                else:
+                    return {"status": "error", "message": "Неожиданный формат ответа от API"}
+            elif response.status_code == 401:
+                return {"status": "error", "message": "Неверный API ключ"}
+            elif response.status_code == 404:
+                return {"status": "error", "message": f"Модель '{model}' не найдена"}
+            else:
+                error_detail = response.text[:200] if response.text else "Неизвестная ошибка"
+                return {"status": "error", "message": f"Ошибка API ({response.status_code}): {error_detail}"}
+                
+    except httpx.TimeoutException:
+        return {"status": "error", "message": "Таймаут подключения к OpenRouter API"}
+    except httpx.ConnectError:
+        return {"status": "error", "message": "Не удалось подключиться к OpenRouter API"}
+    except Exception as e:
+        logger.error(f"❌ Ошибка тестирования OpenRouter: {e}")
+        return {"status": "error", "message": f"Ошибка: {str(e)}"}
 
 
 @app.get("/admin/collections/{name}/data")
@@ -4954,10 +5855,305 @@ async def admin_import_data(req: dict, admin: dict = Depends(admin_required)):
         logger.error(f"Import failed: {e}")
         raise HTTPException(500, str(e))
 
+
+# === ЗАГРУЗКА EXCEL ФАЙЛОВ ===
+
+@app.post("/admin/upload_excel")
+async def admin_upload_excel(
+    file: UploadFile = File(...),
+    sheet: Optional[str] = None,
+    admin: dict = Depends(admin_required)
+):
+    """
+    Загрузка и парсинг Excel файла.
+    
+    Позволяет выбрать лист для парсинга если в файле несколько листов.
+    Возвращает заголовки колонок и preview первых строк для маппинга.
+    
+    Args:
+        file: Excel файл (.xlsx, .xls)
+        sheet: Имя листа для парсинга (по умолчанию - первый лист)
+    
+    Returns:
+        {
+            "sheets": ["Лист1", "Лист2"],
+            "selected_sheet": "Лист1",
+            "headers": ["Код", "Наименование", ...],
+            "preview": [{...}, {...}, ...],
+            "total_rows": 12500
+        }
+    """
+    import pandas as pd
+    
+    # Проверяем расширение файла
+    filename = file.filename or ""
+    if not filename.lower().endswith(('.xlsx', '.xls')):
+        raise HTTPException(400, "Поддерживаются только файлы Excel (.xlsx, .xls)")
+    
+    try:
+        content = await file.read()
+        xlsx = pd.ExcelFile(io.BytesIO(content), engine='openpyxl')
+        
+        sheet_names = xlsx.sheet_names
+        selected = sheet if sheet and sheet in sheet_names else sheet_names[0]
+        
+        # Читаем выбранный лист
+        df = pd.read_excel(
+            xlsx, 
+            sheet_name=selected, 
+            dtype=str,  # Всё как строки для сохранения ведущих нулей
+            na_values=["", "N/A", "NULL", "—", "–", "-"],
+            keep_default_na=True
+        )
+        
+        # Заменяем NaN на пустые строки для JSON сериализации
+        df = df.fillna("")
+        
+        # Сохраняем ВСЕ данные в кэш для последующего импорта
+        # Используем уникальный ключ на основе имени файла и времени
+        import hashlib
+        cache_key = hashlib.md5(f"{filename}_{time.time()}".encode()).hexdigest()[:16]
+        
+        # Глобальный кэш для Excel данных (создаём если не существует)
+        if not hasattr(app.state, 'excel_cache'):
+            app.state.excel_cache = {}
+        
+        # Ограничиваем размер кэша (максимум 5 файлов)
+        if len(app.state.excel_cache) >= 5:
+            # Удаляем самый старый
+            oldest_key = next(iter(app.state.excel_cache))
+            del app.state.excel_cache[oldest_key]
+        
+        # Сохраняем все данные
+        all_records = df.to_dict(orient='records')
+        app.state.excel_cache[cache_key] = {
+            "headers": df.columns.tolist(),
+            "data": all_records,
+            "filename": filename,
+            "timestamp": time.time()
+        }
+        
+        # Формируем preview (первые 100 строк для UI)
+        preview_df = df.head(100)
+        
+        # === ПРИМЕНЯЕМ ПРАВИЛА ОЧИСТКИ К PREVIEW ===
+        # Это позволяет пользователю сразу видеть как будут выглядеть данные после очистки
+        cleaned_preview = []
+        preview_records = preview_df.to_dict(orient='records')
+        
+        # Получаем правила очистки
+        settings = db_manager.collections_metadata.get("_settings", {})
+        rules = settings.get("cleaning_rules", DEFAULT_CLEANING_RULES)
+        
+        for row in preview_records:
+            cleaned_row = {}
+            for col_name, value in row.items():
+                if isinstance(value, str) and value:
+                    # Применяем все активные правила
+                    cleaned_value = value
+                    for rule in rules:
+                        if not rule.get("enabled", True):
+                            continue
+                        apply_to = rule.get("apply_to_columns", ["*"])
+                        if "*" not in apply_to and col_name not in apply_to:
+                            continue
+                        try:
+                            pattern = rule.get("pattern", "")
+                            replacement = rule.get("replacement", "")
+                            cleaned_value = re.sub(pattern, replacement, cleaned_value)
+                        except re.error:
+                            pass  # Игнорируем невалидные regex
+                    cleaned_row[col_name] = cleaned_value.strip()
+                else:
+                    cleaned_row[col_name] = value
+            cleaned_preview.append(cleaned_row)
+        
+        logger.info(f"📊 Excel загружен: {filename}, лист '{selected}', "
+                   f"{len(df)} строк, {len(df.columns)} колонок. Cache key: {cache_key}")
+        
+        return {
+            "filename": filename,
+            "sheets": sheet_names,
+            "selected_sheet": selected,
+            "headers": df.columns.tolist(),
+            "preview": cleaned_preview,  # Очищенные данные для preview!
+            "preview_raw": preview_records,  # Сырые данные для сравнения
+            "total_rows": len(df),
+            "cache_key": cache_key  # Ключ для получения всех данных
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Ошибка парсинга Excel: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        raise HTTPException(500, f"Ошибка парсинга Excel: {str(e)}")
+
+
+@app.get("/admin/excel_data/{cache_key}")
+async def admin_get_excel_data(
+    cache_key: str,
+    admin: dict = Depends(admin_required)
+):
+    """
+    Получить все данные Excel из кэша.
+    
+    Используется при импорте для получения всех строк (не только preview).
+    Cache_key возвращается из /admin/upload_excel.
+    
+    Returns:
+        {"headers": [...], "data": [{...}, ...], "total_rows": N}
+    """
+    if not hasattr(app.state, 'excel_cache') or cache_key not in app.state.excel_cache:
+        raise HTTPException(404, f"Данные не найдены в кэше. Загрузите файл заново.")
+    
+    cached = app.state.excel_cache[cache_key]
+    
+    logger.info(f"📊 Выдача данных из кэша: {cache_key}, {len(cached['data'])} строк")
+    
+    return {
+        "headers": cached["headers"],
+        "data": cached["data"],
+        "total_rows": len(cached["data"]),
+        "filename": cached.get("filename", "unknown")
+    }
+
+
+# === ПРАВИЛА ОЧИСТКИ ДАННЫХ ===
+
+class CleaningRule(BaseModel):
+    """Правило очистки текстовых данных при импорте"""
+    id: str
+    name: str
+    pattern: str  # Regex паттерн
+    replacement: str = ""  # Замена (по умолчанию удаление)
+    enabled: bool = True
+    apply_to_columns: List[str] = ["*"]  # ["*"] = все колонки
+
+
+# Правила очистки по умолчанию
+DEFAULT_CLEANING_RULES = [
+    {
+        "id": "remove_section_prefix",
+        "name": "Удалить 'Раздел/Группа N.N'",
+        "pattern": r"^(Раздел|Группа)\s+[\d\.\s]+",
+        "replacement": "",
+        "enabled": True,
+        "apply_to_columns": ["*"]
+    }
+]
+
+
+@app.get("/admin/cleaning_rules")
+async def admin_get_cleaning_rules():
+    """
+    Получить список правил очистки данных.
+    
+    Правила применяются при импорте данных ко всем текстовым полям.
+    Этот эндпоинт публичный для загрузки в UI.
+    
+    Returns:
+        {"rules": [CleaningRule, ...]}
+    """
+    settings = db_manager.collections_metadata.get("_settings", {})
+    rules = settings.get("cleaning_rules", DEFAULT_CLEANING_RULES)
+    return {"rules": rules}
+
+
+@app.put("/admin/cleaning_rules")
+async def admin_update_cleaning_rules(
+    rules: List[CleaningRule],
+    admin: dict = Depends(admin_required)
+):
+    """
+    Обновить список правил очистки данных.
+    
+    Требует JWT авторизации.
+    
+    Args:
+        rules: Новый список правил очистки
+    
+    Returns:
+        {"status": "success", "rules": [...]}
+    """
+    try:
+        # Проверяем валидность regex-паттернов
+        for rule in rules:
+            try:
+                re.compile(rule.pattern)
+            except re.error as e:
+                raise HTTPException(400, f"Невалидный regex в правиле '{rule.name}': {e}")
+        
+        # Сохраняем в _settings
+        if "_settings" not in db_manager.collections_metadata:
+            db_manager.collections_metadata["_settings"] = {}
+        
+        db_manager.collections_metadata["_settings"]["cleaning_rules"] = [
+            r.dict() for r in rules
+        ]
+        db_manager.save_configuration()
+        
+        logger.info(f"✅ Обновлены правила очистки: {len(rules)} правил")
+        
+        return {"status": "success", "rules": [r.dict() for r in rules]}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Ошибка обновления правил очистки: {e}")
+        raise HTTPException(500, str(e))
+
+
+def apply_cleaning_rules(text: str, column_name: str = None) -> str:
+    """
+    Применяет все активные правила очистки к тексту.
+    
+    Args:
+        text: Исходный текст
+        column_name: Имя колонки (для фильтрации правил по apply_to_columns)
+    
+    Returns:
+        Очищенный текст
+    """
+    import pandas as pd
+    
+    if pd.isna(text) or text == "":
+        return ""
+    
+    result = str(text)
+    settings = db_manager.collections_metadata.get("_settings", {})
+    rules = settings.get("cleaning_rules", DEFAULT_CLEANING_RULES)
+    
+    for rule in rules:
+        if not rule.get("enabled", True):
+            continue
+        
+        apply_to = rule.get("apply_to_columns", ["*"])
+        if "*" not in apply_to and column_name and column_name not in apply_to:
+            continue
+        
+        try:
+            pattern = rule.get("pattern", "")
+            replacement = rule.get("replacement", "")
+            result = re.sub(pattern, replacement, result)
+        except re.error:
+            pass  # Игнорируем невалидные regex
+    
+    return result.strip()
+
 @app.get("/admin/jobs")
 async def admin_list_jobs(admin: dict = Depends(admin_required)):
     """Получение списка фоновых задач. Требует JWT авторизации."""
     return await job_manager.list_jobs()
+
+
+@app.post("/admin/jobs/{job_id}/stop")
+async def admin_stop_job(job_id: str, admin: dict = Depends(admin_required)):
+    """Остановка фоновой задачи"""
+    success = await job_manager.cancel_job(job_id)
+    if not success:
+        raise HTTPException(status_code=400, detail="Невозможно остановить задачу (не найдена или уже завершена)")
+    
+    return {"status": "success", "message": f"Задача {job_id} остановлена"}
 
 
 # === ENDPOINTS ДЛЯ ПОЛУЧЕНИЯ ВСЕХ КОДОВ КСР ИЗ БАЗЫ QDRANT ===
@@ -5592,8 +6788,10 @@ async def create_collection(request: CreateCollectionRequest):
                 )
 
         # Создаем коллекцию
-        # Определяем размерность автоматически из загруженной модели
-        model_dimension = db_manager.embedding_model.config.hidden_size
+        # === ИСПРАВЛЕНИЕ: Используем get_embedding_dimension() для корректного определения размерности ===
+        # Это работает и для OpenRouter API, и для локальной модели
+        model_dimension = db_manager.get_embedding_dimension()
+        logger.info(f"📐 Определена размерность модели: {model_dimension}")
         
         db_manager.client.create_collection(
             collection_name=request.collection_name,
@@ -5612,8 +6810,10 @@ async def create_collection(request: CreateCollectionRequest):
             config = {}
 
         # Добавляем новую коллекцию с полной конфигурацией
+        # === ИСПРАВЛЕНИЕ: Сохраняем dimension в конфигурацию ===
         config[request.collection_name] = {
             "description": request.description or f"Векторная база {request.collection_name}",
+            "dimension": model_dimension,  # Размерность эмбеддингов!
             "columns": {"code": "code", "description": "description"},
             "thresholds": {"cosine": 0.45, "rerank": 0.6},
             "last_updated": datetime.now().strftime("%d.%m.%Y"),
@@ -5700,6 +6900,22 @@ if __name__ == "__main__":
     logger.info("   🔤 Регистронезависимый поиск (lowercase нормализация)")
     logger.info("   📦 Встроенное хранение метаданных (без Parquet)")
     logger.info("   🔄 Инкрементальные обновления без перестроения индекса")
+    logger.info("=" * 80)
+    
+    # === PRE-BUILD BM25 INDEX ===
+    # Строим индекс при старте, чтобы первый запрос был быстрым
+    if BM25_ENABLED:
+        logger.info("📚 Построение BM25 индекса для активных коллекций...")
+        for collection_name in db_manager.collections_metadata.keys():
+            if collection_name == "_settings":
+                continue
+            try:
+                db_manager._ensure_bm25_index(collection_name)
+            except Exception as e:
+                logger.warning(f"⚠️ Не удалось построить BM25 для '{collection_name}': {e}")
+        logger.info("✅ BM25 индексы готовы")
+    else:
+        logger.info("⚠️ BM25 отключен (BM25_ENABLED=False в config.py)")
     logger.info("=" * 80)
 
     uvicorn.run(

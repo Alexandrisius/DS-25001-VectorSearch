@@ -227,6 +227,8 @@ document.addEventListener('DOMContentLoaded', () => {
     initStatusDropdowns(); // Инициализация кастомных dropdown статусов (делегирование событий)
     loadStatuses(); // Загрузка статусов при инициализации
     initSettingsPage(); // Инициализация страницы настроек
+    initOpenRouterSettings(); // Инициализация настроек OpenRouter
+    loadOpenRouterSettings(); // Загрузка настроек OpenRouter
 });
 
 /**
@@ -483,6 +485,284 @@ function initSettingsPage() {
         });
     }
 }
+
+
+// === OPENROUTER SETTINGS (Настройки генерации эмбеддингов через API) ===
+
+/**
+ * Глобальное состояние настроек OpenRouter
+ */
+const openrouterState = {
+    enabled: false,
+    apiKey: '',
+    apiKeySet: false,  // Флаг: установлен ли ключ (не сам ключ)
+    model: 'qwen/qwen3-embedding-4b'
+};
+
+/**
+ * Загрузка настроек OpenRouter при старте.
+ * Загружает текущие настройки из backend и обновляет UI.
+ */
+async function loadOpenRouterSettings() {
+    try {
+        const res = await fetch('/admin/openrouter-settings');
+        if (res.ok) {
+            const data = await res.json();
+            openrouterState.enabled = data.enabled || false;
+            openrouterState.apiKeySet = data.api_key_set || false;
+            openrouterState.model = data.model || 'qwen/qwen3-embedding-4b';
+
+            // Обновляем UI
+            updateOpenRouterUI();
+            console.log('✅ Настройки OpenRouter загружены');
+        }
+    } catch (e) {
+        console.warn('⚠️ Не удалось загрузить настройки OpenRouter:', e);
+    }
+}
+
+/**
+ * Обновление UI на основе состояния OpenRouter.
+ */
+function updateOpenRouterUI() {
+    const enabledCheckbox = document.getElementById('openrouterEnabled');
+    const apiKeyInput = document.getElementById('openrouterApiKey');
+    const modelSelect = document.getElementById('openrouterModel');
+    const statusIndicator = document.getElementById('openrouterStatusIndicator');
+    const statusText = document.getElementById('openrouterStatusText');
+
+    if (enabledCheckbox) {
+        enabledCheckbox.checked = openrouterState.enabled;
+    }
+
+    if (apiKeyInput && openrouterState.apiKeySet) {
+        // Показываем placeholder для установленного ключа
+        apiKeyInput.placeholder = '••••••••••••••••';
+    }
+
+    if (modelSelect) {
+        modelSelect.value = openrouterState.model;
+    }
+
+    // Обновляем статус
+    if (statusIndicator && statusText) {
+        if (openrouterState.enabled && openrouterState.apiKeySet) {
+            statusIndicator.className = 'status-indicator status-active';
+            statusText.textContent = 'Активен';
+        } else if (openrouterState.apiKeySet) {
+            statusIndicator.className = 'status-indicator status-configured';
+            statusText.textContent = 'Настроен (выключен)';
+        } else {
+            statusIndicator.className = 'status-indicator status-inactive';
+            statusText.textContent = 'Не настроено';
+        }
+    }
+}
+
+/**
+ * Инициализация страницы настроек OpenRouter.
+ * Привязывает обработчики событий к элементам формы.
+ */
+function initOpenRouterSettings() {
+    const saveBtn = document.getElementById('saveOpenrouterBtn');
+    const testBtn = document.getElementById('testOpenrouterBtn');
+    const toggleVisibilityBtn = document.getElementById('toggleApiKeyVisibility');
+    const apiKeyInput = document.getElementById('openrouterApiKey');
+
+    // Обработчик показа/скрытия API ключа
+    if (toggleVisibilityBtn && apiKeyInput) {
+        toggleVisibilityBtn.addEventListener('click', () => {
+            const type = apiKeyInput.type === 'password' ? 'text' : 'password';
+            apiKeyInput.type = type;
+            const icon = toggleVisibilityBtn.querySelector('i');
+            if (icon) {
+                icon.className = type === 'password' ? 'fas fa-eye' : 'fas fa-eye-slash';
+            }
+        });
+    }
+
+    // Обработчик сохранения настроек
+    if (saveBtn) {
+        saveBtn.addEventListener('click', saveOpenRouterSettings);
+    }
+
+    // Обработчик тестирования подключения
+    if (testBtn) {
+        testBtn.addEventListener('click', testOpenRouterConnection);
+    }
+}
+
+/**
+ * Сохранение настроек OpenRouter.
+ * Отправляет текущие настройки на backend.
+ */
+async function saveOpenRouterSettings() {
+    const saveBtn = document.getElementById('saveOpenrouterBtn');
+    const enabledCheckbox = document.getElementById('openrouterEnabled');
+    const apiKeyInput = document.getElementById('openrouterApiKey');
+    const modelSelect = document.getElementById('openrouterModel');
+
+    if (!saveBtn) return;
+
+    // Собираем данные
+    const enabled = enabledCheckbox ? enabledCheckbox.checked : false;
+    const apiKey = apiKeyInput ? apiKeyInput.value.trim() : '';
+    const model = modelSelect ? modelSelect.value : 'qwen/qwen3-embedding-4b';
+
+    // Показываем индикатор загрузки
+    const originalText = saveBtn.innerHTML;
+    saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Сохранение...';
+    saveBtn.disabled = true;
+
+    try {
+        const res = await authFetch('/admin/openrouter-settings', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                enabled: enabled,
+                api_key: apiKey,
+                model: model
+            })
+        });
+
+        if (res.ok) {
+            const data = await res.json();
+            openrouterState.enabled = data.enabled;
+            openrouterState.apiKeySet = data.api_key_set;
+            openrouterState.model = data.model;
+
+            // Очищаем поле ввода ключа (он сохранён на сервере)
+            if (apiKeyInput && apiKey) {
+                apiKeyInput.value = '';
+                apiKeyInput.placeholder = '••••••••••••••••';
+            }
+
+            // Обновляем UI
+            updateOpenRouterUI();
+
+            // Показываем успех
+            saveBtn.innerHTML = '<i class="fas fa-check"></i> Сохранено!';
+            saveBtn.style.background = 'var(--adm-success)';
+
+            setTimeout(() => {
+                saveBtn.innerHTML = originalText;
+                saveBtn.style.background = '';
+                saveBtn.disabled = false;
+            }, 2000);
+        } else {
+            const err = await res.json();
+            throw new Error(err.detail || 'Не удалось сохранить');
+        }
+    } catch (e) {
+        console.error('Ошибка сохранения настроек OpenRouter:', e);
+
+        // Показываем ошибку
+        saveBtn.innerHTML = '<i class="fas fa-times"></i> Ошибка';
+        saveBtn.style.background = 'var(--adm-danger)';
+
+        setTimeout(() => {
+            saveBtn.innerHTML = originalText;
+            saveBtn.style.background = '';
+            saveBtn.disabled = false;
+        }, 2000);
+    }
+}
+
+/**
+ * Тестирование подключения к OpenRouter API.
+ * Выполняет тестовый запрос с текущими сохранёнными настройками.
+ */
+async function testOpenRouterConnection() {
+    const testBtn = document.getElementById('testOpenrouterBtn');
+    const statusIndicator = document.getElementById('openrouterStatusIndicator');
+    const statusText = document.getElementById('openrouterStatusText');
+
+    if (!testBtn) return;
+
+    // Показываем индикатор загрузки
+    const originalText = testBtn.innerHTML;
+    testBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Проверка...';
+    testBtn.disabled = true;
+
+    if (statusIndicator) {
+        statusIndicator.className = 'status-indicator status-testing';
+    }
+    if (statusText) {
+        statusText.textContent = 'Проверка...';
+    }
+
+    try {
+        const res = await authFetch('/admin/openrouter-test', {
+            method: 'POST'
+        });
+
+        const data = await res.json();
+
+        if (data.status === 'success') {
+            // Успешное подключение
+            if (statusIndicator) {
+                statusIndicator.className = 'status-indicator status-success';
+            }
+            if (statusText) {
+                statusText.textContent = data.message || 'Подключение успешно!';
+            }
+
+            testBtn.innerHTML = '<i class="fas fa-check"></i> Успешно!';
+            testBtn.style.background = 'var(--adm-success)';
+            testBtn.style.borderColor = 'var(--adm-success)';
+            testBtn.style.color = 'white';
+        } else {
+            // Ошибка подключения
+            if (statusIndicator) {
+                statusIndicator.className = 'status-indicator status-error';
+            }
+            if (statusText) {
+                statusText.textContent = data.message || 'Ошибка подключения';
+            }
+
+            testBtn.innerHTML = '<i class="fas fa-times"></i> Ошибка';
+            testBtn.style.background = 'var(--adm-danger)';
+            testBtn.style.borderColor = 'var(--adm-danger)';
+            testBtn.style.color = 'white';
+        }
+
+        // Возвращаем оригинальный вид кнопки через 3 секунды
+        setTimeout(() => {
+            testBtn.innerHTML = originalText;
+            testBtn.style.background = '';
+            testBtn.style.borderColor = '';
+            testBtn.style.color = '';
+            testBtn.disabled = false;
+
+            // Обновляем статус на основе состояния
+            updateOpenRouterUI();
+        }, 3000);
+
+    } catch (e) {
+        console.error('Ошибка тестирования OpenRouter:', e);
+
+        if (statusIndicator) {
+            statusIndicator.className = 'status-indicator status-error';
+        }
+        if (statusText) {
+            statusText.textContent = 'Ошибка сети';
+        }
+
+        testBtn.innerHTML = '<i class="fas fa-times"></i> Ошибка';
+        testBtn.style.background = 'var(--adm-danger)';
+        testBtn.style.borderColor = 'var(--adm-danger)';
+        testBtn.style.color = 'white';
+
+        setTimeout(() => {
+            testBtn.innerHTML = originalText;
+            testBtn.style.background = '';
+            testBtn.style.borderColor = '';
+            testBtn.style.color = '';
+            testBtn.disabled = false;
+        }, 3000);
+    }
+}
+
 
 /**
  * Проверка мобильного устройства и показ предупреждения.
@@ -897,13 +1177,29 @@ function initCreateCollection() {
         if (!id) return alert('ID коллекции обязателен');
 
         try {
+            // === ОПРЕДЕЛЯЕМ РАЗМЕРНОСТЬ НА ОСНОВЕ ТЕКУЩЕГО ПРОВАЙДЕРА ===
+            // Получаем размерность эмбеддингов с сервера (зависит от OpenRouter/локальной модели)
+            let dimension = 1024;  // Fallback для локальной модели
+            try {
+                const dimRes = await authFetch('/admin/embedding_dimension');
+                if (dimRes.ok) {
+                    const dimData = await dimRes.json();
+                    dimension = dimData.dimension;
+                    console.log(`📐 Размерность эмбеддингов: ${dimension} (${dimData.provider}: ${dimData.model})`);
+                } else {
+                    console.warn('Не удалось получить размерность — используем 1024');
+                }
+            } catch (e) {
+                console.warn('Ошибка определения размерности:', e);
+            }
+
             const res1 = await fetch('/create_collection', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     collection_name: id,
                     description: name,
-                    dimension: 1024,
+                    dimension: dimension,  // Динамическая размерность!
                     recreate: false
                 })
             });
@@ -918,7 +1214,8 @@ function initCreateCollection() {
                 body: JSON.stringify({
                     visible: visible,
                     locked: false,
-                    thresholds: { cosine, rerank }
+                    thresholds: { cosine, rerank },
+                    dimension: dimension  // Сохраняем размерность в конфиг
                 })
             });
 
@@ -2042,6 +2339,21 @@ window.openImport = (name) => {
     if (els.codeSeparator) els.codeSeparator.value = '.';
     if (els.descSeparator) els.descSeparator.value = ' ';
 
+    // === Сброс UI загрузки Excel ===
+    if (typeof resetExcelUploadUI === 'function') {
+        resetExcelUploadUI();
+    }
+
+    // === Сброс вкладок на "Paste" ===
+    const tabs = document.querySelectorAll('.source-tab');
+    tabs.forEach(t => t.classList.remove('active'));
+    const pasteTab = document.querySelector('.source-tab[data-source="paste"]');
+    if (pasteTab) pasteTab.classList.add('active');
+
+    document.querySelectorAll('.import-source-content').forEach(c => c.classList.remove('active'));
+    const pasteContent = document.getElementById('importSourcePaste');
+    if (pasteContent) pasteContent.classList.add('active');
+
     showImportStep('paste');
     openModal('import');
 };
@@ -2108,7 +2420,433 @@ function initImportWizard() {
             updateAllPreviews();
         });
     }
+
+    // === НОВОЕ: Инициализация вкладок источника импорта ===
+    initImportSourceTabs();
+
+    // === НОВОЕ: Инициализация загрузки Excel ===
+    initExcelUpload();
 }
+
+/**
+ * Инициализация переключения вкладок источника импорта (CSV/Excel).
+ */
+function initImportSourceTabs() {
+    const tabs = document.querySelectorAll('.source-tab');
+    tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            // Снимаем активность со всех вкладок
+            tabs.forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+
+            // Переключаем контент
+            const source = tab.dataset.source;
+            document.querySelectorAll('.import-source-content').forEach(content => {
+                content.classList.remove('active');
+            });
+
+            const targetContent = document.getElementById(
+                source === 'paste' ? 'importSourcePaste' : 'importSourceExcel'
+            );
+            if (targetContent) {
+                targetContent.classList.add('active');
+            }
+        });
+    });
+}
+
+/**
+ * Инициализация загрузки Excel файлов.
+ */
+function initExcelUpload() {
+    const dropZone = document.getElementById('excelDropZone');
+    const fileInput = document.getElementById('excelFileInput');
+    const fileInfo = document.getElementById('excelFileInfo');
+    const fileName = document.getElementById('excelFileName');
+    const fileStats = document.getElementById('excelFileStats');
+    const fileClear = document.getElementById('excelFileClear');
+    const sheetSelector = document.getElementById('excelSheetSelector');
+    const sheetSelect = document.getElementById('excelSheetSelect');
+
+    if (!dropZone || !fileInput) return;
+
+    // Drag and drop
+    dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropZone.classList.add('drag-over');
+    });
+
+    dropZone.addEventListener('dragleave', () => {
+        dropZone.classList.remove('drag-over');
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('drag-over');
+
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+            handleExcelFile(files[0]);
+        }
+    });
+
+    // File input change
+    fileInput.addEventListener('change', (e) => {
+        if (e.target.files.length > 0) {
+            handleExcelFile(e.target.files[0]);
+        }
+    });
+
+    // Clear file
+    if (fileClear) {
+        fileClear.addEventListener('click', () => {
+            resetExcelUploadUI();
+        });
+    }
+
+    // Sheet selection change
+    if (sheetSelect) {
+        sheetSelect.addEventListener('change', async () => {
+            if (state.importData.excelFile) {
+                await uploadExcelFile(state.importData.excelFile, sheetSelect.value);
+            }
+        });
+    }
+}
+
+/**
+ * Сброс интерфейса загрузки Excel в исходное состояние.
+ * Восстанавливает HTML dropzone (удаляет спиннер) и скрывает инфо о файле.
+ */
+function resetExcelUploadUI() {
+    const dropZone = document.getElementById('excelDropZone');
+    const fileInput = document.getElementById('excelFileInput'); // Это старый input (если есть)
+    const fileInfo = document.getElementById('excelFileInfo');
+    const sheetSelector = document.getElementById('excelSheetSelector');
+
+    // Очищаем значение, если input ещё существует
+    if (fileInput) fileInput.value = '';
+
+    // Скрываем панели
+    if (fileInfo) fileInfo.classList.add('hidden');
+    if (sheetSelector) sheetSelector.classList.add('hidden');
+
+    // Восстанавливаем DropZone
+    if (dropZone) {
+        dropZone.classList.remove('hidden');
+
+        // Восстанавливаем исходный HTML
+        dropZone.innerHTML = `
+            <i class="fas fa-file-excel"></i>
+            <p>Перетащите Excel файл сюда</p>
+            <span>или</span>
+            <label for="excelFileInput" class="btn btn-outline" style="cursor: pointer;">
+                <i class="fas fa-folder-open"></i> Выбрать файл
+            </label>
+            <input type="file" id="excelFileInput" accept=".xlsx,.xls" hidden>
+        `;
+
+        // === ВАЖНО: Переназначаем слушатель событий на НОВЫЙ input ===
+        const newFileInput = document.getElementById('excelFileInput');
+        if (newFileInput) {
+            newFileInput.addEventListener('change', (e) => {
+                if (e.target.files.length > 0) {
+                    handleExcelFile(e.target.files[0]);
+                }
+            });
+        }
+    }
+
+    state.importData.excelData = null;
+}
+
+/**
+ * Обработка выбранного Excel файла.
+ * @param {File} file - Excel файл
+ */
+async function handleExcelFile(file) {
+    // Проверка расширения
+    const validExtensions = ['.xlsx', '.xls'];
+    const fileName = file.name.toLowerCase();
+    const isValid = validExtensions.some(ext => fileName.endsWith(ext));
+
+    if (!isValid) {
+        alert('Пожалуйста, выберите файл Excel (.xlsx или .xls)');
+        return;
+    }
+
+    // Сохраняем файл для возможности пере-загрузки с другим листом
+    state.importData.excelFile = file;
+
+    // Загружаем на сервер
+    await uploadExcelFile(file);
+}
+
+/**
+ * Загрузка Excel файла на сервер.
+ * @param {File} file - Excel файл
+ * @param {string} [sheet] - Имя листа (опционально)
+ */
+async function uploadExcelFile(file, sheet = null) {
+    const dropZone = document.getElementById('excelDropZone');
+    const fileInfo = document.getElementById('excelFileInfo');
+    const fileNameEl = document.getElementById('excelFileName');
+    const fileStats = document.getElementById('excelFileStats');
+    const sheetSelector = document.getElementById('excelSheetSelector');
+    const sheetSelect = document.getElementById('excelSheetSelect');
+
+    try {
+        // Показываем индикатор загрузки
+        if (dropZone) {
+            dropZone.innerHTML = '<i class="fas fa-spinner fa-spin"></i><p>Загрузка файла...</p>';
+        }
+
+        // Формируем FormData
+        const formData = new FormData();
+        formData.append('file', file);
+        if (sheet) {
+            formData.append('sheet', sheet);
+        }
+
+        // Отправляем на сервер
+        const response = await fetch('/admin/upload_excel', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${state.token}`
+            },
+            body: formData
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ detail: 'Ошибка загрузки' }));
+            throw new Error(errorData.detail || 'Ошибка загрузки файла');
+        }
+
+        const data = await response.json();
+
+        // Сохраняем данные
+        state.importData.excelData = data;
+        state.importData.headers = data.headers;
+        state.importData.raw = data.preview;  // Preview для маппинга
+        state.importData.cacheKey = data.cache_key;  // Ключ для получения ВСЕХ данных
+        state.importData.totalRows = data.total_rows;  // Общее количество строк
+
+        // Обновляем UI
+        if (dropZone) dropZone.classList.add('hidden');
+
+        if (fileInfo) {
+            fileInfo.classList.remove('hidden');
+            if (fileNameEl) fileNameEl.textContent = data.filename || file.name;
+            if (fileStats) fileStats.textContent = `${data.total_rows} строк, ${data.headers.length} колонок`;
+        }
+
+        // Показываем выбор листа если их несколько
+        if (data.sheets && data.sheets.length > 1 && sheetSelector && sheetSelect) {
+            sheetSelector.classList.remove('hidden');
+            sheetSelect.innerHTML = data.sheets.map(s =>
+                `<option value="${s}" ${s === data.selected_sheet ? 'selected' : ''}>${s}</option>`
+            ).join('');
+        }
+
+        // Переходим к маппингу колонок
+        // Инициализация выбора по умолчанию (как в processPastedData)
+        state.importData.codeSelection = {};
+        if (state.importData.headers.length > 0) {
+            state.importData.codeSelection[state.importData.headers[0]] = 1;
+        }
+        state.importData.descSelection = {};
+        state.importData.hierarchySelection = {};
+
+        // Рендерим панели с цифровыми чек-боксами
+        renderNumberedCheckboxes(els.mapCodeCols, state.importData.codeSelection, 'code');
+        renderNumberedCheckboxes(els.mapDescCols, state.importData.descSelection, 'desc');
+        renderNumberedCheckboxes(els.mapHierarchyCols, state.importData.hierarchySelection, 'hierarchy');
+
+        // Рендерим превью таблицы
+        renderPreviewTable();
+        updateAllPreviews();
+
+        showImportStep('mapping');
+
+    } catch (error) {
+        console.error('Excel upload error:', error);
+        alert(`Ошибка загрузки Excel: ${error.message}`);
+
+        // Сбрасываем UI в исходное состояние (убираем спиннер)
+        resetExcelUploadUI();
+    }
+}
+
+// === ПРАВИЛА ОЧИСТКИ ДАННЫХ ===
+
+/** Локальное хранилище правил очистки */
+let cleaningRules = [];
+
+/**
+ * Загрузка правил очистки с сервера.
+ */
+async function loadCleaningRules() {
+    try {
+        const response = await fetch('/admin/cleaning_rules');
+        if (response.ok) {
+            const data = await response.json();
+            cleaningRules = data.rules || [];
+            renderCleaningRules();
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки правил очистки:', error);
+    }
+}
+
+/**
+ * Рендер списка правил очистки.
+ */
+function renderCleaningRules() {
+    const container = document.getElementById('cleaningRulesList');
+    if (!container) return;
+
+    if (cleaningRules.length === 0) {
+        container.innerHTML = '<p style="color: var(--adm-text-sec); text-align: center; padding: 20px;">Нет правил очистки</p>';
+        return;
+    }
+
+    container.innerHTML = cleaningRules.map((rule, idx) => `
+        <div class="cleaning-rule-item ${rule.enabled ? '' : 'disabled'}" data-rule-id="${rule.id}">
+            <div class="rule-toggle">
+                <label class="toggle-switch">
+                    <input type="checkbox" ${rule.enabled ? 'checked' : ''} 
+                           onchange="toggleCleaningRule('${rule.id}')">
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+            <div class="rule-content">
+                <div class="rule-name">${escapeHtml(rule.name)}</div>
+                <code class="rule-pattern">${escapeHtml(rule.pattern)}</code>
+            </div>
+            <div class="rule-actions">
+                <button class="btn-icon danger" onclick="deleteCleaningRule('${rule.id}')" title="Удалить">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        </div>
+    `).join('');
+}
+
+/**
+ * Переключение активности правила.
+ * @param {string} ruleId - ID правила
+ */
+function toggleCleaningRule(ruleId) {
+    const rule = cleaningRules.find(r => r.id === ruleId);
+    if (rule) {
+        rule.enabled = !rule.enabled;
+        renderCleaningRules();
+    }
+}
+
+/**
+ * Удаление правила.
+ * @param {string} ruleId - ID правила
+ */
+function deleteCleaningRule(ruleId) {
+    if (!confirm('Удалить это правило очистки?')) return;
+    cleaningRules = cleaningRules.filter(r => r.id !== ruleId);
+    renderCleaningRules();
+}
+
+/**
+ * Добавление нового правила очистки.
+ */
+function addCleaningRule() {
+    const nameInput = document.getElementById('newRuleName');
+    const patternInput = document.getElementById('newRulePattern');
+    const replacementInput = document.getElementById('newRuleReplacement');
+
+    if (!nameInput || !patternInput) return;
+
+    const name = nameInput.value.trim();
+    const pattern = patternInput.value.trim();
+    const replacement = replacementInput ? replacementInput.value : '';
+
+    if (!name || !pattern) {
+        alert('Введите название и regex-паттерн');
+        return;
+    }
+
+    // Проверяем валидность regex
+    try {
+        new RegExp(pattern);
+    } catch (e) {
+        alert(`Невалидный regex: ${e.message}`);
+        return;
+    }
+
+    // Генерируем уникальный ID
+    const id = 'rule_' + Date.now();
+
+    cleaningRules.push({
+        id,
+        name,
+        pattern,
+        replacement,
+        enabled: true,
+        apply_to_columns: ['*']
+    });
+
+    // Очищаем форму
+    nameInput.value = '';
+    patternInput.value = '';
+    if (replacementInput) replacementInput.value = '';
+
+    renderCleaningRules();
+}
+
+/**
+ * Сохранение правил очистки на сервер.
+ */
+async function saveCleaningRules() {
+    try {
+        const response = await authFetch('/admin/cleaning_rules', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(cleaningRules)
+        });
+
+        if (response.ok) {
+            alert('Правила очистки сохранены!');
+        } else {
+            const error = await response.json().catch(() => ({ detail: 'Ошибка' }));
+            alert(`Ошибка: ${error.detail}`);
+        }
+    } catch (error) {
+        console.error('Ошибка сохранения правил:', error);
+        alert('Ошибка сохранения правил');
+    }
+}
+
+/**
+ * Инициализация управления правилами очистки.
+ */
+function initCleaningRulesSettings() {
+    const addBtn = document.getElementById('addCleaningRuleBtn');
+    const saveBtn = document.getElementById('saveCleaningRulesBtn');
+
+    if (addBtn) {
+        addBtn.addEventListener('click', addCleaningRule);
+    }
+
+    if (saveBtn) {
+        saveBtn.addEventListener('click', saveCleaningRules);
+    }
+
+    // Загружаем правила
+    loadCleaningRules();
+}
+
+// Добавляем инициализацию в DOMContentLoaded
+document.addEventListener('DOMContentLoaded', () => {
+    initCleaningRulesSettings();
+});
 
 /**
  * Валидация маппинга колонок перед импортом.
@@ -2149,6 +2887,45 @@ function getOrderedSelection(type) {
 }
 
 /**
+ * Загрузка ВСЕХ данных Excel из кэша сервера.
+ * Вызывается перед импортом если был загружен Excel файл.
+ * @returns {Promise<boolean>} true если данные загружены успешно
+ */
+async function loadFullExcelData() {
+    const cacheKey = state.importData.cacheKey;
+
+    // Если нет cacheKey (CSV/TSV вставка) — пропускаем
+    if (!cacheKey) {
+        console.log('Нет cacheKey — используем данные из state.importData.raw');
+        return true;
+    }
+
+    try {
+        console.log(`Загрузка всех данных из кэша: ${cacheKey}`);
+
+        const response = await authFetch(`/admin/excel_data/${cacheKey}`);
+
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({ detail: 'Ошибка загрузки' }));
+            throw new Error(error.detail || 'Не удалось загрузить данные');
+        }
+
+        const data = await response.json();
+
+        // Заменяем preview на полные данные
+        state.importData.raw = data.data;
+
+        console.log(`✅ Загружено ${data.total_rows} строк из кэша`);
+        return true;
+
+    } catch (error) {
+        console.error('Ошибка загрузки данных из кэша:', error);
+        alert(`Ошибка загрузки данных: ${error.message}\n\nПопробуйте загрузить файл заново.`);
+        return false;
+    }
+}
+
+/**
  * Формирование записей из сырых данных на основе текущего маппинга.
  * 
  * НОВАЯ ЛОГИКА v2:
@@ -2165,15 +2942,25 @@ function buildRecordsFromMapping() {
     const descSeparator = state.importData.descSeparator || ' ';  // Кастомный разделитель описания
 
     return state.importData.raw.map(row => {
-        // Склеиваем код
-        const code = codeCols.map(c => row[c]).filter(Boolean).join(codeSeparator);
+        // Вспомогательная функция для очистки значения ячейки
+        const cleanValue = (val) => {
+            if (!val) return '';
+            // Обрезаем симметричные кавычки если функция уже определена
+            if (typeof stripSymmetricQuotes === 'function') {
+                return stripSymmetricQuotes(String(val).trim());
+            }
+            return String(val).trim();
+        };
 
-        // Склеиваем описание через кастомный разделитель
-        const description = descCols.map(c => row[c]).filter(Boolean).join(descSeparator);
+        // Склеиваем код (обрезаем кавычки из каждой ячейки)
+        const code = codeCols.map(c => cleanValue(row[c])).filter(Boolean).join(codeSeparator);
+
+        // Склеиваем описание через кастомный разделитель (обрезаем кавычки)
+        const description = descCols.map(c => cleanValue(row[c])).filter(Boolean).join(descSeparator);
 
         // Склеиваем иерархию через " → " (фиксированный разделитель для категорий каталога)
         const hierarchy = hierarchyCols.length > 0
-            ? hierarchyCols.map(c => row[c]).filter(Boolean).join(' → ')
+            ? hierarchyCols.map(c => cleanValue(row[c])).filter(Boolean).join(' → ')
             : null;  // null = будет использоваться description на сервере
 
         return {
@@ -2367,7 +3154,9 @@ function processPastedData(text) {
         delimiter = delimiterValue;
     }
 
-    const rows = text.split('\n').map(r => r.split(delimiter)).filter(r => r.some(cell => cell.trim()));
+    // Используем полноценный CSV парсер вместо простого split
+    // Это корректно обрабатывает экранированные кавычки ("") и разделители внутри кавычек
+    const rows = parseCSV(text, delimiter);
 
     if (rows.length < 2) {
         alert('Недостаточно данных. Нужна минимум 1 строка заголовков и 1 строка данных.\n\nПроверьте выбранный разделитель!');
@@ -2410,6 +3199,89 @@ function processPastedData(text) {
     updateAllPreviews();
 
     showImportStep('mapping');
+}
+
+/**
+ * Полноценный CSV парсер по RFC 4180.
+ * 
+ * Корректно обрабатывает:
+ * - Поля в кавычках: "значение"
+ * - Экранированные кавычки внутри полей: "текст ""кавычки"" текст" → текст "кавычки" текст
+ * - Разделители внутри кавычек: "a;b;c" → одно поле
+ * - Многострочные поля в кавычках
+ * 
+ * @param {string} text - Исходный CSV/TSV текст
+ * @param {string} delimiter - Разделитель полей (запятая, точка с запятой, табуляция)
+ * @returns {Array<Array<string>>} Массив строк, каждая строка — массив полей
+ */
+function parseCSV(text, delimiter) {
+    const rows = [];
+    let currentRow = [];
+    let currentField = '';
+    let inQuotes = false;
+    let i = 0;
+
+    // Нормализуем переносы строк
+    text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+    while (i < text.length) {
+        const char = text[i];
+        const nextChar = text[i + 1];
+
+        if (inQuotes) {
+            // Внутри кавычек
+            if (char === '"') {
+                if (nextChar === '"') {
+                    // Экранированная кавычка "" → "
+                    currentField += '"';
+                    i += 2;
+                } else {
+                    // Закрывающая кавычка
+                    inQuotes = false;
+                    i++;
+                }
+            } else {
+                // Обычный символ внутри кавычек
+                currentField += char;
+                i++;
+            }
+        } else {
+            // Вне кавычек
+            if (char === '"') {
+                // Открывающая кавычка
+                inQuotes = true;
+                i++;
+            } else if (char === delimiter) {
+                // Разделитель полей
+                currentRow.push(currentField);
+                currentField = '';
+                i++;
+            } else if (char === '\n') {
+                // Конец строки
+                currentRow.push(currentField);
+                if (currentRow.some(cell => cell.trim())) {
+                    rows.push(currentRow);
+                }
+                currentRow = [];
+                currentField = '';
+                i++;
+            } else {
+                // Обычный символ
+                currentField += char;
+                i++;
+            }
+        }
+    }
+
+    // Добавляем последнее поле и строку
+    if (currentField || currentRow.length > 0) {
+        currentRow.push(currentField);
+        if (currentRow.some(cell => cell.trim())) {
+            rows.push(currentRow);
+        }
+    }
+
+    return rows;
 }
 
 function renderPreviewTable() {
@@ -2476,10 +3348,55 @@ function showImportStep(stepName) {
 // === DIFF ANALYSIS (Анализ изменений) ===
 
 /**
+ * Обрезка симметричных кавычек с обоих концов строки.
+ * 
+ * Поддерживаемые пары кавычек:
+ * - Двойные: "..." и «...»
+ * - Одинарные: '...'
+ * - Типографские: „..." и "..."
+ * 
+ * Рекурсивно удаляет все парные кавычки.
+ * 
+ * @param {string} text - Исходный текст
+ * @returns {string} Текст без симметричных кавычек
+ */
+function stripSymmetricQuotes(text) {
+    if (!text || text.length < 2) return text || '';
+
+    // Пары кавычек: [открывающая, закрывающая]
+    const quotePairs = [
+        ['"', '"'],     // Обычные двойные кавычки
+        ["'", "'"],     // Одинарные кавычки
+        ['«', '»'],     // Французские кавычки (ёлочки)
+        ['„', '"'],     // Немецкие типографские кавычки
+        ['"', '"'],     // Английские типографские кавычки
+        ['`', '`'],     // Обратные кавычки
+    ];
+
+    let result = text.trim();
+    let changed = true;
+
+    // Рекурсивно убираем все парные кавычки
+    while (changed && result.length >= 2) {
+        changed = false;
+        for (const [open, close] of quotePairs) {
+            if (result.startsWith(open) && result.endsWith(close)) {
+                result = result.slice(open.length, -close.length).trim();
+                changed = true;
+                break; // Начинаем проверку заново
+            }
+        }
+    }
+
+    return result;
+}
+
+/**
  * Нормализация текста для корректного сравнения.
  * Порт из Python скрипта 03_update_qdrant_collection.py
  * 
  * Убирает различия которые не влияют на смысл:
+ * - Симметричные кавычки с обоих концов
  * - Разные переносы строк (Windows \r\n vs Unix \n)
  * - Множественные пробелы и табуляции
  * - Пробелы в начале/конце строк
@@ -2488,7 +3405,11 @@ function showImportStep(stepName) {
  */
 function normalizeText(text) {
     if (!text) return '';
-    return text.toLowerCase()
+
+    // Сначала обрезаем симметричные кавычки
+    let normalized = stripSymmetricQuotes(text);
+
+    return normalized.toLowerCase()
         .replace(/\r\n/g, '\n')
         .replace(/\r/g, '\n')
         .replace(/[ \t]+/g, ' ')
@@ -2740,6 +3661,12 @@ function analyzeFolderChanges(newRecords, existingFolders) {
  * Выполнение diff-анализа: загрузка текущих записей и сравнение.
  */
 async function performDiffAnalysis() {
+    // Если был загружен Excel — подгружаем ВСЕ данные из кэша (не только preview)
+    if (state.importData.cacheKey) {
+        const loaded = await loadFullExcelData();
+        if (!loaded) return;  // Ошибка загрузки — прерываем
+    }
+
     // Показываем индикатор загрузки
     showImportStep('diff');
     els.diffLoading.classList.remove('hidden');
@@ -2789,6 +3716,22 @@ async function performDiffAnalysis() {
         state.diffData.folderChanges = folderDiff;
 
         console.log(`📊 Анализ папок: +${folderDiff.added.length} новых, ~${folderDiff.modified.length} изменённых, -${folderDiff.deleted.length} удалённых`);
+
+        // === ДИАГНОСТИКА: Показываем первые 5 записей из каждой категории ===
+        if (diff.added.length > 0) {
+            console.log('🔍 Первые 5 ДОБАВЛЕННЫХ записей:', diff.added.slice(0, 5).map(r => ({
+                code: r.code,
+                description: r.description?.substring(0, 50) + '...',
+                hierarchy: r.hierarchy?.substring(0, 30) + '...'
+            })));
+        }
+        if (diff.modified.length > 0) {
+            console.log('🔍 Первые 5 ИЗМЕНЁННЫХ записей:', diff.modified.slice(0, 5).map(r => ({
+                code: r.code,
+                old: r.oldDescription?.substring(0, 40) + '...',
+                new: r.newDescription?.substring(0, 40) + '...'
+            })));
+        }
 
         // Обновляем UI
         updateDiffUI();
@@ -3109,6 +4052,12 @@ function truncate(text, maxLength) {
  * Полная загрузка всех записей (перезапись).
  */
 async function performFullUpload() {
+    // Если был загружен Excel — подгружаем ВСЕ данные из кэша (не только preview)
+    if (state.importData.cacheKey) {
+        const loaded = await loadFullExcelData();
+        if (!loaded) return;  // Ошибка загрузки — прерываем
+    }
+
     const records = buildRecordsFromMapping();
 
     if (records.length === 0) {
@@ -3405,6 +4354,9 @@ async function pollJobUntilComplete(jobId, progressStart, progressEnd) {
                     } else if (job.status === 'error') {
                         clearInterval(interval);
                         reject(new Error(job.error || 'Ошибка обработки'));
+                    } else if (job.status === 'cancelled') {
+                        clearInterval(interval);
+                        reject(new Error('Задача отменена пользователем'));
                     }
                 }
             } catch (e) {
@@ -3421,10 +4373,13 @@ async function pollJobUntilComplete(jobId, progressStart, progressEnd) {
  * Опрос статуса фоновой задачи.
  */
 async function pollJob(jobId) {
+    // Очищаем предыдущий интервал если был
+    if (state.jobInterval) clearInterval(state.jobInterval);
+
     els.importStatusText.innerText = 'В очереди...';
     els.importProgress.style.width = '0%';
 
-    const interval = setInterval(async () => {
+    state.jobInterval = setInterval(async () => {
         try {
             const res = await authFetch('/admin/jobs');
             const jobs = await res.json();
@@ -3443,7 +4398,8 @@ async function pollJob(jobId) {
                 els.importStatusText.innerText = `${statusText[job.status] || job.status} (${job.progress}%)`;
 
                 if (job.status === 'completed') {
-                    clearInterval(interval);
+                    clearInterval(state.jobInterval);
+                    state.jobInterval = null;
 
                     // Инвалидируем кэш иерархии для обновлённой коллекции
                     fetch(`/hierarchy/${state.activeCollection}/invalidate`, { method: 'POST' })
@@ -3456,14 +4412,21 @@ async function pollJob(jobId) {
                         loadCollections();
                     }, 500);
                 } else if (job.status === 'error') {
-                    clearInterval(interval);
+                    clearInterval(state.jobInterval);
+                    state.jobInterval = null;
                     alert(`Ошибка: ${job.error}`);
+                    closeModal('import');
+                } else if (job.status === 'cancelled') {
+                    clearInterval(state.jobInterval);
+                    state.jobInterval = null;
+                    alert('Импорт отменен пользователем');
                     closeModal('import');
                 }
             }
         } catch (e) {
             if (e.message === 'Unauthorized') {
-                clearInterval(interval);
+                clearInterval(state.jobInterval);
+                state.jobInterval = null;
             }
         }
     }, 1500);
@@ -3479,10 +4442,13 @@ async function loadJobs() {
             'pending': 'Ожидание',
             'processing': 'Обработка',
             'completed': 'Завершено',
-            'error': 'Ошибка'
+            'error': 'Ошибка',
+            'cancelled': 'Отменено'
         };
 
-        els.jobsTableBody.innerHTML = jobs.map(j => `
+        els.jobsTableBody.innerHTML = jobs.map(j => {
+            const canStop = j.status === 'pending' || j.status === 'processing';
+            return `
             <tr>
                 <td style="font-family:monospace; font-size:0.8rem">${j.id.slice(0, 8)}...</td>
                 <td>${j.type === 'import_batch' ? 'Импорт' : j.type}</td>
@@ -3493,8 +4459,11 @@ async function loadJobs() {
                     </div>
                 </td>
                 <td>${new Date(j.created_at * 1000).toLocaleString('ru-RU')}</td>
+                <td>
+                    ${canStop ? `<button class="btn btn-danger" style="padding: 4px 8px; font-size: 0.8rem;" onclick="stopJob('${j.id}')" title="Остановить"><i class="fas fa-stop"></i></button>` : ''}
+                </td>
             </tr>
-        `).join('');
+        `}).join('');
     } catch (e) {
         if (e.message !== 'Unauthorized') {
             console.error('Failed to load jobs:', e);
@@ -3507,6 +4476,25 @@ function startJobPoller() {
         if (state.currentView === 'jobs') loadJobs();
     }, 3000);
 }
+
+/**
+ * Остановка задачи
+ */
+window.stopJob = async (jobId) => {
+    if (!confirm('Вы уверены, что хотите остановить эту задачу?')) return;
+
+    try {
+        const res = await authFetch(`/admin/jobs/${jobId}/stop`, { method: 'POST' });
+        if (res.ok) {
+            loadJobs(); // Обновляем список сразу
+        } else {
+            const err = await res.json();
+            alert('Ошибка: ' + (err.detail || 'Не удалось остановить задачу'));
+        }
+    } catch (e) {
+        alert('Ошибка связи с сервером');
+    }
+};
 
 // === MODAL UTILS ===
 function initModals() {
@@ -3595,4 +4583,11 @@ function openModal(name) {
 
 function closeModal(name) {
     if (els.modals[name]) els.modals[name].classList.remove('active');
+
+    // Если закрываем окно импорта - останавливаем поллинг UI
+    // (сама задача на сервере продолжится, пока её не отменят)
+    if (name === 'import' && state.jobInterval) {
+        clearInterval(state.jobInterval);
+        state.jobInterval = null;
+    }
 }

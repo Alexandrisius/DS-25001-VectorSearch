@@ -19,7 +19,7 @@ import re
 from pathlib import Path
 
 # ─── Конфигурация ───────────────────────────────────────────────
-RAW_PATH = Path("data/01_raw/KSR_28.11.2025.xlsx")
+RAW_PATH = Path("data/01_raw/KSR_19.12.2025.xlsx")
 INTERIM_PATH = Path("data/02_interim/KSR_clean.csv")
 
 # ─── Функция очистки (ваша, без изменений) ─────────────────────

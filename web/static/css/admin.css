@@ -2437,3 +2437,618 @@ body.resizing-columns .data-table-full th {
     margin-bottom: 20px;
     line-height: 1.5;
 }
+
+/* === OPENROUTER SETTINGS (Настройки API эмбеддингов) === */
+
+/* Секция toggle переключателя */
+.openrouter-toggle-section {
+    background: var(--adm-bg);
+    border: 1px solid var(--adm-border);
+    border-radius: 12px;
+    padding: 16px 20px;
+    margin-bottom: 20px;
+}
+
+.toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.toggle-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.toggle-label {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: var(--adm-text);
+}
+
+.toggle-hint {
+    font-size: 0.8rem;
+    color: var(--adm-text-sec);
+}
+
+/* Toggle Switch - iOS стиль */
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 52px;
+    height: 28px;
+    flex-shrink: 0;
+}
+
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: var(--adm-border);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border-radius: 28px;
+}
+
+.toggle-slider::before {
+    position: absolute;
+    content: "";
+    height: 22px;
+    width: 22px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border-radius: 50%;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.toggle-switch input:checked + .toggle-slider {
+    background-color: var(--adm-primary);
+}
+
+.toggle-switch input:checked + .toggle-slider::before {
+    transform: translateX(24px);
+}
+
+.toggle-switch input:focus + .toggle-slider {
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+}
+
+/* Секции полей формы OpenRouter */
+.openrouter-field-section {
+    margin-bottom: 20px;
+}
+
+.field-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--adm-text);
+    margin-bottom: 10px;
+}
+
+.field-label i {
+    color: var(--adm-primary);
+    font-size: 0.85rem;
+}
+
+.field-hint {
+    margin-top: 8px;
+    font-size: 0.8rem;
+    color: var(--adm-text-sec);
+}
+
+.field-hint a {
+    color: var(--adm-primary);
+    text-decoration: none;
+}
+
+.field-hint a:hover {
+    text-decoration: underline;
+}
+
+/* API Key Input с кнопкой видимости */
+.api-key-input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.api-key-input-wrapper input {
+    width: 100%;
+    padding: 12px 48px 12px 14px;
+    border: 2px solid var(--adm-border);
+    border-radius: 10px;
+    background: var(--adm-surface);
+    color: var(--adm-text);
+    font-size: 0.95rem;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    transition: all 0.2s;
+}
+
+.api-key-input-wrapper input:focus {
+    border-color: var(--adm-primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+    outline: none;
+}
+
+.api-key-input-wrapper input::placeholder {
+    color: var(--adm-text-sec);
+    font-family: inherit;
+}
+
+.toggle-visibility-btn {
+    position: absolute;
+    right: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    color: var(--adm-text-sec);
+    cursor: pointer;
+    border-radius: 8px;
+    transition: all 0.2s;
+}
+
+.toggle-visibility-btn:hover {
+    background: var(--adm-bg);
+    color: var(--adm-primary);
+}
+
+/* Секция статуса подключения */
+.openrouter-status-section {
+    margin-bottom: 20px;
+    padding: 12px 16px;
+    background: var(--adm-bg);
+    border-radius: 10px;
+    border: 1px solid var(--adm-border);
+}
+
+.status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    /* Ограничиваем в одну строку */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.status-indicator i {
+    font-size: 0.6rem;
+    flex-shrink: 0;
+}
+
+.status-indicator span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Статусы подключения OpenRouter */
+.status-indicator.status-inactive i {
+    color: var(--adm-text-sec);
+}
+
+.status-indicator.status-inactive span {
+    color: var(--adm-text-sec);
+}
+
+.status-indicator.status-configured i {
+    color: #f59e0b;
+}
+
+.status-indicator.status-configured span {
+    color: #f59e0b;
+}
+
+.status-indicator.status-active i {
+    color: var(--adm-success);
+}
+
+.status-indicator.status-active span {
+    color: var(--adm-success);
+}
+
+.status-indicator.status-testing i {
+    color: var(--adm-primary);
+    animation: pulse 1s infinite;
+}
+
+.status-indicator.status-testing span {
+    color: var(--adm-primary);
+}
+
+.status-indicator.status-success i {
+    color: var(--adm-success);
+}
+
+.status-indicator.status-success span {
+    color: var(--adm-success);
+}
+
+.status-indicator.status-error i {
+    color: var(--adm-danger);
+}
+
+.status-indicator.status-error span {
+    color: var(--adm-danger);
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.4;
+    }
+}
+
+/* Кнопки действий OpenRouter */
+.openrouter-actions {
+    display: flex;
+    gap: 12px;
+    padding-top: 8px;
+    border-top: 1px solid var(--adm-border);
+    margin-top: 8px;
+}
+
+.openrouter-actions .btn {
+    flex: 1;
+    justify-content: center;
+    padding: 12px 16px;
+    font-weight: 600;
+    border-radius: 10px;
+    transition: all 0.2s;
+}
+
+.openrouter-actions .btn:hover {
+    transform: translateY(-1px);
+}
+
+.openrouter-actions .btn-outline {
+    background: transparent;
+    border: 2px solid var(--adm-border);
+    color: var(--adm-text);
+}
+
+.openrouter-actions .btn-outline:hover {
+    border-color: var(--adm-primary);
+    color: var(--adm-primary);
+}
+
+/* === IMPORT SOURCE TABS === */
+.import-source-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    border-bottom: 2px solid var(--adm-border);
+    padding-bottom: 12px;
+}
+
+.source-tab {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 18px;
+    border: 2px solid var(--adm-border);
+    border-radius: 10px;
+    background: var(--adm-surface);
+    color: var(--adm-text-sec);
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.source-tab:hover {
+    border-color: var(--adm-primary);
+    color: var(--adm-text);
+}
+
+.source-tab.active {
+    border-color: var(--adm-primary);
+    background: rgba(99, 102, 241, 0.08);
+    color: var(--adm-primary);
+    font-weight: 600;
+}
+
+.source-tab i {
+    font-size: 1rem;
+}
+
+.import-source-content {
+    display: none;
+}
+
+.import-source-content.active {
+    display: block;
+}
+
+/* === EXCEL DROP ZONE === */
+.excel-drop-zone {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+    border: 3px dashed var(--adm-border);
+    border-radius: 16px;
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.03) 0%, rgba(99, 102, 241, 0.01) 100%);
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s;
+    min-height: 200px;
+}
+
+.excel-drop-zone:hover,
+.excel-drop-zone.drag-over {
+    border-color: var(--adm-primary);
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.08) 0%, rgba(99, 102, 241, 0.04) 100%);
+}
+
+.excel-drop-zone.drag-over {
+    transform: scale(1.02);
+    box-shadow: 0 8px 24px rgba(99, 102, 241, 0.15);
+}
+
+.excel-drop-zone i {
+    font-size: 4rem;
+    color: #22c55e;
+    margin-bottom: 16px;
+    opacity: 0.8;
+}
+
+.excel-drop-zone p {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--adm-text);
+    margin: 0 0 8px 0;
+}
+
+.excel-drop-zone span {
+    font-size: 0.85rem;
+    color: var(--adm-text-sec);
+    margin-bottom: 12px;
+}
+
+.excel-drop-zone .btn {
+    margin-top: 8px;
+}
+
+/* Excel file info card */
+.excel-file-info {
+    margin-top: 16px;
+}
+
+.file-info-card {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px 20px;
+    background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+    border-radius: 12px;
+    color: white;
+}
+
+.file-info-card i {
+    font-size: 2.5rem;
+    opacity: 0.9;
+}
+
+.file-details {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.file-name {
+    font-weight: 700;
+    font-size: 1rem;
+}
+
+.file-stats {
+    font-size: 0.85rem;
+    opacity: 0.9;
+}
+
+.file-info-card .btn {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: transparent;
+    color: white;
+}
+
+.file-info-card .btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+/* Excel sheet selector */
+.excel-sheet-selector {
+    margin-top: 16px;
+    padding: 16px;
+    background: var(--adm-bg);
+    border: 1px solid var(--adm-border);
+    border-radius: 12px;
+}
+
+/* === CLEANING RULES SECTION === */
+.cleaning-rules-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 24px;
+}
+
+.cleaning-rule-item {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px 20px;
+    background: var(--adm-bg);
+    border: 1px solid var(--adm-border);
+    border-radius: 12px;
+    transition: all 0.2s;
+}
+
+.cleaning-rule-item:hover {
+    border-color: var(--adm-primary);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.1);
+}
+
+.cleaning-rule-item.disabled {
+    opacity: 0.5;
+}
+
+.rule-toggle {
+    flex-shrink: 0;
+}
+
+.rule-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.rule-name {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: var(--adm-text);
+    margin-bottom: 6px;
+}
+
+.rule-pattern {
+    display: inline-block;
+    padding: 4px 10px;
+    background: var(--adm-surface);
+    border: 1px solid var(--adm-border);
+    border-radius: 6px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 0.8rem;
+    color: var(--adm-primary);
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.rule-actions {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.rule-actions .btn-icon {
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid var(--adm-border);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--adm-text-sec);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.rule-actions .btn-icon:hover {
+    border-color: var(--adm-primary);
+    color: var(--adm-primary);
+}
+
+.rule-actions .btn-icon.danger:hover {
+    border-color: var(--adm-danger);
+    background: var(--adm-danger-bg);
+    color: var(--adm-danger);
+}
+
+/* Add rule form */
+.add-rule-section {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.05) 0%, rgba(99, 102, 241, 0.02) 100%);
+    border: 2px dashed var(--adm-border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 24px;
+}
+
+.add-rule-section:hover {
+    border-color: var(--adm-primary);
+}
+
+.add-rule-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--adm-text);
+}
+
+.add-rule-header i {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--adm-primary);
+    color: white;
+    border-radius: 8px;
+    font-size: 0.8rem;
+}
+
+.add-rule-form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.add-rule-form .form-row {
+    display: flex;
+    gap: 12px;
+}
+
+.add-rule-form input {
+    flex: 1;
+    padding: 12px 14px;
+    border: 2px solid var(--adm-border);
+    border-radius: 10px;
+    background: var(--adm-surface);
+    color: var(--adm-text);
+    font-size: 0.9rem;
+    transition: all 0.2s;
+}
+
+.add-rule-form input:focus {
+    border-color: var(--adm-primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+    outline: none;
+}
+
+.save-rules-section {
+    display: flex;
+    justify-content: flex-end;
+    padding-top: 8px;
+    border-top: 1px solid var(--adm-border);
+    margin-top: 8px;
+}

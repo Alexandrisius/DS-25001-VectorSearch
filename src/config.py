@@ -81,6 +81,10 @@ EMBEDDING_BATCH_SIZE = 32
 # Размер батча для загрузки в Qdrant
 UPLOAD_BATCH_SIZE = 100
 
+# Параметры для API OpenRouter (параллельная генерация)
+API_EMBEDDING_BATCH_SIZE = 100
+API_MAX_WORKERS = 10
+
 
 # === ПАРАМЕТРЫ ПОИСКА (по умолчанию) ===
 
@@ -96,6 +100,25 @@ DEFAULT_MAX_RESULTS = 100
 # Пороги по умолчанию (переопределяются в vector_databases.json)
 DEFAULT_COSINE_THRESHOLD = 0.45
 DEFAULT_RERANK_THRESHOLD = 0.6
+
+
+# === ГИБРИДНЫЙ ПОИСК (BM25 + Dense) ===
+
+# Включить гибридный поиск (BM25 + Dense)?
+# False = только векторный поиск (как было раньше)
+BM25_ENABLED = True
+
+# Количество кандидатов из BM25 (Stage 1 Sparse)
+# BM25 Search мгновенный (~0.004s), можно брать много
+BM25_TOP_K = 200
+
+# Максимум уникальных BM25 записей для подгрузки payload
+# Retrieve тоже быстрый (~0.001s для 30 записей)
+BM25_MAX_RETRIEVE = 100
+
+# Лимит кандидатов для Reranker после объединения Dense+BM25
+# 200 = 100 dense + до 100 bm25 (reranker ~0.4s для 200 пар)
+HYBRID_RERANK_LIMIT = 200
 
 
 # === КЭШИРОВАНИЕ ===

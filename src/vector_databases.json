@@ -1,4 +1,11 @@
 {
+  "_settings": {
+    "openrouter": {
+      "enabled": true,
+      "model": "qwen/qwen3-embedding-4b",
+      "api_key": "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"
+    }
+  },
   "ksr_main": {
     "description": "База КСР 'ЕвроХим'",
     "columns": {
@@ -9,12 +16,12 @@
       "cosine": 0.45,
       "rerank": 0.6
     },
-    "last_updated": "29.11.2025",
+    "last_updated": "19.12.2025",
     "visible": true,
     "locked": true
   },
-  "ksr_6": {
-    "description": "Тест Климович",
+  "ksr_3": {
+    "description": "Тестовая",
     "columns": {
       "code": "code",
       "description": "description"
@@ -23,25 +30,8 @@
       "cosine": 0.45,
       "rerank": 0.6
     },
-    "last_updated": "04.12.2025",
-    "visible": false,
-    "locked": false
-  },
-  "ksr.125": {
-    "description": "Красивое название",
-    "columns": {
-      "code": "code",
-      "description": "description"
-    },
-    "thresholds": {
-      "cosine": 0.45,
-      "rerank": 0.6
-    },
-    "last_updated": "04.12.2025",
+    "last_updated": "19.12.2025",
     "visible": true,
     "locked": false
-  },
-  "_settings": {
-    "active_reranker": "jina-v3"
   }
 }
