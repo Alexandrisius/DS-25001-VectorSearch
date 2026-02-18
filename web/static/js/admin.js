@@ -572,7 +572,9 @@ const openrouterState = {
     enabled: false,
     apiKey: '',
     apiKeySet: false,  // Флаг: установлен ли ключ (не сам ключ)
-    model: 'qwen/qwen3-embedding-4b'
+    model: 'qwen/qwen3-embedding-4b',
+    batch_size: 10,
+    max_workers: 3
 };
 
 /**
@@ -587,6 +589,8 @@ async function loadOpenRouterSettings() {
             openrouterState.enabled = data.enabled || false;
             openrouterState.apiKeySet = data.api_key_set || false;
             openrouterState.model = data.model || 'qwen/qwen3-embedding-4b';
+            openrouterState.batch_size = data.batch_size || 10;
+            openrouterState.max_workers = data.max_workers || 3;
 
             // Обновляем UI
             updateOpenRouterUI();
@@ -618,6 +622,16 @@ function updateOpenRouterUI() {
 
     if (modelSelect) {
         modelSelect.value = openrouterState.model;
+    }
+    
+    // Установка значений батчинга
+    const batchSizeInput = document.getElementById('openrouterBatchSize');
+    const maxWorkersInput = document.getElementById('openrouterMaxWorkers');
+    if (batchSizeInput) {
+        batchSizeInput.value = openrouterState.batch_size || 10;
+    }
+    if (maxWorkersInput) {
+        maxWorkersInput.value = openrouterState.max_workers || 3;
     }
 
     // Обновляем статус
@@ -684,6 +698,10 @@ async function saveOpenRouterSettings() {
     const enabled = enabledCheckbox ? enabledCheckbox.checked : false;
     const apiKey = apiKeyInput ? apiKeyInput.value.trim() : '';
     const model = modelSelect ? modelSelect.value : 'qwen/qwen3-embedding-4b';
+    const batchSizeInput = document.getElementById('openrouterBatchSize');
+    const maxWorkersInput = document.getElementById('openrouterMaxWorkers');
+    const batch_size = batchSizeInput ? parseInt(batchSizeInput.value) || 10 : 10;
+    const max_workers = maxWorkersInput ? parseInt(maxWorkersInput.value) || 3 : 3;
 
     // Показываем индикатор загрузки
     const originalText = saveBtn.innerHTML;
@@ -697,7 +715,9 @@ async function saveOpenRouterSettings() {
             body: JSON.stringify({
                 enabled: enabled,
                 api_key: apiKey,
-                model: model
+                model: model,
+                batch_size: batch_size,
+                max_workers: max_workers
             })
         });
 
@@ -706,6 +726,8 @@ async function saveOpenRouterSettings() {
             openrouterState.enabled = data.enabled;
             openrouterState.apiKeySet = data.api_key_set;
             openrouterState.model = data.model;
+            openrouterState.batch_size = data.batch_size || 10;
+            openrouterState.max_workers = data.max_workers || 3;
 
             // Очищаем поле ввода ключа (он сохранён на сервере)
             if (apiKeyInput && apiKey) {

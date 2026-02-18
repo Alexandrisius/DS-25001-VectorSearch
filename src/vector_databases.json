@@ -3,7 +3,9 @@
     "openrouter": {
       "enabled": true,
       "model": "qwen/qwen3-embedding-4b",
-      "api_key": "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"
+      "api_key": "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",
+      "batch_size": 100,
+      "max_workers": 1
     }
   },
   "ksr_main": {
@@ -16,7 +18,7 @@
       "cosine": 0.45,
       "rerank": 0.6
     },
-    "last_updated": "20.12.2025",
+    "last_updated": "06.01.2026",
     "visible": true,
     "locked": true
   }

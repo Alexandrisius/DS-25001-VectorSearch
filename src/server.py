@@ -1718,6 +1718,8 @@ class QdrantVectorDatabaseManager:
         Использует ThreadPoolExecutor для ускорения обработки большого количества текстов.
         Размер батча и количество воркеров берутся из конфигурации.
         
+        Добавлена retry логика с экспоненциальной задержкой для надёжности.
+        
         Args:
             texts (List[str]): Список текстов для эмбеддинга
             batch_size (int): Игнорируется для API (используется API_EMBEDDING_BATCH_SIZE)
@@ -1725,9 +1727,10 @@ class QdrantVectorDatabaseManager:
         Returns:
             np.ndarray: Массив эмбеддингов (N, D)
         """
-        # Используем настройки из конфига для максимальной скорости
-        batch_size = API_EMBEDDING_BATCH_SIZE
-        max_workers = API_MAX_WORKERS
+        # Получаем настройки из БД (или из config.py как fallback)
+        or_settings = self._get_openrouter_settings()
+        batch_size = or_settings.get("batch_size", API_EMBEDDING_BATCH_SIZE)
+        max_workers = or_settings.get("max_workers", API_MAX_WORKERS)
         
         # Получаем настройки OpenRouter
         or_settings = self._get_openrouter_settings()
@@ -1746,74 +1749,101 @@ class QdrantVectorDatabaseManager:
             f"(по {batch_size}), {max_workers} потоков"
         )
         
-        # Функция для обработки одного батча (выполняется в потоке)
-        def process_batch(batch_texts, batch_idx):
-            # Нормализация и проверка на пустые строки
-            processed_texts = []
-            for i, t in enumerate(batch_texts):
-                clean_t = t.strip()
-                if not clean_t:
-                    logger.warning(f"⚠️ Warning: Пустая строка в батче {batch_idx}, индекс {i}. Заменяем на placeholders.")
-                    processed_texts.append("пусто")
-                else:
-                    processed_texts.append(clean_t.lower())
+        # Функция для обработки одного батча (выполняется в потоке) с retry
+        def process_batch(batch_texts, batch_idx, max_retries=3, initial_delay=2.0):
+            """Обработка батча с retry логикой"""
+            last_error = None
             
-            batch_texts = processed_texts
-
-            try:
-                # ВАЖНО: Создаем свой клиент для каждого потока (хотя httpx.Client потокобезопасен, 
-                # context manager лучше использовать локально)
-                with httpx.Client(timeout=120.0) as client:
-                    response = client.post(
-                        "https://openrouter.ai/api/v1/embeddings",
-                        headers={
-                            "Authorization": f"Bearer {api_key}",
-                            "Content-Type": "application/json",
-                            "HTTP-Referer": "https://ksr-matcher.local",
-                            "X-Title": "KSR Matcher"
-                        },
-                        json={
-                            "model": model,
-                            "input": batch_texts,
-                            "encoding_format": "float"
-                        }
-                    )
-                    
-                    if response.status_code == 200:
-                        data = response.json()
-                        embeddings = []
-                        if "data" in data and isinstance(data["data"], list):
-                            # Сортируем по index для гарантии порядка внутри батча
-                            sorted_data = sorted(data["data"], key=lambda x: x.get("index", 0))
-                            for item in sorted_data:
-                                emb = item.get("embedding", [])
-                                if emb:
-                                    emb_np = np.array(emb, dtype=np.float32)
-                                    # L2 нормализация
-                                    norm = np.linalg.norm(emb_np)
-                                    if norm > 0:
-                                        emb_np = emb_np / norm
-                                    embeddings.append(emb_np)
-                            return embeddings
+            for attempt in range(max_retries):
+                try:
+                    # Нормализация и проверка на пустые строки
+                    processed_texts = []
+                    for i, t in enumerate(batch_texts):
+                        clean_t = t.strip()
+                        if not clean_t:
+                            logger.warning(f"⚠️ Warning: Пустая строка в батче {batch_idx}, индекс {i}. Заменяем на placeholders.")
+                            processed_texts.append("пусто")
                         else:
-                            # ЛОГИРУЕМ ПРОБЛЕМНЫЙ БАТЧ
-                            logger.error(f"❌ OpenRouter Invalid Response: {data}")
-                            logger.error(f"🔍 Problematic Batch Content (first 5): {batch_texts[:5]}")
-                            raise HTTPException(status_code=500, detail=f"Неожиданный формат ответа OpenRouter: {str(data)[:500]}")
-                    elif response.status_code == 401:
-                        raise HTTPException(status_code=401, detail="Неверный OpenRouter API ключ")
-                    elif response.status_code == 429:
-                        logger.warning(f"⚠️ Rate limit на батче {batch_idx}. Пауза 2с...")
-                        time.sleep(2)
-                        # Простейшая ретрай логика (можно улучшить)
-                        raise HTTPException(status_code=429, detail="OpenRouter Rate Limit")
-                    else:
-                        error_text = response.text[:200] if response.text else "Неизвестная ошибка"
-                        raise HTTPException(status_code=500, detail=f"Ошибка OpenRouter ({response.status_code}): {error_text}")
+                            processed_texts.append(clean_t.lower())
+                    
+                    batch_texts = processed_texts
+
+                    # ВАЖНО: Создаем свой клиент для каждого потока
+                    with httpx.Client(timeout=120.0) as client:
+                        response = client.post(
+                            "https://openrouter.ai/api/v1/embeddings",
+                            headers={
+                                "Authorization": f"Bearer {api_key}",
+                                "Content-Type": "application/json",
+                                "HTTP-Referer": "https://ksr-matcher.local",
+                                "X-Title": "KSR Matcher"
+                            },
+                            json={
+                                "model": model,
+                                "input": batch_texts,
+                                "encoding_format": "float"
+                            }
+                        )
                         
-            except Exception as e:
-                logger.error(f"❌ Ошибка OpenRouter batch {batch_idx}: {e}")
-                raise e
+                        if response.status_code == 200:
+                            data = response.json()
+                            embeddings = []
+                            # ВАЖНО: OpenRouter может вернуть HTTP 200 с телом {'error': {...}}
+                            if "error" in data:
+                                error_info = data["error"]
+                                error_msg = error_info.get("message", "Неизвестная ошибка провайдера")
+                                error_code = error_info.get("code", "")
+                                logger.error(f"❌ OpenRouter вернул ошибку провайдера (HTTP 200): {data}")
+                                if error_code == 404 or "No successful provider" in error_msg:
+                                    raise HTTPException(
+                                        status_code=500,
+                                        detail=f"Модель '{model}' недоступна на OpenRouter: {error_msg}. "
+                                               f"Проверьте название модели в настройках OpenRouter."
+                                    )
+                                raise HTTPException(status_code=500, detail=f"Ошибка провайдера OpenRouter: {error_msg}")
+                            if "data" in data and isinstance(data["data"], list):
+                                # Сортируем по index для гарантии порядка внутри батча
+                                sorted_data = sorted(data["data"], key=lambda x: x.get("index", 0))
+                                for item in sorted_data:
+                                    emb = item.get("embedding", [])
+                                    if emb:
+                                        emb_np = np.array(emb, dtype=np.float32)
+                                        # L2 нормализация
+                                        norm = np.linalg.norm(emb_np)
+                                        if norm > 0:
+                                            emb_np = emb_np / norm
+                                        embeddings.append(emb_np)
+                                return embeddings
+                            else:
+                                # ЛОГИРУЕМ ПРОБЛЕМНЫЙ БАТЧ
+                                logger.error(f"❌ OpenRouter Invalid Response: {data}")
+                                logger.error(f"🔍 Problematic Batch Content (first 5): {batch_texts[:5]}")
+                                raise HTTPException(status_code=500, detail=f"Неожиданный формат ответа OpenRouter: {str(data)[:500]}")
+                        elif response.status_code == 401:
+                            raise HTTPException(status_code=401, detail="Неверный OpenRouter API ключ")
+                        elif response.status_code == 429:
+                            # Rate limit - retry с задержкой
+                            delay = initial_delay * (2 ** attempt)  # экспоненциальная задержка
+                            logger.warning(f"⚠️ Rate limit на батче {batch_idx}, попытка {attempt+1}/{max_retries}. Пауза {delay:.1f}с...")
+                            time.sleep(delay)
+                            continue
+                        else:
+                            error_text = response.text[:200] if response.text else "Неизвестная ошибка"
+                            raise HTTPException(status_code=500, detail=f"Ошибка OpenRouter ({response.status_code}): {error_text}")
+                            
+                except HTTPException:
+                    raise  # Пробрасываем HTTPException без retry
+                except Exception as e:
+                    last_error = e
+                    if attempt < max_retries - 1:
+                        delay = initial_delay * (2 ** attempt)
+                        logger.warning(f"⚠️ Ошибка батча {batch_idx}, попытка {attempt+1}/{max_retries}: {e}. Пауза {delay:.1f}с...")
+                        time.sleep(delay)
+                    continue
+            
+            # Все попытки исчерпаны
+            logger.error(f"❌ Батч {batch_idx} не удался после {max_retries} попыток: {last_error}")
+            raise last_error
 
         # Запускаем параллельное выполнение
         # Используем future для сохранения порядка результатов
@@ -1969,7 +1999,9 @@ class QdrantVectorDatabaseManager:
         openrouter = settings.get("openrouter", {})
         return {
             "api_key": openrouter.get("api_key", ""),
-            "model": openrouter.get("model", "qwen/qwen3-embedding-4b")
+            "model": openrouter.get("model", "qwen/qwen3-embedding-4b"),
+            "batch_size": openrouter.get("batch_size", API_EMBEDDING_BATCH_SIZE),
+            "max_workers": openrouter.get("max_workers", API_MAX_WORKERS)
         }
 
     def _get_embedding_openrouter_sync(self, text: str) -> np.ndarray:
@@ -2018,6 +2050,19 @@ class QdrantVectorDatabaseManager:
                 
                 if response.status_code == 200:
                     data = response.json()
+                    # ВАЖНО: OpenRouter может вернуть HTTP 200 с телом {'error': {...}}
+                    if "error" in data:
+                        error_info = data["error"]
+                        error_msg = error_info.get("message", "Неизвестная ошибка провайдера")
+                        error_code = error_info.get("code", "")
+                        logger.error(f"❌ OpenRouter вернул ошибку провайдера (HTTP 200): {data}")
+                        if error_code == 404 or "No successful provider" in error_msg:
+                            raise HTTPException(
+                                status_code=500,
+                                detail=f"Модель '{model}' недоступна на OpenRouter: {error_msg}. "
+                                       f"Проверьте название модели в настройках OpenRouter."
+                            )
+                        raise HTTPException(status_code=500, detail=f"Ошибка провайдера OpenRouter: {error_msg}")
                     if "data" in data and len(data["data"]) > 0:
                         embedding = data["data"][0].get("embedding", [])
                         if embedding:
@@ -2151,7 +2196,11 @@ class QdrantVectorDatabaseManager:
                 "text-embedding-ada-002": 1536,
                 "voyage-large-2": 1536,
                 "voyage-code-2": 1536,
-                # Qwen и подобные модели обычно используют 2560
+                # Qwen3 Embedding модели
+                "qwen/qwen3-embedding-4b": 2560,
+                "qwen/qwen3-embedding-0.6b": 1024,
+                "qwen3-embedding-4b": 2560,
+                "qwen3-embedding-0.6b": 1024,
             }
             
             # Проверяем известные модели
@@ -3560,9 +3609,12 @@ class BackgroundJobManager:
         # Определяем размер батча для обработки
         # Если используется OpenRouter - увеличиваем батч для параллельной загрузки
         if db_manager._is_openrouter_enabled():
-             # Используем полную мощность: размер батча API * количество воркеров
-             BATCH_SIZE = API_EMBEDDING_BATCH_SIZE * API_MAX_WORKERS
-             logger.info(f"🚀 Включен параллельный импорт: батч {BATCH_SIZE} (API)")
+             # Получаем настройки из БД (или из config.py как fallback)
+             or_settings = db_manager._get_openrouter_settings()
+             bs = or_settings.get("batch_size", API_EMBEDDING_BATCH_SIZE)
+             mw = or_settings.get("max_workers", API_MAX_WORKERS)
+             BATCH_SIZE = bs * mw
+             logger.info(f"🚀 Включен параллельный импорт: батч {BATCH_SIZE} (API: {bs}*{mw})")
         else:
              # Локальный режим (GPU) - используем стандартный батч
              BATCH_SIZE = 32
@@ -3743,8 +3795,12 @@ class BackgroundJobManager:
             
             # Генерируем эмбеддинги для папок батчами
             if db_manager._is_openrouter_enabled():
-                FOLDER_BATCH_SIZE = API_EMBEDDING_BATCH_SIZE * API_MAX_WORKERS
-                logger.info(f"🚀 Включен параллельный индекс папок: батч {FOLDER_BATCH_SIZE} (API)")
+                # Получаем настройки из БД (или из config.py как fallback)
+                or_settings = db_manager._get_openrouter_settings()
+                bs = or_settings.get("batch_size", API_EMBEDDING_BATCH_SIZE)
+                mw = or_settings.get("max_workers", API_MAX_WORKERS)
+                FOLDER_BATCH_SIZE = bs * mw
+                logger.info(f"🚀 Включен параллельный индекс папок: батч {FOLDER_BATCH_SIZE} (API: {bs}*{mw})")
             else:
                 FOLDER_BATCH_SIZE = 32
                 logger.info(f"🐢 Включен локальный индекс папок: батч {FOLDER_BATCH_SIZE} (GPU)")
@@ -5178,6 +5234,8 @@ class OpenRouterSettings(BaseModel):
     enabled: bool = False
     api_key: str = ""
     model: str = "qwen/qwen3-embedding-4b"
+    batch_size: int = 10  # Размер батча для одного запроса
+    max_workers: int = 3  # Количество параллельных потоков
 
 
 class OpenRouterSettingsUpdate(BaseModel):
@@ -5185,6 +5243,8 @@ class OpenRouterSettingsUpdate(BaseModel):
     enabled: bool = False
     api_key: str = ""
     model: str = "qwen/qwen3-embedding-4b"
+    batch_size: int = 10  # Размер батча для одного запроса
+    max_workers: int = 3  # Количество параллельных потоков
 
 
 @app.get("/admin/openrouter-settings")
@@ -5217,7 +5277,9 @@ async def admin_get_openrouter_settings():
             "enabled": openrouter.get("enabled", False),
             "api_key": masked_key,  # Маскированный ключ
             "api_key_set": bool(api_key),  # Флаг: установлен ли ключ
-            "model": openrouter.get("model", "qwen/qwen3-embedding-4b")
+            "model": openrouter.get("model", "qwen/qwen3-embedding-4b"),
+            "batch_size": openrouter.get("batch_size", 10),
+            "max_workers": openrouter.get("max_workers", 3)
         }
     except Exception as e:
         logger.error(f"❌ Ошибка получения настроек OpenRouter: {e}")
@@ -5253,9 +5315,11 @@ async def admin_update_openrouter_settings(req: OpenRouterSettingsUpdate, admin:
         
         openrouter_settings = db_manager.collections_metadata["_settings"]["openrouter"]
         
-        # Обновляем enabled и model
+        # Обновляем enabled, model, batch_size и max_workers
         openrouter_settings["enabled"] = req.enabled
         openrouter_settings["model"] = req.model
+        openrouter_settings["batch_size"] = req.batch_size
+        openrouter_settings["max_workers"] = req.max_workers
         
         # Обновляем API key только если передан непустой и не маскированный
         # (маскированный ключ содержит звёздочки)
@@ -5271,6 +5335,8 @@ async def admin_update_openrouter_settings(req: OpenRouterSettingsUpdate, admin:
             "status": "success",
             "enabled": openrouter_settings["enabled"],
             "model": openrouter_settings["model"],
+            "batch_size": openrouter_settings.get("batch_size", API_EMBEDDING_BATCH_SIZE),
+            "max_workers": openrouter_settings.get("max_workers", API_MAX_WORKERS),
             "api_key_set": bool(openrouter_settings.get("api_key", ""))
         }
         
@@ -5360,6 +5426,18 @@ async def admin_test_openrouter_connection(admin: dict = Depends(admin_required)
             
             if response.status_code == 200:
                 data = response.json()
+                # ВАЖНО: OpenRouter может вернуть HTTP 200 с телом {'error': {...}}
+                if "error" in data:
+                    error_info = data["error"]
+                    error_msg = error_info.get("message", "Неизвестная ошибка провайдера")
+                    error_code = error_info.get("code", "")
+                    if error_code == 404 or "No successful provider" in error_msg:
+                        return {
+                            "status": "error",
+                            "message": f"Модель '{model}' недоступна на OpenRouter: {error_msg}. "
+                                       f"Проверьте название модели в настройках."
+                        }
+                    return {"status": "error", "message": f"Ошибка провайдера OpenRouter: {error_msg}"}
                 # Проверяем что получили эмбеддинг
                 if "data" in data and len(data["data"]) > 0:
                     embedding_dim = len(data["data"][0].get("embedding", []))

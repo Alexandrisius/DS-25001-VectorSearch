@@ -82,8 +82,9 @@ EMBEDDING_BATCH_SIZE = 32
 UPLOAD_BATCH_SIZE = 100
 
 # Параметры для API OpenRouter (параллельная генерация)
-API_EMBEDDING_BATCH_SIZE = 100
-API_MAX_WORKERS = 10
+# Уменьшенные значения для избежания rate limiting и ошибок "No successful provider"
+API_EMBEDDING_BATCH_SIZE = 10  # было 100 - уменьшено для надёжности
+API_MAX_WORKERS = 3  # было 10 - уменьшено для надёжности
 
 
 # === ПАРАМЕТРЫ ПОИСКА (по умолчанию) ===

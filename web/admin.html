@@ -7,7 +7,7 @@
     <title>Админ-панель | KSR Matcher</title>
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="/static/css/font-awesome.min.css">
     <link rel="stylesheet" href="/static/css/admin.css">
 </head>
 
@@ -249,11 +249,38 @@
                                     Модель эмбеддингов
                                 </label>
                                 <select id="openrouterModel" class="form-select-modern">
-                                    <option value="qwen/qwen3-embedding-4b">qwen/qwen3-embedding-4b (рекомендуется)
-                                    </option>
+                                    <option value="qwen/qwen3-embedding-4b">qwen/qwen3-embedding-4b (рекомендуется)</option>
+                                    <option value="qwen/qwen3-embedding-0.6b">qwen/qwen3-embedding-0.6b (лёгкая)</option>
+                                    <option value="text-embedding-3-small">text-embedding-3-small (OpenAI)</option>
+                                    <option value="text-embedding-3-large">text-embedding-3-large (OpenAI, 3072d)</option>
+                                    <option value="text-embedding-ada-002">text-embedding-ada-002 (OpenAI, legacy)</option>
                                 </select>
                                 <p class="field-hint">
                                     Модель для генерации векторных представлений текста
+                                </p>
+                            </div>
+
+                            <!-- Настройки батчинга -->
+                            <div class="openrouter-field-section">
+                                <label class="field-label">
+                                    <i class="fas fa-layer-group"></i>
+                                    Параметры батчинга
+                                </label>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                                    <div>
+                                        <label style="display: block; margin-bottom: 5px; font-size: 0.85rem; color: var(--adm-text-sec);">Размер батча</label>
+                                        <input type="number" id="openrouterBatchSize" min="1" max="100" value="10" class="form-input">
+                                        <p class="field-hint">Текстов за один API запрос</p>
+                                    </div>
+                                    <div>
+                                        <label style="display: block; margin-bottom: 5px; font-size: 0.85rem; color: var(--adm-text-sec);">Параллельные потоки</label>
+                                        <input type="number" id="openrouterMaxWorkers" min="1" max="20" value="3" class="form-input">
+                                        <p class="field-hint">Кол-во одновременных запросов</p>
+                                    </div>
+                                </div>
+                                <p class="field-hint" style="margin-top: 8px;">
+                                    <i class="fas fa-info-circle"></i>
+                                    Уменьшите значения при ошибках "No successful provider responses"
                                 </p>
                             </div>
 
