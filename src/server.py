@@ -2190,16 +2190,32 @@ class QdrantVectorDatabaseManager:
             
             # Размерности известных моделей OpenRouter
             known_dimensions = {
-                "thenlper/gte-large": 1024,
+                # OpenAI
+                "openai/text-embedding-3-small": 1536,
+                "openai/text-embedding-3-large": 3072,
+                "openai/text-embedding-ada-002": 1536,
                 "text-embedding-3-small": 1536,
                 "text-embedding-3-large": 3072,
                 "text-embedding-ada-002": 1536,
+                # Google
+                "google/gemini-embedding-001": 3072,
+                # BAAI
+                "baai/bge-m3": 1024,
+                # Intfloat
+                "intfloat/multilingual-e5-large": 1024,
+                # Mistral
+                "mistralai/mistral-embed-2312": 1024,
+                # Thenlper
+                "thenlper/gte-large": 1024,
+                # Voyage
                 "voyage-large-2": 1536,
                 "voyage-code-2": 1536,
                 # Qwen3 Embedding модели
                 "qwen/qwen3-embedding-4b": 2560,
+                "qwen/qwen3-embedding-8b": 4096,
                 "qwen/qwen3-embedding-0.6b": 1024,
                 "qwen3-embedding-4b": 2560,
+                "qwen3-embedding-8b": 4096,
                 "qwen3-embedding-0.6b": 1024,
             }
             
