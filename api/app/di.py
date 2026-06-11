@@ -39,6 +39,7 @@ async def get_embedding_service(session: DBSession) -> EmbeddingService:
             model=prov.model_embed,
             batch_size=prov.batch_size,
             max_workers=prov.max_workers,
+            base_url=prov.base_url,
         )
     # Fallback на env-ключ (если есть)
     return EmbeddingService(
@@ -46,6 +47,7 @@ async def get_embedding_service(session: DBSession) -> EmbeddingService:
         model=settings.openrouter_model_embed,
         batch_size=settings.openrouter_batch_size,
         max_workers=settings.openrouter_max_workers,
+        base_url=settings.openrouter_base_url,
     )
 
 
@@ -54,10 +56,15 @@ async def get_rerank_service(session: DBSession) -> RerankService:
     settings = get_settings()
     if prov and prov.enabled and prov.api_key_encrypted:
         api_key = decrypt_secret(prov.api_key_encrypted)
-        return RerankService(api_key=api_key, model=prov.model_rerank)
+        return RerankService(
+            api_key=api_key,
+            model=prov.model_rerank,
+            base_url=prov.base_url,
+        )
     return RerankService(
         api_key=settings.openrouter_api_key or "missing",
         model=settings.openrouter_model_rerank,
+        base_url=settings.openrouter_base_url,
     )
 
 

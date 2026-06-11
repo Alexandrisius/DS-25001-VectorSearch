@@ -1,11 +1,11 @@
-"""RerankService — кросс-энкодер реранкер через OpenRouter API.
+"""RerankService — кросс-энкодер реранкер через OpenRouter или OpenAI-совместимый API.
 
-Использует OpenRouter /rerank endpoint (если модель поддерживает)
-или fallback на LLM-based rerank через /chat/completions.
+Поддерживает:
+- OpenRouter /rerank endpoint (cohere/rerank-4-pro, cohere/rerank-4-fast)
+- Любой OpenAI-совместимый endpoint через кастомный base_url
+  (LM Studio с rerank-моделями, Cohere напрямую и т.д.)
 """
 from __future__ import annotations
-
-import asyncio
 
 import httpx
 from loguru import logger
@@ -21,12 +21,40 @@ from app.core.exceptions import ExternalAPIError
 OPENROUTER_RERANK_URL = "https://openrouter.ai/api/v1/rerank"
 
 
-class RerankService:
-    """Сервис реранкинга через OpenRouter.
+def _resolve_rerank_url(base_url: str | None) -> str:
+    """Преобразует base_url в полный URL для /rerank.
 
-    Поддерживает два режима:
-    1. /rerank endpoint (если модель — настоящий rerank model)
-    2. Fallback: LLM-based scoring через /chat/completions (если /rerank недоступен)
+    base_url='http://localhost:1234/v1' -> 'http://localhost:1234/v1/rerank'
+    base_url=None -> OPENROUTER_RERANK_URL
+    """
+    if not base_url:
+        return OPENROUTER_RERANK_URL
+    base = base_url.rstrip("/")
+    if base.endswith("/rerank"):
+        return base
+    return f"{base}/rerank"
+
+
+class RerankService:
+    """Сервис реранкинга через OpenRouter или OpenAI-совместимый API.
+
+    Поддерживаемые модели (через OpenRouter):
+    - cohere/rerank-4-pro (рекомендуется, мультиязычный)
+    - cohere/rerank-4-fast (быстрее, чуть хуже качество)
+
+    Использование:
+        # OpenRouter
+        service = RerankService(
+            api_key="sk-or-v1-...",
+            model="cohere/rerank-4-pro",
+        )
+
+        # LM Studio или другой OpenAI-совместимый
+        service = RerankService(
+            api_key="lm-studio",
+            model="my-rerank-model",
+            base_url="http://host.docker.internal:1234/v1",
+        )
     """
 
     def __init__(
@@ -35,11 +63,14 @@ class RerankService:
         model: str,
         timeout: int = 60,
         max_retries: int = 3,
+        base_url: str | None = None,
     ) -> None:
         self.api_key = api_key
         self.model = model
         self.timeout = timeout
         self.max_retries = max_retries
+        self.base_url = (base_url or "").strip() or None
+        self.endpoint = _resolve_rerank_url(self.base_url)
 
     async def rerank(
         self,
@@ -77,9 +108,11 @@ class RerankService:
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
-            "HTTP-Referer": "https://ksr-matcher.local",
-            "X-Title": "KSR Matcher",
         }
+        if not self.base_url:
+            headers["HTTP-Referer"] = "https://ksr-matcher.local"
+            headers["X-Title"] = "KSR Matcher"
+
         payload: dict = {
             "model": self.model,
             "query": query,
@@ -98,7 +131,7 @@ class RerankService:
                 try:
                     async with httpx.AsyncClient(timeout=self.timeout) as client:
                         resp = await client.post(
-                            OPENROUTER_RERANK_URL, headers=headers, json=payload
+                            self.endpoint, headers=headers, json=payload
                         )
                 except (httpx.TimeoutException, httpx.ConnectError) as e:
                     logger.warning(f"Rerank network error: {e}")
@@ -111,7 +144,6 @@ class RerankService:
                             f"Rerank error: {data['error'].get('message', 'Unknown')}"
                         )
                     if "results" in data and isinstance(data["results"], list):
-                        # results: [{"index": i, "relevance_score": s}, ...]
                         scores = [0.0] * len(documents)
                         for item in data["results"]:
                             idx = item.get("index", 0)
@@ -125,10 +157,11 @@ class RerankService:
                     logger.warning(f"Rerank {resp.status_code}, retrying")
                     raise httpx.HTTPError(f"Status {resp.status_code}")
                 elif resp.status_code == 401:
-                    raise ExternalAPIError("Неверный OpenRouter API ключ")
+                    raise ExternalAPIError("Неверный API ключ")
                 elif resp.status_code == 404:
                     raise ExternalAPIError(
-                        f"Модель '{self.model}' не поддерживает /rerank на OpenRouter"
+                        f"Модель '{self.model}' не поддерживает /rerank. "
+                        f"Проверьте модель или base_url.",
                     )
                 else:
                     raise ExternalAPIError(

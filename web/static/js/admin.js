@@ -563,23 +563,24 @@ function initSettingsPage() {
 }
 
 
-// === OPENROUTER SETTINGS (Настройки генерации эмбеддингов через API) ===
+// === LLM API SETTINGS (OpenRouter / OpenAI-совместимый endpoint) ===
 
 /**
- * Глобальное состояние настроек OpenRouter
+ * Глобальное состояние настроек LLM API
  */
 const openrouterState = {
     enabled: false,
     apiKey: '',
-    apiKeySet: false,  // Флаг: установлен ли ключ (не сам ключ)
-    model: 'qwen/qwen3-embedding-4b',
+    apiKeySet: false,
+    baseUrl: '',
+    modelEmbed: 'qwen/qwen3-embedding-4b',
+    modelRerank: 'cohere/rerank-4-pro',
     batch_size: 10,
     max_workers: 3
 };
 
 /**
- * Загрузка настроек OpenRouter при старте.
- * Загружает текущие настройки из backend и обновляет UI.
+ * Загрузка настроек LLM API при старте.
  */
 async function loadOpenRouterSettings() {
     try {
@@ -588,26 +589,29 @@ async function loadOpenRouterSettings() {
             const data = await res.json();
             openrouterState.enabled = data.enabled || false;
             openrouterState.apiKeySet = data.api_key_set || false;
-            openrouterState.model = data.model || 'qwen/qwen3-embedding-4b';
+            openrouterState.baseUrl = data.base_url || '';
+            openrouterState.modelEmbed = data.model_embed || 'qwen/qwen3-embedding-4b';
+            openrouterState.modelRerank = data.model_rerank || 'cohere/rerank-4-pro';
             openrouterState.batch_size = data.batch_size || 10;
             openrouterState.max_workers = data.max_workers || 3;
 
-            // Обновляем UI
             updateOpenRouterUI();
-            console.log('✅ Настройки OpenRouter загружены');
+            console.log('✅ Настройки LLM API загружены');
         }
     } catch (e) {
-        console.warn('⚠️ Не удалось загрузить настройки OpenRouter:', e);
+        console.warn('⚠️ Не удалось загрузить настройки LLM API:', e);
     }
 }
 
 /**
- * Обновление UI на основе состояния OpenRouter.
+ * Обновление UI на основе состояния.
  */
 function updateOpenRouterUI() {
     const enabledCheckbox = document.getElementById('openrouterEnabled');
     const apiKeyInput = document.getElementById('openrouterApiKey');
-    const modelSelect = document.getElementById('openrouterModel');
+    const baseUrlInput = document.getElementById('openrouterBaseUrl');
+    const modelEmbedInput = document.getElementById('openrouterModel');
+    const modelRerankInput = document.getElementById('openrouterRerankModel');
     const statusIndicator = document.getElementById('openrouterStatusIndicator');
     const statusText = document.getElementById('openrouterStatusText');
 
@@ -616,15 +620,21 @@ function updateOpenRouterUI() {
     }
 
     if (apiKeyInput && openrouterState.apiKeySet) {
-        // Показываем placeholder для установленного ключа
         apiKeyInput.placeholder = '••••••••••••••••';
     }
 
-    if (modelSelect) {
-        modelSelect.value = openrouterState.model;
+    if (baseUrlInput) {
+        baseUrlInput.value = openrouterState.baseUrl || '';
     }
-    
-    // Установка значений батчинга
+
+    if (modelEmbedInput) {
+        modelEmbedInput.value = openrouterState.modelEmbed;
+    }
+
+    if (modelRerankInput) {
+        modelRerankInput.value = openrouterState.modelRerank;
+    }
+
     const batchSizeInput = document.getElementById('openrouterBatchSize');
     const maxWorkersInput = document.getElementById('openrouterMaxWorkers');
     if (batchSizeInput) {
@@ -634,11 +644,14 @@ function updateOpenRouterUI() {
         maxWorkersInput.value = openrouterState.max_workers || 3;
     }
 
-    // Обновляем статус
+    // Статус
     if (statusIndicator && statusText) {
+        const isCustom = openrouterState.baseUrl && openrouterState.baseUrl.trim();
         if (openrouterState.enabled && openrouterState.apiKeySet) {
             statusIndicator.className = 'status-indicator status-active';
-            statusText.textContent = 'Активен';
+            statusText.textContent = isCustom
+                ? 'Активен (кастомный endpoint)'
+                : 'Активен (OpenRouter)';
         } else if (openrouterState.apiKeySet) {
             statusIndicator.className = 'status-indicator status-configured';
             statusText.textContent = 'Настроен (выключен)';
@@ -650,8 +663,7 @@ function updateOpenRouterUI() {
 }
 
 /**
- * Инициализация страницы настроек OpenRouter.
- * Привязывает обработчики событий к элементам формы.
+ * Инициализация страницы настроек LLM API.
  */
 function initOpenRouterSettings() {
     const saveBtn = document.getElementById('saveOpenrouterBtn');
@@ -659,7 +671,6 @@ function initOpenRouterSettings() {
     const toggleVisibilityBtn = document.getElementById('toggleApiKeyVisibility');
     const apiKeyInput = document.getElementById('openrouterApiKey');
 
-    // Обработчик показа/скрытия API ключа
     if (toggleVisibilityBtn && apiKeyInput) {
         toggleVisibilityBtn.addEventListener('click', () => {
             const type = apiKeyInput.type === 'password' ? 'text' : 'password';
@@ -671,39 +682,38 @@ function initOpenRouterSettings() {
         });
     }
 
-    // Обработчик сохранения настроек
     if (saveBtn) {
         saveBtn.addEventListener('click', saveOpenRouterSettings);
     }
 
-    // Обработчик тестирования подключения
     if (testBtn) {
         testBtn.addEventListener('click', testOpenRouterConnection);
     }
 }
 
 /**
- * Сохранение настроек OpenRouter.
- * Отправляет текущие настройки на backend.
+ * Сохранение настроек LLM API.
  */
 async function saveOpenRouterSettings() {
     const saveBtn = document.getElementById('saveOpenrouterBtn');
-    const enabledCheckbox = document.getElementById('openrouterEnabled');
-    const apiKeyInput = document.getElementById('openrouterApiKey');
-    const modelSelect = document.getElementById('openrouterModel');
-
     if (!saveBtn) return;
 
-    // Собираем данные
-    const enabled = enabledCheckbox ? enabledCheckbox.checked : false;
-    const apiKey = apiKeyInput ? apiKeyInput.value.trim() : '';
-    const model = modelSelect ? modelSelect.value : 'qwen/qwen3-embedding-4b';
+    const enabledCheckbox = document.getElementById('openrouterEnabled');
+    const apiKeyInput = document.getElementById('openrouterApiKey');
+    const baseUrlInput = document.getElementById('openrouterBaseUrl');
+    const modelEmbedInput = document.getElementById('openrouterModel');
+    const modelRerankInput = document.getElementById('openrouterRerankModel');
     const batchSizeInput = document.getElementById('openrouterBatchSize');
     const maxWorkersInput = document.getElementById('openrouterMaxWorkers');
+
+    const enabled = enabledCheckbox ? enabledCheckbox.checked : false;
+    const apiKey = apiKeyInput ? apiKeyInput.value.trim() : '';
+    const baseUrl = baseUrlInput ? baseUrlInput.value.trim() : '';
+    const modelEmbed = modelEmbedInput ? modelEmbedInput.value.trim() : 'qwen/qwen3-embedding-4b';
+    const modelRerank = modelRerankInput ? modelRerankInput.value.trim() : 'cohere/rerank-4-pro';
     const batch_size = batchSizeInput ? parseInt(batchSizeInput.value) || 10 : 10;
     const max_workers = maxWorkersInput ? parseInt(maxWorkersInput.value) || 3 : 3;
 
-    // Показываем индикатор загрузки
     const originalText = saveBtn.innerHTML;
     saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Сохранение...';
     saveBtn.disabled = true;
@@ -715,7 +725,9 @@ async function saveOpenRouterSettings() {
             body: JSON.stringify({
                 enabled: enabled,
                 api_key: apiKey,
-                model: model,
+                base_url: baseUrl || null,
+                model_embed: modelEmbed,
+                model_rerank: modelRerank,
                 batch_size: batch_size,
                 max_workers: max_workers
             })
@@ -725,20 +737,19 @@ async function saveOpenRouterSettings() {
             const data = await res.json();
             openrouterState.enabled = data.enabled;
             openrouterState.apiKeySet = data.api_key_set;
-            openrouterState.model = data.model;
+            openrouterState.baseUrl = data.base_url || '';
+            openrouterState.modelEmbed = data.model_embed;
+            openrouterState.modelRerank = data.model_rerank;
             openrouterState.batch_size = data.batch_size || 10;
             openrouterState.max_workers = data.max_workers || 3;
 
-            // Очищаем поле ввода ключа (он сохранён на сервере)
             if (apiKeyInput && apiKey) {
                 apiKeyInput.value = '';
                 apiKeyInput.placeholder = '••••••••••••••••';
             }
 
-            // Обновляем UI
             updateOpenRouterUI();
 
-            // Показываем успех
             saveBtn.innerHTML = '<i class="fas fa-check"></i> Сохранено!';
             saveBtn.style.background = 'var(--adm-success)';
 
@@ -752,9 +763,7 @@ async function saveOpenRouterSettings() {
             throw new Error(err.detail || 'Не удалось сохранить');
         }
     } catch (e) {
-        console.error('Ошибка сохранения настроек OpenRouter:', e);
-
-        // Показываем ошибку
+        console.error('Ошибка сохранения настроек LLM API:', e);
         saveBtn.innerHTML = '<i class="fas fa-times"></i> Ошибка';
         saveBtn.style.background = 'var(--adm-danger)';
 

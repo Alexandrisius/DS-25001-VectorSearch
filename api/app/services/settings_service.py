@@ -27,7 +27,11 @@ class SettingsService:
         return list(result.scalars().all())
 
     async def get_provider(self, name: str) -> ApiProvider | None:
-        return await self.session.get(ApiProvider, name=name)  # type: ignore[arg-type]
+        from sqlalchemy import select
+        result = await self.session.execute(
+            select(ApiProvider).where(ApiProvider.name == name)
+        )
+        return result.scalars().first()
 
     async def get_or_create_provider(self, name: str) -> ApiProvider:
         prov = await self.get_provider(name)
@@ -51,6 +55,7 @@ class SettingsService:
         *,
         enabled: bool | None = None,
         api_key: str | None = None,
+        base_url: str | None = None,
         model_embed: str | None = None,
         model_rerank: str | None = None,
         batch_size: int | None = None,
@@ -61,6 +66,8 @@ class SettingsService:
             prov.enabled = enabled
         if api_key and "*" not in api_key:
             prov.api_key_encrypted = encrypt_secret(api_key)
+        if base_url is not None:
+            prov.base_url = base_url.strip() or None
         if model_embed is not None:
             prov.model_embed = model_embed
         if model_rerank is not None:

@@ -54,7 +54,7 @@ open http://localhost:8000
 │   └── Dockerfile
 ├── web/                  # Frontend (HTML/CSS/JS, as-is)
 ├── deploy/               # Скрипты деплоя
-├── docker-compose.yml    # 6 сервисов
+├── docker-compose.yml    # 6 сервисов + опциональный cloudflared
 ├── .env.example
 ├── Makefile
 └── README.md
@@ -142,6 +142,74 @@ make migrate
 ```
 
 Опционально — настроить nginx + Let's Encrypt для HTTPS (см. `deploy/nginx/`).
+
+---
+
+## 🤖 LLM API: OpenRouter + LM Studio
+
+Все настройки моделей и API ключей задаются **через админку** (`http://localhost:8000/admin` → Настройки → LLM API).
+
+### OpenRouter (по умолчанию)
+- Получите API ключ на [openrouter.ai/keys](https://openrouter.ai/keys)
+- Вставьте в поле "API Key" в админке
+- Выберите модели:
+  - **Эмбеддинги:** `qwen/qwen3-embedding-4b` (2560d), `qwen/qwen3-embedding-8b` (4096d), `openai/text-embedding-3-small/large`
+  - **Реранкер (cross-encoder):** `cohere/rerank-4-pro` или `cohere/rerank-4-fast`
+
+### LM Studio (OpenAI-совместимый endpoint)
+Можно подключить локально запущенный LM Studio, Ollama или vLLM:
+
+1. Запустите LM Studio и включите локальный сервер (по умолчанию `http://localhost:1234`)
+2. Загрузите модели (например embedding + reranker)
+3. В админке:
+   - **API Key:** любое значение (например `lm-studio`) — игнорируется
+   - **Base URL:** `http://host.docker.internal:1234/v1`
+   - **Модель эмбеддингов:** имя модели из LM Studio (например `text-embedding-nomic-embed-text-v1.5`)
+   - **Модель реранкера:** имя reranker-модели (если есть)
+
+> `host.docker.internal` — специальный DNS, который Docker Desktop пробрасывает на хост-машину (только Windows/macOS).
+
+---
+
+## 🌐 Cloudflare Tunnel (одной командой)
+
+После первоначальной настройки в Cloudflare Dashboard, туннель поднимается **вместе со всем стеком** одной командой.
+
+### Первоначальная настройка (один раз)
+
+1. Зайдите в [Cloudflare Zero Trust](https://one.dash.cloudflare.com/) → **Networks** → **Tunnels** → **Create a tunnel**
+2. Тип: **Cloudflared** → имя: `ksrmatch` (или любое)
+3. Скопируйте **TUNNEL_TOKEN** (длинная строка)
+4. На вкладке **Public Hostname** добавьте:
+   - Subdomain: `@` (или пусто) → Domain: `ksrmatch.online`
+   - Service: `http://api:8000`
+
+### Запуск
+
+```bash
+# Добавьте токен в .env
+echo "TUNNEL_TOKEN=eyJhIjoixxxxxxxxxxxxx..." >> .env
+
+# Поднимите весь стек (включая cloudflared)
+docker compose --profile tunnel up -d
+```
+
+Или используйте отдельный compose-файл (только cloudflared, основной стек уже работает):
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.cloudflared.yml up -d
+```
+
+> Если `TUNNEL_TOKEN` пустой, cloudflared не поднимется (через `profiles: ["tunnel"]`).
+
+### Проверка
+
+```bash
+docker compose logs cloudflared
+# Должно быть: "Connection established" / "Registered tunnel connection"
+```
+
+После этого сайт доступен по `https://ksrmatch.online` без проброса портов на роутере.
 
 ---
 

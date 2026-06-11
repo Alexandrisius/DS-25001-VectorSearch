@@ -22,11 +22,12 @@ class ApiProvider(Base):
     name: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     api_key_encrypted: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    base_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
     model_embed: Mapped[str] = mapped_column(
         String(128), nullable=False, default="qwen/qwen3-embedding-4b"
     )
     model_rerank: Mapped[str] = mapped_column(
-        String(128), nullable=False, default="qwen/qwen3-rerank-8b"
+        String(128), nullable=False, default="cohere/rerank-4-pro"
     )
     batch_size: Mapped[int] = mapped_column(Integer, nullable=False, default=10)
     max_workers: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
@@ -39,6 +40,7 @@ class ApiProvider(Base):
             "name": self.name,
             "enabled": self.enabled,
             "api_key_set": bool(self.api_key_encrypted),
+            "base_url": self.base_url,
             "model_embed": self.model_embed,
             "model_rerank": self.model_rerank,
             "batch_size": self.batch_size,

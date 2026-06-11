@@ -150,7 +150,10 @@ class CollectionService:
         # Иначе — попробовать через тестовый эмбеддинг
         if prov and prov.enabled and prov.get_api_key():
             svc = EmbeddingService(
-                api_key=prov.get_api_key(), model=model, batch_size=1
+                api_key=prov.get_api_key(),
+                model=model,
+                batch_size=1,
+                base_url=prov.base_url,
             )
             vec = await svc.embed_one("тест", use_cache=False)
             return len(vec)

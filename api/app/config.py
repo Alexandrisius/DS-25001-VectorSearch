@@ -79,8 +79,9 @@ class Settings(BaseSettings):
 
     # ===== OpenRouter (defaults, can be overridden in DB) =====
     openrouter_api_key: str = ""
+    openrouter_base_url: str = ""  # Пусто = OpenRouter; иначе OpenAI-совместимый endpoint (LM Studio и др.)
     openrouter_model_embed: str = "qwen/qwen3-embedding-4b"
-    openrouter_model_rerank: str = "qwen/qwen3-rerank-8b"
+    openrouter_model_rerank: str = "cohere/rerank-4-pro"
     openrouter_batch_size: int = 10
     openrouter_max_workers: int = 3
     openrouter_request_timeout: int = 60

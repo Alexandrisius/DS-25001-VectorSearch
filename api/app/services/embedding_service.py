@@ -1,4 +1,9 @@
-"""EmbeddingService — генерация эмбеддингов через OpenRouter API.
+"""EmbeddingService — генерация эмбеддингов через OpenRouter или OpenAI-совместимый API.
+
+Поддерживает:
+- OpenRouter (по умолчанию, https://openrouter.ai/api/v1)
+- Любой OpenAI-совместимый endpoint через кастомный base_url
+  (LM Studio, Ollama, vLLM, etc.)
 
 Кеш: in-memory LRU (для prod можно заменить на Redis).
 Retry: экспоненциальная задержка при 429/5xx.
@@ -7,7 +12,6 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import time
 from typing import Any
 
 import httpx
@@ -39,16 +43,39 @@ KNOWN_EMBED_DIMS: dict[str, int] = {
     "mistralai/mistral-embed-2312": 1024,
     "voyage-large-2": 1536,
     "voyage-code-2": 1536,
+    "text-embedding-nomic-embed-text-v1.5": 768,
+    "nomic-embed-text-v1.5": 768,
 }
 
 
+def _resolve_embed_url(base_url: str | None) -> str:
+    """Преобразует кастомный base_url в полный URL для эмбеддингов.
+
+    base_url='http://localhost:1234/v1' -> 'http://localhost:1234/v1/embeddings'
+    base_url='http://localhost:1234/v1/' -> 'http://localhost:1234/v1/embeddings'
+    base_url=None -> OPENROUTER_EMBED_URL
+    """
+    if not base_url:
+        return OPENROUTER_EMBED_URL
+    base = base_url.rstrip("/")
+    if base.endswith("/embeddings"):
+        return base
+    return f"{base}/embeddings"
+
+
 class EmbeddingService:
-    """Сервис генерации эмбеддингов через OpenRouter.
+    """Сервис генерации эмбеддингов через OpenRouter или OpenAI-совместимый API.
 
     Использование:
-        service = EmbeddingService(api_key="...", model="qwen/qwen3-embedding-4b")
-        emb = await service.embed_one("труба стальная")
-        embs = await service.embed_batch(["...", "...", ...])
+        # OpenRouter (по умолчанию)
+        service = EmbeddingService(api_key="sk-or-v1-...", model="qwen/qwen3-embedding-4b")
+
+        # LM Studio (OpenAI-совместимый)
+        service = EmbeddingService(
+            api_key="lm-studio",  # любой, LM Studio игнорирует
+            model="text-embedding-nomic-embed-text-v1.5",
+            base_url="http://localhost:1234/v1",
+        )
     """
 
     def __init__(
@@ -59,6 +86,7 @@ class EmbeddingService:
         max_workers: int = 3,
         timeout: int = 60,
         max_retries: int = 3,
+        base_url: str | None = None,
     ) -> None:
         self.api_key = api_key
         self.model = model
@@ -66,6 +94,8 @@ class EmbeddingService:
         self.max_workers = max_workers
         self.timeout = timeout
         self.max_retries = max_retries
+        self.base_url = (base_url or "").strip() or None
+        self.endpoint = _resolve_embed_url(self.base_url)
         self._cache: dict[str, list[float]] = {}
         self._cache_max = get_settings().embedding_cache_size
 
@@ -190,14 +220,23 @@ class EmbeddingService:
     # Internals
     # ---------------------------------------------------------------------
     async def _call_api(self, texts: list[str]) -> list[list[float]]:
-        """Один HTTP запрос к OpenRouter /embeddings."""
+        """Один HTTP запрос к /embeddings.
+
+        Для OpenRouter добавляются заголовки HTTP-Referer/X-Title (требование API).
+        Для кастомного base_url — отправляется минимальный набор заголовков.
+        """
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
-            "HTTP-Referer": "https://ksr-matcher.local",
-            "X-Title": "KSR Matcher",
         }
-        payload = {"model": self.model, "input": texts, "encoding_format": "float"}
+        if not self.base_url:
+            headers["HTTP-Referer"] = "https://ksr-matcher.local"
+            headers["X-Title"] = "KSR Matcher"
+
+        payload = {"model": self.model, "input": texts}
+        # encoding_format поддерживается OpenRouter и OpenAI, но не LM Studio
+        if not self.base_url or "openrouter.ai" in self.base_url:
+            payload["encoding_format"] = "float"
 
         async for attempt in AsyncRetrying(
             stop=stop_after_attempt(self.max_retries),
@@ -208,9 +247,9 @@ class EmbeddingService:
             with attempt:
                 try:
                     async with httpx.AsyncClient(timeout=self.timeout) as client:
-                        resp = await client.post(OPENROUTER_EMBED_URL, headers=headers, json=payload)
+                        resp = await client.post(self.endpoint, headers=headers, json=payload)
                 except (httpx.TimeoutException, httpx.ConnectError) as e:
-                    logger.warning(f"OpenRouter network error: {e}")
+                    logger.warning(f"Embeddings endpoint network error: {e}")
                     raise
 
                 if resp.status_code == 200:
@@ -220,9 +259,9 @@ class EmbeddingService:
                         code = data["error"].get("code", "")
                         if code == 404 or "No successful provider" in msg:
                             raise ExternalAPIError(
-                                f"Модель '{self.model}' недоступна на OpenRouter: {msg}"
+                                f"Модель '{self.model}' недоступна: {msg}"
                             )
-                        raise ExternalAPIError(f"OpenRouter error: {msg}")
+                        raise ExternalAPIError(f"API error: {msg}")
                     if "data" in data and isinstance(data["data"], list):
                         sorted_data = sorted(data["data"], key=lambda x: x.get("index", 0))
                         return [
@@ -233,18 +272,24 @@ class EmbeddingService:
                     raise ExternalAPIError(f"Unexpected response: {str(data)[:200]}")
                 elif resp.status_code in (429, 500, 502, 503, 504):
                     logger.warning(
-                        f"OpenRouter {resp.status_code}, retrying "
+                        f"Embeddings {resp.status_code}, retrying "
                         f"(attempt {attempt.retry_state.attempt_number})"
                     )
                     raise httpx.HTTPError(f"Status {resp.status_code}")
                 elif resp.status_code == 401:
-                    raise ExternalAPIError("Неверный OpenRouter API ключ", details={"status": 401})
+                    raise ExternalAPIError("Неверный API ключ", details={"status": 401})
+                elif resp.status_code == 404:
+                    raise ExternalAPIError(
+                        f"Endpoint не найден: {self.endpoint}. "
+                        f"Проверьте base_url.",
+                        details={"status": 404},
+                    )
                 else:
                     raise ExternalAPIError(
-                        f"OpenRouter error {resp.status_code}: {resp.text[:200]}"
+                        f"API error {resp.status_code}: {resp.text[:200]}"
                     )
 
-        raise ExternalAPIError("OpenRouter: исчерпаны попытки")
+        raise ExternalAPIError("Embeddings: исчерпаны попытки")
 
     @staticmethod
     def _normalize(vec: list[float]) -> list[float]:
@@ -255,7 +300,7 @@ class EmbeddingService:
         return [v / norm for v in vec]
 
     def _cache_key(self, text: str) -> str:
-        return hashlib.sha256(f"{self.model}|{text}".encode()).hexdigest()[:32]
+        return hashlib.sha256(f"{self.endpoint}|{self.model}|{text}".encode()).hexdigest()[:32]
 
     def _cache_put(self, text: str, vector: list[float]) -> None:
         if len(self._cache) >= self._cache_max:

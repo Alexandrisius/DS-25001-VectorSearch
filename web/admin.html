@@ -196,24 +196,23 @@
                             </div>
                         </div>
 
-                        <!-- Карточка: Настройки OpenRouter (генерация эмбеддингов) -->
+                        <!-- Карточка: Настройки LLM API (OpenRouter / LM Studio) -->
                         <div class="settings-card">
                             <div class="settings-card-header">
                                 <i class="fas fa-cloud"></i>
-                                <h3>OpenRouter API</h3>
+                                <h3>LLM API (эмбеддинги + реранкер)</h3>
                             </div>
                             <p class="settings-card-desc">
-                                Настройте OpenRouter для генерации эмбеддингов через облачный API.
-                                При включении все эмбеддинги будут генерироваться через API вместо локальной модели.
+                                Подключите OpenRouter или собственный OpenAI-совместимый сервер
+                                (LM Studio, Ollama, vLLM) для генерации эмбеддингов и кросс-энкодер реранкинга.
                             </p>
 
-                            <!-- Toggle включения OpenRouter -->
+                            <!-- Toggle включения провайдера -->
                             <div class="openrouter-toggle-section">
                                 <div class="toggle-row">
                                     <div class="toggle-info">
-                                        <span class="toggle-label">Использовать OpenRouter</span>
-                                        <span class="toggle-hint">Переключает генерацию эмбеддингов на облачный
-                                            API</span>
+                                        <span class="toggle-label">Использовать LLM API</span>
+                                        <span class="toggle-hint">Все эмбеддинги и реранкинг через внешний сервис</span>
                                     </div>
                                     <label class="toggle-switch">
                                         <input type="checkbox" id="openrouterEnabled">
@@ -237,30 +236,73 @@
                                     </button>
                                 </div>
                                 <p class="field-hint">
-                                    Получите API ключ на <a href="https://openrouter.ai/keys" target="_blank"
-                                        rel="noopener">openrouter.ai/keys</a>
+                                    OpenRouter: получите ключ на
+                                    <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">openrouter.ai/keys</a>.
+                                    Для LM Studio можно ввести любое значение (например <code>lm-studio</code>) — оно
+                                    игнорируется.
                                 </p>
                             </div>
 
-                            <!-- Выбор модели -->
+                            <!-- Base URL (опционально) -->
+                            <div class="openrouter-field-section">
+                                <label class="field-label">
+                                    <i class="fas fa-link"></i>
+                                    Base URL
+                                    <span style="font-weight: normal; color: var(--adm-text-sec); font-size: 0.85rem;">
+                                        (опционально, для OpenAI-совместимых серверов)
+                                    </span>
+                                </label>
+                                <input type="text" id="openrouterBaseUrl"
+                                    placeholder="http://host.docker.internal:1234/v1"
+                                    class="form-input" autocomplete="off">
+                                <p class="field-hint">
+                                    <i class="fas fa-info-circle"></i>
+                                    Оставьте пустым для OpenRouter.
+                                    Для <b>LM Studio</b> внутри Docker на этом же ПК используйте
+                                    <code>http://host.docker.internal:1234/v1</code>.
+                                </p>
+                            </div>
+
+                            <!-- Модель эмбеддингов -->
                             <div class="openrouter-field-section">
                                 <label class="field-label">
                                     <i class="fas fa-brain"></i>
                                     Модель эмбеддингов
                                 </label>
-                                <select id="openrouterModel" class="form-select-modern">
-                                    <option value="qwen/qwen3-embedding-8b">qwen/qwen3-embedding-8b (4096d, стабильная)</option>
-                                    <option value="qwen/qwen3-embedding-4b">qwen/qwen3-embedding-4b (2560d, медленная)</option>
-                                    <option value="openai/text-embedding-3-small">openai/text-embedding-3-small (1536d, лучший GAP)</option>
-                                    <option value="openai/text-embedding-3-large">openai/text-embedding-3-large (3072d)</option>
-                                    <option value="openai/text-embedding-ada-002">openai/text-embedding-ada-002 (1536d, legacy)</option>
-                                    <option value="baai/bge-m3">baai/bge-m3 (1024d, мультиязычная)</option>
-                                    <option value="google/gemini-embedding-001">google/gemini-embedding-001 (3072d)</option>
-                                    <option value="intfloat/multilingual-e5-large">intfloat/multilingual-e5-large (1024d)</option>
-                                    <option value="mistralai/mistral-embed-2312">mistralai/mistral-embed-2312 (1024d)</option>
-                                </select>
+                                <input type="text" id="openrouterModel" class="form-input"
+                                    placeholder="qwen/qwen3-embedding-4b"
+                                    list="embedModelsList" autocomplete="off">
+                                <datalist id="embedModelsList">
+                                    <option value="qwen/qwen3-embedding-8b">
+                                    <option value="qwen/qwen3-embedding-4b">
+                                    <option value="openai/text-embedding-3-small">
+                                    <option value="openai/text-embedding-3-large">
+                                    <option value="baai/bge-m3">
+                                    <option value="google/gemini-embedding-001">
+                                    <option value="text-embedding-nomic-embed-text-v1.5">
+                                    <option value="nomic-embed-text-v1.5">
+                                </datalist>
                                 <p class="field-hint">
-                                    Модель для генерации векторных представлений текста
+                                    Имя модели из OpenRouter <i>или</i> имя модели, загруженной в LM Studio.
+                                </p>
+                            </div>
+
+                            <!-- Модель реранкера (cross-encoder) -->
+                            <div class="openrouter-field-section">
+                                <label class="field-label">
+                                    <i class="fas fa-sort-amount-down"></i>
+                                    Модель реранкера (cross-encoder)
+                                </label>
+                                <input type="text" id="openrouterRerankModel" class="form-input"
+                                    placeholder="cohere/rerank-4-pro"
+                                    list="rerankModelsList" autocomplete="off">
+                                <datalist id="rerankModelsList">
+                                    <option value="cohere/rerank-4-pro">
+                                    <option value="cohere/rerank-4-fast">
+                                </datalist>
+                                <p class="field-hint">
+                                    На OpenRouter доступны только <b>cohere/rerank-4-pro</b>
+                                    и <b>cohere/rerank-4-fast</b>.
                                 </p>
                             </div>
 

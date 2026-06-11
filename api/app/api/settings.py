@@ -130,18 +130,19 @@ async def get_openrouter_settings(session: DBSession) -> dict:
             "enabled": False,
             "api_key": "",
             "api_key_set": False,
+            "base_url": "",
             "model_embed": "qwen/qwen3-embedding-4b",
-            "model_rerank": "qwen/qwen3-rerank-8b",
+            "model_rerank": "cohere/rerank-4-pro",
             "batch_size": 10,
             "max_workers": 3,
         }
-    # Получить замаскированный ключ
     from app.core.security import decrypt_secret
     plain = decrypt_secret(prov.api_key_encrypted) if prov.api_key_encrypted else ""
     return {
         "enabled": prov.enabled,
         "api_key": svc.mask_api_key(plain),
         "api_key_set": bool(prov.api_key_encrypted),
+        "base_url": prov.base_url or "",
         "model_embed": prov.model_embed,
         "model_rerank": prov.model_rerank,
         "batch_size": prov.batch_size,
@@ -158,6 +159,7 @@ async def update_openrouter_settings(
         "openrouter",
         enabled=req.enabled,
         api_key=req.api_key or None,
+        base_url=req.base_url,
         model_embed=req.model_embed,
         model_rerank=req.model_rerank,
         batch_size=req.batch_size,
@@ -166,6 +168,7 @@ async def update_openrouter_settings(
     return {
         "status": "success",
         "enabled": prov.enabled,
+        "base_url": prov.base_url or "",
         "model_embed": prov.model_embed,
         "model_rerank": prov.model_rerank,
         "batch_size": prov.batch_size,
@@ -176,29 +179,35 @@ async def update_openrouter_settings(
 
 @router.post("/openrouter-test", dependencies=[Depends(get_current_admin)])
 async def test_openrouter(session: DBSession) -> dict:
-    """Тест подключения к OpenRouter."""
+    """Тест подключения к эмбеддинг endpoint.
+
+    Использует кастомный base_url если указан, иначе OpenRouter.
+    """
     import httpx
     from app.core.security import decrypt_secret
+    from app.services.embedding_service import _resolve_embed_url
 
     svc = SettingsService(session)
     prov = await svc.get_provider("openrouter")
     if not prov or not prov.api_key_encrypted:
         return {"status": "error", "message": "API ключ не настроен"}
     api_key = decrypt_secret(prov.api_key_encrypted)
+    endpoint = _resolve_embed_url(prov.base_url)
     try:
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
+        if not prov.base_url:
+            headers["HTTP-Referer"] = "https://ksr-matcher.local"
+            headers["X-Title"] = "KSR Matcher"
+
+        payload: dict = {"model": prov.model_embed, "input": "test connection"}
+        if not prov.base_url or "openrouter.ai" in prov.base_url:
+            payload["encoding_format"] = "float"
+
         async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post(
-                "https://openrouter.ai/api/v1/embeddings",
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": prov.model_embed,
-                    "input": "test connection",
-                    "encoding_format": "float",
-                },
-            )
+            resp = await client.post(endpoint, headers=headers, json=payload)
         if resp.status_code == 200:
             data = resp.json()
             if "error" in data:
@@ -212,12 +221,16 @@ async def test_openrouter(session: DBSession) -> dict:
             return {"status": "error", "message": "Неожиданный формат ответа"}
         if resp.status_code == 401:
             return {"status": "error", "message": "Неверный API ключ"}
+        if resp.status_code == 404:
+            return {"status": "error", "message": f"Endpoint не найден: {endpoint}"}
         return {
             "status": "error",
             "message": f"Ошибка API ({resp.status_code}): {resp.text[:200]}",
         }
     except httpx.TimeoutException:
         return {"status": "error", "message": "Таймаут подключения"}
+    except httpx.ConnectError as e:
+        return {"status": "error", "message": f"Не удалось подключиться: {e}"}
     except Exception as e:
         return {"status": "error", "message": f"Ошибка: {e}"}
 

@@ -123,20 +123,22 @@ services:
     networks:
       - ksr_net
 
-  # === Опционально: Cloudflare Tunnel (раскомментируйте для использования) ===
+  # === Cloudflare Tunnel (активируется, если задан TUNNEL_TOKEN в .env) ===
   # Создайте туннель в Cloudflare Dashboard → Zero Trust → Networks → Tunnels
-  # Скопируйте TUNNEL_TOKEN и добавьте в .env
-  # cloudflared:
-  #   image: cloudflare/cloudflared:latest
-  #   container_name: ksr_cloudflared
-  #   restart: unless-stopped
-  #   command: tunnel --no-autoupdate run
-  #   environment:
-  #     TUNNEL_TOKEN: ${TUNNEL_TOKEN}
-  #   depends_on:
-  #     - api
-  #   networks:
-  #     - ksr_net
+  # Скопируйте TUNNEL_TOKEN в .env — контейнер поднимется автоматически.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: ksr_cloudflared
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:-}
+    profiles:
+      - tunnel
+    depends_on:
+      - api
+    networks:
+      - ksr_net
 
 volumes:
   pgdata:

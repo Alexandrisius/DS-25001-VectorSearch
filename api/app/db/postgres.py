@@ -49,10 +49,11 @@ def get_session_maker() -> async_sessionmaker[AsyncSession]:
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    """FastAPI dependency: выдаёт AsyncSession, закрывает после запроса."""
+    """FastAPI dependency: 뤠�� AsyncSession, ����뢠�� ��᫥ �����."""
     async with get_session_maker()() as session:
         try:
             yield session
+            await session.commit()
         except Exception:
             await session.rollback()
             raise

@@ -50,6 +50,7 @@ class ApiProviderOut(BaseModel):
     enabled: bool
     api_key: str  # маскированный
     api_key_set: bool
+    base_url: str | None = None
     model_embed: str
     model_rerank: str
     batch_size: int
@@ -60,7 +61,8 @@ class ApiProviderOut(BaseModel):
 class ApiProviderUpdate(BaseModel):
     enabled: bool = False
     api_key: str = ""
+    base_url: str | None = None
     model_embed: str = "qwen/qwen3-embedding-4b"
-    model_rerank: str = "qwen/qwen3-rerank-8b"
+    model_rerank: str = "cohere/rerank-4-pro"
     batch_size: int = 10
     max_workers: int = 3

@@ -63,6 +63,7 @@ def import_task(self, job_id: str, collection_id: int, records: list[dict]) -> d
                 model=prov.model_embed,
                 batch_size=prov.batch_size,
                 max_workers=prov.max_workers,
+                base_url=prov.base_url,
             )
             cleaning = CleaningRunner(session)
             import_svc = ImportService(session, embedding_service=embedding, cleaning=cleaning)
@@ -119,7 +120,11 @@ def reindex_task(self, job_id: str, collection_id: int) -> dict:
                 raise ValueError("OpenRouter не настроен")
             from app.core.security import decrypt_secret
             api_key = decrypt_secret(prov.api_key_encrypted)
-            embedding = EmbeddingService(api_key=api_key, model=prov.model_embed)
+            embedding = EmbeddingService(
+                api_key=api_key,
+                model=prov.model_embed,
+                base_url=prov.base_url,
+            )
             folder_svc = FolderService(session, embedding_service=embedding)
             return await folder_svc.rebuild_for_collection(coll, path_levels)
 
