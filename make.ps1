@@ -64,6 +64,9 @@ function Show-Help {
     Write-Host "  tunnel-down       Остановить cloudflared"
     Write-Host "  tunnel-logs       Логи cloudflared"
     Write-Host ""
+    Write-Host "━━━ ADMIN ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Green
+    Write-Host "  password <new>    Сменить пароль админки (и пересобрать API)"
+    Write-Host ""
     Write-Host "━━━ BROWSER ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Green
     Write-Host "  open-site         Открыть сайт"
     Write-Host "  open-admin        Открыть админку"
@@ -185,6 +188,23 @@ switch ($Command) {
 
     "tunnel-logs" {
         Run-Docker compose -f docker-compose.yml -f docker-compose.cloudflared.yml logs -f cloudflared
+    }
+
+    "password" {
+        $newPass = $Args[0]
+        if (-not $newPass) {
+            Write-Host "Usage: .\make.ps1 password <new_password>" -ForegroundColor Yellow
+            Write-Host "Example: .\make.ps1 password MyNewSecret123" -ForegroundColor Yellow
+            exit 1
+        }
+        Write-Host "Changing admin password..." -ForegroundColor Yellow
+        python scripts/change_password.py $newPass
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        Write-Host ""
+        Write-Host "Rebuilding API to apply new password..." -ForegroundColor Yellow
+        Run-Docker compose build api
+        Run-Docker compose up -d api celery_worker
+        Write-Host "[OK] Done. Login: admin / $newPass" -ForegroundColor Green
     }
 
     "open-site" { Start-Process "http://localhost:8000" }

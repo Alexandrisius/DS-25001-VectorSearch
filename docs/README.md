@@ -24,6 +24,7 @@
 | Сделать бэкап данных | [07-data.md](07-data.md) — раздел "Бэкап" |
 | Открыть сайт друзьям по нормальной ссылке | [06-tunnel.md](06-tunnel.md) |
 | Развернуть на VPS (когда надоест дома) | [08-deploy-vps.md](08-deploy-vps.md) |
+| Сменить пароль админки / токены / секреты | [09-security-secrets.md](09-security-secrets.md) |
 
 ## Справочник команд
 
@@ -42,6 +43,7 @@
 | `make backup` | Дамп PostgreSQL в `backups/` |
 | `make tunnel-up` | Запустить Cloudflare Tunnel (открыть сайт друзьям) |
 | `make tunnel-down` | Остановить Cloudflare Tunnel |
+| `make password NEW=xxx` | Сменить пароль админки (и пересобрать API) |
 | `make open-admin` | Открыть админку в браузере |
 | `make open-site` | Открыть сайт в браузере |
 
