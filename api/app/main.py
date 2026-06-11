@@ -1,7 +1,6 @@
 """FastAPI application entry point."""
 from __future__ import annotations
 
-import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -10,7 +9,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api.system import router as system_router
+from app.api import (
+    admin,
+    admin_data,
+    collections,
+    feedback,
+    hierarchy,
+    import_export,
+    materials,
+    search,
+    settings as settings_api,
+    system,
+)
 from app.config import get_settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import logger, setup_logging
@@ -27,7 +37,7 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     logger.info(f"🚀 KSR Vector Search v2 starting (env={settings.env})")
 
-    # Web директория — as-is, монтируется из docker-compose volume ./web:/app/web
+    # Web директория — as-is, монтируется через docker volume ./web:/app/web
     web_dir = Path(__file__).resolve().parent.parent / "web"
     if web_dir.exists():
         app.mount("/static", StaticFiles(directory=str(web_dir / "static")), name="static")
@@ -45,7 +55,6 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
-    """Application factory."""
     settings = get_settings()
     app = FastAPI(
         title="KSR Matcher API v2",
@@ -70,7 +79,16 @@ def create_app() -> FastAPI:
     register_exception_handlers(app)
 
     # Routers
-    app.include_router(system_router)
+    app.include_router(system.router)
+    app.include_router(search.router)
+    app.include_router(hierarchy.router)
+    app.include_router(feedback.router)
+    app.include_router(materials.router)
+    app.include_router(collections.router)
+    app.include_router(admin.router)
+    app.include_router(admin_data.router)
+    app.include_router(settings_api.router)
+    app.include_router(import_export.router)
 
     # Web UI (HTML)
     @app.get("/", response_class=HTMLResponse, include_in_schema=False)

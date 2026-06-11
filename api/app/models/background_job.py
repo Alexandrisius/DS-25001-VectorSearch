@@ -26,7 +26,7 @@ class BackgroundJob(Base):
 
     __tablename__ = "background_jobs"
 
-    id: Mapped[uuid.UUID] = mapped_column(PG_UUID(astext_type=Text), primary_key=True)
+    id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True)
     type: Mapped[str] = mapped_column(String(64), nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
     progress: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

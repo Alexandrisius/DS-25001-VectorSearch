@@ -32,7 +32,7 @@ class Material(Base):
     path_levels: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     path_depth: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     payload: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
-    qdrant_point_id: Mapped[UUID] = mapped_column(PG_UUID(astext_type=Text), nullable=False)
+    qdrant_point_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False)
     status_id: Mapped[str] = mapped_column(
         String(32), ForeignKey("statuses.id"), nullable=False, default="active", server_default="active"
     )

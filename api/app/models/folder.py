@@ -31,7 +31,7 @@ class Folder(Base):
     )
     level: Mapped[int] = mapped_column(Integer, nullable=False)
     items_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    qdrant_point_id: Mapped[UUID | None] = mapped_column(PG_UUID(astext_type=Text), nullable=True)
+    qdrant_point_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
