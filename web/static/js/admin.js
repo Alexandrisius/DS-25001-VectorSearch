@@ -90,7 +90,6 @@ const state = {
 // === DOM ELEMENTS ===
 const els = {
     loginScreen: document.getElementById('loginScreen'),
-    authSplash: document.getElementById('authSplash'),
     adminApp: document.getElementById('adminApp'),
     authPassword: document.getElementById('authPassword'),
     authBtn: document.getElementById('authBtn'),
@@ -942,7 +941,6 @@ function initAuth() {
         });
     } else {
         els.loginScreen.classList.remove('hidden');
-        els.authSplash.classList.add('hidden');
     }
 
     els.authBtn.addEventListener('click', attemptLogin);
@@ -1078,7 +1076,6 @@ async function attemptLogin() {
 
 function showApp() {
     els.loginScreen.classList.add('hidden');
-    els.authSplash.classList.add('hidden');
     els.adminApp.classList.remove('hidden');
     switchView('collections');
     startJobPoller();

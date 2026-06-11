@@ -168,8 +168,8 @@ class SearchService:
         valid = []
         for cand, score in zip(to_rerank, rerank_scores):
             if score >= collection.rerank_threshold:
-                valid.append({**cand, "rerank_score": float(score)})
-        valid.sort(key=lambda x: x["rerank_score"], reverse=True)
+                valid.append({**cand, "reranker_score": float(score)})
+        valid.sort(key=lambda x: x["reranker_score"], reverse=True)
 
         # Шаг 7: Форматирование
         out = []
