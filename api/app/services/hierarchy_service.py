@@ -71,23 +71,19 @@ class HierarchyService:
     async def get_children(
         self, collection: Collection, parent_path: str = "", parent_level: int = 0
     ) -> dict[str, Any]:
-        """Ленивая загрузка прямых детей (категории + материалы на leaf уровне).
+        """Ленивая загрузка прямых детей (категории + материалы на leaf).
 
-        В ОРИГИНАЛЕ (backup/feature-qdrant) parent_path хранился как
-        tuple через "→" — parent_level = len(tuple). Parent materials
-        группировались по full_path, leaf materials показывались как
-        дети leaf-категории.
+        parent_path может быть:
+        - "" → root, дети = уникальные path_level_1
+        - "A" → level-1 категория, дети = уникальные path_level_2
+        - "A → B" → level-2 категория (leaf), дети = сами материалы
+        - "A → B → C" → level-3 (если данные depth=3), дети = level-4
 
-        В v2 parent_path хранится БЕЗ "→" (одна строка имени категории).
-        Уровень parent_path определяется динамически по данным:
-        - parent_path == "" → root, дети = все path_level_1
-        - parent_path совпадает с path_level_1 в материалах → level-1,
-          дети = уникальные path_level_2 (с has_children=True если есть
-          материалы на level 2)
-        - parent_path совпадает с path_level_2 в материалах → level-2
-          (leaf), дети = сами материалы (с is_material=True)
-
-        Это правильно для depth=2 данных. Для depth>2 логика расширяется.
+        Логика: парсим parent_path в parts, фильтруем Qdrant по
+        точному совпадению path_level_N = parts[N-1] для каждого N.
+        Затем по path_depth материала определяем, является ли он
+        дочерней категорией (path_depth > len(parts)) или материалом
+        на этом уровне (path_depth == len(parts)).
         """
         cache_key = f"{collection.name}::{parent_level}::{parent_path}"
         cached = self._children_cache.get(cache_key)
@@ -100,30 +96,35 @@ class HierarchyService:
                 "cached": True,
             }
 
+        parent_parts = [p.strip() for p in parent_path.split("→") if p.strip()] if parent_path else []
+        parent_depth = len(parent_parts)
+        child_level = parent_depth + 1  # 1-indexed
+        child_field = f"path_level_{child_level}" if child_level <= 10 else None
+
         loop = asyncio.get_event_loop()
 
         def _scroll():
-            """Scroll Qdrant: если parent_path пустой — все материалы,
-            иначе фильтр: path_level_1 == parent_path ИЛИ path_level_2 == parent_path.
-            Это покрывает оба случая: parent на level 1 (дети = level 2
-            категории) И parent на level 2 (дети = материалы этого листа).
-            """
             children_map: dict[str, dict[str, Any]] = {}
             materials: list[dict[str, Any]] = []
 
-            if parent_path:
-                scroll_filter = qm.Filter(should=[
+            # Filter: точные совпадения на каждом уровне parent_path
+            if parent_parts:
+                scroll_filter = qm.Filter(must=[
                     qm.FieldCondition(
-                        key="path_level_1",
-                        match=qm.MatchValue(value=parent_path),
-                    ),
-                    qm.FieldCondition(
-                        key="path_level_2",
-                        match=qm.MatchValue(value=parent_path),
-                    ),
+                        key=f"path_level_{i + 1}",
+                        match=qm.MatchValue(value=part),
+                    )
+                    for i, part in enumerate(parent_parts)
                 ])
             else:
                 scroll_filter = None
+
+            payload_fields = ["code", "path_depth", "full_description", "is_folder"]
+            # Запрашиваем payload для всех возможных path_level_N
+            for i in range(1, 12):
+                payload_fields.append(f"path_level_{i}")
+            # dedup
+            payload_fields = list(dict.fromkeys(payload_fields))
 
             offset = None
             while True:
@@ -131,10 +132,7 @@ class HierarchyService:
                     collection_name=collection.name,
                     limit=2000,
                     offset=offset,
-                    with_payload=[
-                        "code", "path_depth", "path_level_1", "path_level_2",
-                        "full_description", "is_folder",
-                    ],
+                    with_payload=payload_fields,
                     with_vectors=False,
                     scroll_filter=scroll_filter,
                 )
@@ -142,42 +140,38 @@ class HierarchyService:
                     payload = p.payload or {}
                     if payload.get("is_folder"):
                         continue
-                    pl1 = payload.get("path_level_1", "")
-                    pl2 = payload.get("path_level_2", "")
+                    path_depth = payload.get("path_depth", 0)
                     code = payload.get("code", "")
                     full = payload.get("full_description", "")
 
-                    if not parent_path:
-                        # Root → группируем по path_level_1
-                        if pl1:
-                            if pl1 not in children_map:
-                                children_map[pl1] = {
-                                    "count": 0,
-                                    "has_materials": False,
-                                    "materials": [],
-                                }
-                            children_map[pl1]["count"] += 1
-                    elif pl1 == parent_path and pl2:
-                        # Parent на level 1, ребёнок = level 2 категория
-                        if pl2 not in children_map:
-                            children_map[pl2] = {
-                                "count": 0,
-                                "has_materials": True,  # у level-2 есть материалы
-                                "materials": [],
-                            }
-                        children_map[pl2]["count"] += 1
-                        if len(children_map[pl2]["materials"]) < 5 and full:
-                            children_map[pl2]["materials"].append(
-                                {"code": code, "name": full}
-                            )
-                    elif pl2 == parent_path:
-                        # Parent на level 2 (leaf) — показываем материалы
+                    if path_depth == parent_depth:
+                        # Материал на уровне parent (leaf) — показываем
                         if len(materials) < 50:
                             materials.append({
                                 "code": code,
                                 "name": full,
                                 "is_material": True,
                             })
+                    elif path_depth > parent_depth and child_field:
+                        # Дочерняя категория — группируем по child_field
+                        child_value = payload.get(child_field, "")
+                        if child_value:
+                            if child_value not in children_map:
+                                children_map[child_value] = {
+                                    "count": 0,
+                                    "has_materials": False,
+                                    "materials": [],
+                                }
+                            children_map[child_value]["count"] += 1
+                            # has_materials = True если у этого ребёнка есть
+                            # материалы (т.е. path_depth == child_level для
+                            # его собственных материалов)
+                            if path_depth == child_level:
+                                children_map[child_value]["has_materials"] = True
+                            if len(children_map[child_value]["materials"]) < 5 and full:
+                                children_map[child_value]["materials"].append(
+                                    {"code": code, "name": full}
+                                )
                 if offset is None:
                     break
             return children_map, materials
@@ -187,10 +181,14 @@ class HierarchyService:
         # Форматируем детей
         children: list[dict[str, Any]] = []
         for name, data in children_map.items():
+            # path — ПОЛНЫЙ иерархический путь с разделителем "→".
+            # Frontend ищет ноду в дереве через data-path === category_path
+            # (где category_path — это "A → B" из search results /metadata).
+            child_path = f"{parent_path} → {name}" if parent_path else name
             child = {
                 "name": name,
-                "path": name,  # Frontend передаёт обратно как parent_path
-                "level": 0,  # не используется, но для совместимости
+                "path": child_path,
+                "level": child_level,
                 "count": data["count"],
                 "has_children": data["has_materials"] or data["count"] > 0,
                 "is_category": True,
