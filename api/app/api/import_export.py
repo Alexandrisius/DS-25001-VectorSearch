@@ -36,11 +36,13 @@ async def admin_import(
     job_svc = JobService(session)
     coll = await CollectionService(session).get_or_404(req.collection_name)
 
+    records = req.get_records()
+
     job = await job_svc.create(
         job_type="import_batch",
         params={
             "collection_name": req.collection_name,
-            "total_records": len(req.data),
+            "total_records": len(records),
             "recreate": req.recreate,
             "folders_to_delete": req.folders_to_delete,
         },
@@ -51,7 +53,7 @@ async def admin_import(
     import_task.delay(
         job_id=str(job.id),
         collection_id=coll.id,
-        records=req.data,
+        records=records,
     )
     return ImportResponse(job_id=str(job.id), status="queued")
 

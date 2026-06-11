@@ -24,11 +24,11 @@ celery_app.conf.update(
     task_track_started=True,
     task_acks_late=True,
     worker_prefetch_multiplier=1,
+    # Worker слушает ОБЕ очереди: ksr_default (для reconcile) и imports (для импорта).
+    # Задаётся через command: celery -A ... worker -Q imports,ksr_default
     task_default_queue="ksr_default",
-    task_routes={
-        "app.workers.tasks.import_task": {"queue": "imports"},
-        "app.workers.tasks.reindex_task": {"queue": "imports"},
-    },
+    # Используем только default queue (imports не нужен как отдельный)
+    task_routes={},
     beat_schedule={
         "reconcile-postgres-qdrant": {
             "task": "app.workers.tasks.reconcile_task",

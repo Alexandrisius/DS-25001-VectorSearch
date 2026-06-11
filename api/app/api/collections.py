@@ -62,7 +62,18 @@ async def admin_update_config(
         cosine_threshold=config.thresholds.get("cosine"),
         rerank_threshold=config.thresholds.get("rerank"),
     )
-    return {"status": "success", "config": coll.to_dict()}
+    # НЕ вызываем coll.to_dict() — это вызовет MissingGreenlet (lazy load).
+    # Собираем dict вручную с eager-loaded count.
+    from sqlalchemy import func, select
+    from app.models.material import Material
+    count_result = await session.execute(
+        select(func.count(Material.id)).where(Material.collection_id == coll.id)
+    )
+    record_count = count_result.scalar() or 0
+    return {
+        "status": "success",
+        "config": coll.to_dict(record_count=record_count),
+    }
 
 
 @router.delete("/admin/collections/{name}")

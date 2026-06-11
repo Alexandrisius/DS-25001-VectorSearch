@@ -1,4 +1,4 @@
-"""BackgroundJob — фоновая задача (импорт и др.)."""
+"""BackgroundJob - фоновая задача (импорт и др.)."""
 from __future__ import annotations
 
 import enum
@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import DateTime, Integer, String, Text, func
+from sqlalchemy.dialects.postgresql import ENUM as PgEnum
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -28,7 +29,17 @@ class BackgroundJob(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True)
     type: Mapped[str] = mapped_column(String(64), nullable=False)
-    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    # status - PostgreSQL ENUM (job_status), создан в миграции 0001.
+    # Используем postgresql.ENUM с create_type=False (тип уже в БД).
+    status: Mapped[str] = mapped_column(
+        PgEnum(
+            *[s.value for s in JobStatus],
+            name="job_status",
+            create_type=False,
+        ),
+        nullable=False,
+        default=JobStatus.PENDING.value,
+    )
     progress: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     total: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     details: Mapped[str] = mapped_column(Text, nullable=False, default="")
@@ -45,7 +56,7 @@ class BackgroundJob(Base):
         return {
             "id": str(self.id),
             "type": self.type,
-            "status": self.status,
+            "status": self.status.value if hasattr(self.status, "value") else str(self.status),
             "progress": self.progress,
             "total": self.total,
             "details": self.details,
@@ -55,3 +66,5 @@ class BackgroundJob(Base):
             "started_at": self.started_at.isoformat() if self.started_at else None,
             "finished_at": self.finished_at.isoformat() if self.finished_at else None,
         }
+
+__all__ = ["JobStatus", "BackgroundJob"]
