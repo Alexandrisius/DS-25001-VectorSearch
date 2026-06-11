@@ -3092,3 +3092,42 @@ body.resizing-columns .data-table-full th {
 .openrouter-status-section .status-message.is-success {
     color: #10b981;
 }
+
+/* === JOBS TABLE === */
+#jobsTable {
+    width: 100%;
+    border-collapse: collapse;
+}
+#jobsTable thead th {
+    text-align: left;
+    padding: 10px 12px;
+    font-weight: 600;
+    color: var(--adm-text-secondary, #94a3b8);
+    border-bottom: 1px solid var(--adm-border, #2a3548);
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+#jobsTable tbody td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--adm-border, #2a3548);
+    vertical-align: middle;
+}
+#jobsTable tbody td:last-child {
+    text-align: center;
+    width: 80px;
+}
+#jobsTable tbody tr:hover {
+    background: var(--adm-bg-hover, rgba(255, 255, 255, 0.03));
+}
+#jobsTable .btn-danger {
+    background: #dc2626;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+#jobsTable .btn-danger:hover {
+    background: #b91c1c;
+}

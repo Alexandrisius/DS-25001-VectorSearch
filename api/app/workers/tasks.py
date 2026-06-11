@@ -138,16 +138,10 @@ def import_task(
                     coll, records, job=job,
                     batch_size=outer_chunk,
                 )
-                await session.execute(
-                    update(BackgroundJob)
-                    .where(BackgroundJob.id == uuid.UUID(job_id))
-                    .values(
-                        status=JobStatus.COMPLETED.value,
-                        finished_at=datetime.now(timezone.utc),
-                        progress=100,
-                        result=result,
-                    )
-                )
+                # import_records сам выставляет status=COMPLETED с подробностями
+                # в job.details. Не перезатираем здесь — иначе пропадёт
+                # cancellation (если job был остановлен через /admin/jobs/{id}/stop)
+                # и текст с количеством созданных папок/материалов.
                 # Очищаем cache после успешного импорта
                 if cache_key:
                     await delete_excel_from_cache(cache_key)

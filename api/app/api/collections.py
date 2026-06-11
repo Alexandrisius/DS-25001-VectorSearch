@@ -30,20 +30,27 @@ async def admin_list_collections(
     all_coll = await svc.list_all()
     current = await svc.get_current_active(None)
 
-    # Считаем реальное количество материалов для каждой коллекции
-    # одним запросом (вместо N запросов в цикле).
+    # Используем stored counter (materials_count) — мгновенный ответ.
+    # Counter обновляется при импорте в _upsert_materials_bulk.
+    # Fallback: если по какой-то причине counter = 0 а записей много —
+    # используем реальный COUNT (для коллекций созданных до миграции 0003).
     from app.models.collection import Collection
     coll_ids = [c.id for c in all_coll]
     counts_by_id: dict[int, int] = {}
     if coll_ids:
-        rows = await session.execute(
-            select(Material.collection_id, func.count(Material.id))
-            .where(Material.collection_id.in_(coll_ids))
-            .where(Material.status_id == "active")
-            .group_by(Material.collection_id)
-        )
-        for cid, cnt in rows.all():
-            counts_by_id[cid] = cnt
+        # Stored counters
+        for c in all_coll:
+            counts_by_id[c.id] = c.materials_count or 0
+        # Если counter = 0 для всех — fallback на COUNT
+        if all((c.materials_count or 0) == 0 for c in all_coll):
+            rows = await session.execute(
+                select(Material.collection_id, func.count(Material.id))
+                .where(Material.collection_id.in_(coll_ids))
+                .where(Material.status_id == "active")
+                .group_by(Material.collection_id)
+            )
+            for cid, cnt in rows.all():
+                counts_by_id[cid] = cnt
 
     return CollectionListResponse(
         collections=[

@@ -29,6 +29,25 @@ def deterministic_uuid(code: str) -> UUID:
     return UUID(str(uuid_mod.uuid5(uuid_mod.NAMESPACE_DNS, code)))
 
 
+async def _is_cancelled(session: AsyncSession, job: BackgroundJob) -> bool:
+    """Проверить, что job был отменён пользователем через /admin/jobs/{id}/stop.
+
+    Делает fresh SELECT (не доверяем кэшу job-объекта) и использует
+    session.expire(job) чтобы точно увидеть обновление статуса,
+    проставленное в другой сессии (JobService.cancel).
+
+    Возвращает True если job.status == 'cancelled'.
+    """
+    try:
+        session.expire(job)
+        refreshed = await session.get(BackgroundJob, job.id)
+        if refreshed and refreshed.status == JobStatus.CANCELLED.value:
+            return True
+    except Exception:
+        return False
+    return False
+
+
 def deterministic_folder_uuid(full_path: str) -> UUID:
     code = f"folder::{full_path.replace(' → ', '::')}"
     return UUID(str(uuid_mod.uuid5(uuid_mod.NAMESPACE_DNS, code)))
@@ -235,6 +254,11 @@ class ImportService:
             chunk = processed[chunk_start:chunk_end]
             chunk_texts = [p["context"] for p in chunk]
 
+            # Cancellation check (перед тяжёлой работой каждого chunk)
+            if job and (await _is_cancelled(self.session, job)):
+                logger.info(f"[import] job {job.id} cancelled at chunk {chunk_idx+1}/{total_chunks}")
+                return {"materials": imported_count, "folders": {}, "cancelled": True}
+
             # 2. Embed только для chunk (memory bounded)
             try:
                 chunk_embeddings = await self.embedding.embed_batch(chunk_texts)
@@ -299,7 +323,7 @@ class ImportService:
                 "data": {"status": "processing", "progress": 92, "details": "Пересборка папок…"},
             })
 
-        folder_stats = await self._rebuild_folders(collection, all_path_levels)
+        folder_stats = await self._rebuild_folders(collection, all_path_levels, job=job)
 
         # 6. Удалить папки по списку (если передан)
         folders_to_delete = []
@@ -321,6 +345,21 @@ class ImportService:
         # 7. Финал
         collection.last_updated = datetime.now(timezone.utc).date()
         if job:
+            # Проверяем cancellation ещё раз (могли отменить во время folder rebuild)
+            if await _is_cancelled(self.session, job):
+                logger.info(f"[import] job {job.id} cancelled during folder rebuild — keeping CANCELLED status")
+                await self.session.commit()
+                publish_job_progress(str(job.id), {
+                    "type": "cancelled",
+                    "data": {
+                        "id": str(job.id),
+                        "status": "cancelled",
+                        "progress": job.progress,
+                        "details": f"Отменено. Импортировано {imported_count} материалов",
+                    },
+                })
+                return {"materials": imported_count, "folders": folder_stats, "cancelled": True}
+
             job.progress = 100
             job.status = JobStatus.COMPLETED.value
             job.finished_at = datetime.now(timezone.utc)
@@ -455,6 +494,10 @@ class ImportService:
         )
         await self.session.execute(stmt)
 
+        # Stored counter для /admin/collections (мгновенный ответ)
+        # При повторном импорте того же кода — counter не растёт (on conflict)
+        collection.materials_count = (collection.materials_count or 0) + len(values_list)
+
     async def _upsert_to_qdrant_chunk(
         self,
         collection: Collection,
@@ -548,28 +591,24 @@ class ImportService:
             )
 
     async def _rebuild_folders(
-        self, collection: Collection, all_path_levels: list[dict[str, Any]]
+        self,
+        collection: Collection,
+        all_path_levels: list[dict[str, Any]],
+        job: BackgroundJob | None = None,
     ) -> dict[str, int]:
-        """Пересобрать папки (extract + upsert в Postgres + Qdrant)."""
+        """Пересобрать папки (extract + bulk embed + batch upsert)."""
         from app.utils.path_levels import extract_folders_from_records
 
         new_folders = extract_folders_from_records(all_path_levels)
         new_paths = {f["full_path"] for f in new_folders}
 
-        # Текущие папки
-        result = await self.session.execute(
-            select(Material).where(  # type: ignore[arg-type]
-                Material.collection_id == collection.id,
-            )
-        )
-        # Удалить осиротевшие
-        deleted = 0
-        # (Простая версия: ищем в Qdrant, чего больше нет в new_paths)
+        # 1. Удалить осиротевшие (full_path больше не встречается)
         loop = asyncio.get_event_loop()
+        deleted = 0
 
         def _scroll_existing():
             offset = None
-            existing_paths: dict[str, str] = {}  # full_path -> qdrant_point_id
+            existing_paths: dict[str, str] = {}
             while True:
                 points, offset = self.qdrant.scroll(
                     collection_name=collection.name,
@@ -595,38 +634,97 @@ class ImportService:
 
         try:
             existing_orphans = await loop.run_in_executor(None, _scroll_existing)
-            for fp, pid in existing_orphans.items():
-                try:
-                    self.qdrant.delete(collection.name, [pid])
-                except Exception:
-                    pass
-                deleted += 1
+            if existing_orphans:
+                await loop.run_in_executor(
+                    None,
+                    lambda: self.qdrant.delete(
+                        collection.name,
+                        list(existing_orphans.values()),
+                    ),
+                )
+                deleted = len(existing_orphans)
         except Exception as e:
             logger.warning(f"Не удалось просканировать старые папки: {e}")
 
-        # Upsert новых
-        created = 0
-        for f in new_folders:
-            fp = f["full_path"]
+        if not new_folders:
+            return {"created": 0, "updated": 0, "deleted": deleted}
+
+        # Cancellation check перед тяжёлым embed_batch (folder rebuild — самая долгая фаза)
+        if job and (await _is_cancelled(self.session, job)):
+            logger.info(f"[folders] job {job.id} cancelled before bulk embed")
+            return {"created": 0, "updated": 0, "deleted": deleted, "cancelled": True}
+
+        # 2. Bulk embed всех папок одним вызовом (внутри chunking + параллелизм)
+        folder_paths = [f["full_path"] for f in new_folders]
+        logger.info(f"[folders] embedding {len(folder_paths)} folders in bulk")
+
+        last_publish = 0.0
+        total = len(folder_paths)
+
+        def _embed_progress(done: int, total_inner: int) -> None:
+            nonlocal last_publish
+            now = asyncio.get_event_loop().time()
+            if (now - last_publish) < 0.5 and done < total_inner:
+                return
+            last_publish = now
+            pct = 92 + int(done / max(total_inner, 1) * 7)
+            pct = min(pct, 99)
+            if job:
+                job.details = f"Папки: {done}/{total_inner} embeddings"
+                job.progress = pct
+            publish_job_progress(str(job.id) if job else "", {
+                "type": "progress",
+                "data": {
+                    "status": "processing",
+                    "progress": pct,
+                    "details": f"Папки: {done}/{total_inner} embeddings",
+                },
+            })
+
+        folder_embeddings = await self.embedding.embed_batch(
+            folder_paths, progress_cb=_embed_progress
+        )
+
+        # 3. Собрать все points и один batch upsert
+        points: list[qm.PointStruct] = []
+        for folder, vector in zip(new_folders, folder_embeddings):
+            fp = folder["full_path"]
             fid = deterministic_folder_uuid(fp)
-            vector = await self.embedding.embed_one(fp)
             payload = {
                 "code": f"folder::{fp.replace(' → ', '::')}",
                 "description": fp,
                 "full_path": fp,
-                "leaf_name": f["leaf_name"],
-                "path_depth": f["level"],
-                "items_count": f["items_count"],
+                "leaf_name": folder["leaf_name"],
+                "path_depth": folder["level"],
+                "items_count": folder["items_count"],
                 "is_folder": True,
-                **{k: v for k, v in f["path_levels"].items() if k.startswith("path_level_")},
+                **{k: v for k, v in folder["path_levels"].items() if k.startswith("path_level_")},
             }
-            self.qdrant.upsert(
-                collection.name,
-                [qm.PointStruct(id=fid, vector=vector, payload=payload)],
-            )
-            created += 1
+            points.append(qm.PointStruct(id=fid, vector=vector, payload=payload))
 
-        return {"created": created, "updated": 0, "deleted": deleted}
+        if points:
+            # Cancellation check перед финальной записью в Qdrant
+            if job and (await _is_cancelled(self.session, job)):
+                logger.info(f"[folders] job {job.id} cancelled after embed, before qdrant upsert")
+                return {"created": 0, "updated": 0, "deleted": deleted, "cancelled": True}
+            await loop.run_in_executor(
+                None, lambda: self.qdrant.upsert(collection.name, points=points)
+            )
+
+        if job:
+            job.details = f"Папки: записано {len(points)} в Qdrant"
+            job.progress = 99
+            await self.session.flush()
+        publish_job_progress(str(job.id) if job else "", {
+            "type": "progress",
+            "data": {
+                "status": "processing",
+                "progress": 99,
+                "details": f"Папки: записано {len(points)} в Qdrant",
+            },
+        })
+
+        return {"created": len(points), "updated": 0, "deleted": deleted}
 
 
 __all__ = ["ImportService"]

@@ -930,9 +930,11 @@ function checkMobileDevice() {
  * Проверяет сохранённый токен и настраивает обработчики.
  */
 function initAuth() {
-    // Проверяем есть ли сохранённый токен
+    // Если есть сохранённый токен — валидируем через API.
+    // Пока идёт валидация — показываем splash (НЕ форму входа),
+    // иначе пользователь видит форму логина на 100-500мс ("flash").
     if (state.token) {
-        // Валидируем токен через тестовый запрос
+        // loginScreen скрыт, authSplash виден (по умолчанию)
         validateToken().then(valid => {
             if (valid) {
                 showApp();
@@ -941,6 +943,10 @@ function initAuth() {
                 logout();
             }
         });
+    } else {
+        // Токена нет — сразу показываем форму входа
+        els.loginScreen.classList.remove('hidden');
+        els.authSplash.classList.add('hidden');
     }
 
     els.authBtn.addEventListener('click', attemptLogin);
@@ -1076,6 +1082,7 @@ async function attemptLogin() {
 
 function showApp() {
     els.loginScreen.classList.add('hidden');
+    els.authSplash.classList.add('hidden');
     els.adminApp.classList.remove('hidden');
     switchView('collections');
     startJobPoller();
@@ -4642,6 +4649,22 @@ function watchJob(jobId) {
                 alert(`Ошибка импорта: ${msg.message || 'unknown'}`);
                 closeModal('import');
             }, 100);
+        } else if (msg.type === 'cancelled') {
+            const j = msg.data || msg;
+            els.importProgress.style.width = `${j.progress || 0}%`;
+            els.importStatusText.innerText = 'Отменено';
+            try { ws.close(); } catch (e) {}
+            state.jobWs = null;
+            clearInterval(watchDog);
+            fetch(`/hierarchy/${state.activeCollection}/invalidate`, { method: 'POST' })
+                .then(() => console.log('✅ Кэш иерархии очищен после отмены'))
+                .catch(e => console.warn('⚠️ Не удалось очистить кэш иерархии:', e));
+            setTimeout(() => {
+                alert(`Импорт отменён.\n\n${j.details || ''}`);
+                closeModal('import');
+                loadJobs();
+                loadCollections();
+            }, 300);
         }
     };
 

@@ -31,6 +31,12 @@ class Collection(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+    # Stored counter — обновляется при импорте (INCREMENT по chunk).
+    # Нужен чтобы /admin/collections возвращался мгновенно (без
+    # SELECT COUNT(*) по 142k записей при каждом запросе).
+    materials_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
 
     # Связи
     materials: Mapped[list["Material"]] = relationship(  # noqa: F821

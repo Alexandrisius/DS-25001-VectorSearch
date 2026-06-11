@@ -11,7 +11,7 @@
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg?v=3">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/font-awesome.min.css?v=3">
-    <link rel="stylesheet" href="/static/css/admin.css?v=3">
+    <link rel="stylesheet" href="/static/css/admin.css?v=4">
 </head>
 
 <body>
@@ -29,12 +29,20 @@
     </div>
 
     <!-- === ЭКРАН ВХОДА === -->
-    <div id="loginScreen" class="login-container">
+    <div id="loginScreen" class="login-container hidden">
         <div class="login-card">
             <h2>Вход в админку</h2>
             <input type="password" id="authPassword" placeholder="Введите пароль..." autofocus>
             <button id="authBtn" class="btn btn-primary">Войти</button>
             <div id="authError" class="hidden" style="color: #f87171; margin-top: 15px;">Неверный пароль</div>
+        </div>
+    </div>
+
+    <!-- === SPLASH (проверка токена при загрузке) === -->
+    <div id="authSplash" class="login-container">
+        <div class="login-card" style="text-align: center;">
+            <i class="fas fa-spinner fa-spin" style="font-size: 2.5rem; color: var(--adm-primary);"></i>
+            <h2 style="margin-top: 20px;">Загрузка…</h2>
         </div>
     </div>
 
@@ -129,6 +137,7 @@
                                     <th>Тип</th>
                                     <th>Статус</th>
                                     <th>Прогресс</th>
+                                    <th>Детали</th>
                                     <th>Создано</th>
                                     <th>Действия</th>
                                 </tr>
@@ -878,7 +887,7 @@
         </div>
     </div>
 
-    <script src="/static/js/admin.js?v=2.3.1"></script>
+    <script src="/static/js/admin.js?v=2.3.2"></script>
 </body>
 
 </html>
