@@ -222,7 +222,9 @@ class EmbeddingService:
     async def _call_api(self, texts: list[str]) -> list[list[float]]:
         """Один HTTP запрос к /embeddings.
 
-        Для OpenRouter добавляются заголовки HTTP-Referer/X-Title (требование API).
+        Для OpenRouter добавляются заголовки HTTP-Referer/X-Title
+        (требование API — без них возможен 403 Forbidden).
+        Используем X-Title (старое имя) — X-OpenRouter-Title ломает.
         Для кастомного base_url — отправляется минимальный набор заголовков.
         """
         headers = {

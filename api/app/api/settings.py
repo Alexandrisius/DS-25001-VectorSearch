@@ -206,6 +206,8 @@ async def test_openrouter(session: DBSession) -> dict:
         "Content-Type": "application/json",
     }
     if not prov.base_url:
+        # OpenRouter требует эти headers (иначе 403)
+        # Используем X-Title (старое имя) — X-OpenRouter-Title ломает
         common_headers["HTTP-Referer"] = "https://ksr-matcher.local"
         common_headers["X-Title"] = "KSR Matcher"
 
@@ -242,6 +244,22 @@ async def test_openrouter(session: DBSession) -> dict:
                     "status": "error",
                     "model": prov.model_embed,
                     "message": "Неверный API ключ",
+                }
+            if resp.status_code == 403:
+                is_html = "<!doctype" in resp.text.lower() or "<html" in resp.text.lower()
+                if is_html:
+                    return {
+                        "status": "error",
+                        "model": prov.model_embed,
+                        "message": (
+                            "403 Forbidden (Cloudflare). "
+                            "Проверь ключ на openrouter.ai/keys"
+                        ),
+                    }
+                return {
+                    "status": "error",
+                    "model": prov.model_embed,
+                    "message": "Forbidden",
                 }
             if resp.status_code == 404:
                 return {
@@ -314,6 +332,35 @@ async def test_openrouter(session: DBSession) -> dict:
                     "model": prov.model_rerank,
                     "message": "Неверный API ключ",
                 }
+            if resp.status_code == 403:
+                # OpenRouter /rerank может отдавать HTML 403 через Cloudflare guardrail
+                # Типичные причины: скомпрометированный ключ, недостаточно прав,
+                # или модель недоступна через /rerank endpoint
+                is_html = "<!doctype" in resp.text.lower() or "<html" in resp.text.lower()
+                if is_html:
+                    return {
+                        "status": "error",
+                        "model": prov.model_rerank,
+                        "message": (
+                            "403 Forbidden (Cloudflare guardrail). "
+                            "Попробуй: 1) проверить ключ на openrouter.ai/keys, "
+                            "2) проверить баланс, "
+                            "3) попробовать другую модель rerank"
+                        ),
+                    }
+                try:
+                    err_data = resp.json()
+                    return {
+                        "status": "error",
+                        "model": prov.model_rerank,
+                        "message": err_data.get("error", {}).get("message", "Forbidden"),
+                    }
+                except Exception:
+                    return {
+                        "status": "error",
+                        "model": prov.model_rerank,
+                        "message": "Forbidden",
+                    }
             if resp.status_code == 404:
                 return {
                     "status": "error",

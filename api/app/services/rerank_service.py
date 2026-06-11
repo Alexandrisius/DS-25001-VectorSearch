@@ -110,6 +110,9 @@ class RerankService:
             "Content-Type": "application/json",
         }
         if not self.base_url:
+            # OpenRouter требует эти headers для non-localhost ключей
+            # (иначе возвращает 403 Forbidden через guardrail)
+            # Используем X-Title (старое имя) — X-OpenRouter-Title ломает
             headers["HTTP-Referer"] = "https://ksr-matcher.local"
             headers["X-Title"] = "KSR Matcher"
 
