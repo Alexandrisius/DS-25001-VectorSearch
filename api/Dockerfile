@@ -1,43 +1,55 @@
 # =============================================================================
-# KSR Vector Search v2 - Backend Dockerfile
+# KSR Vector Search v2 - Multi-stage Dockerfile
 # =============================================================================
-# Multi-stage build для минимального размера образа
+# Stage 1: builder — установка зависимостей
+# Stage 2: runtime — минимальный образ для запуска
 # =============================================================================
 
-FROM python:3.12-slim AS base
+# === Stage 1: Builder ===
+FROM python:3.12-slim AS builder
 
-# Системные зависимости (минимум)
+WORKDIR /build
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential \
-        curl \
-        libpq-dev \
         gcc \
+        libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# uv для быстрой установки зависимостей
 RUN pip install --no-cache-dir uv
+
+COPY pyproject.toml ./
+RUN uv pip install --system --no-cache .
+
+COPY . .
+
+# === Stage 2: Runtime ===
+FROM python:3.12-slim AS runtime
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        curl \
+        libpq5 \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Копируем файлы зависимостей (для кэширования слоя)
-COPY pyproject.toml ./
+# Copy installed packages from builder
+COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
 
-# Устанавливаем зависимости
-RUN uv pip install --system --no-cache .
+# Copy application code
+COPY --from=builder /build/app /app/app
+COPY --from=builder /build/alembic /app/alembic
+COPY --from=builder /build/alembic.ini /app/alembic.ini
+COPY --from=builder /build/pyproject.toml /app/pyproject.toml
 
-# Копируем код
-COPY . .
-
-# Непривилегированный пользователь
+# Non-root user
 RUN useradd --create-home --shell /bin/bash ksr && chown -R ksr:ksr /app
 USER ksr
 
-# Порт по умолчанию
 EXPOSE 8000
 
-# Healthcheck
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
-# Default command
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

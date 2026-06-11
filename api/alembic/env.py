@@ -39,8 +39,13 @@ from app.models import (  # noqa: E402, F401
 config = context.config
 
 # Подставляем URL из настроек приложения
+# Alembic использует async engine, поэтому нужен asyncpg URL
 settings = get_settings()
-config.set_main_option("sqlalchemy.url", settings.sync_database_url)
+async_url = settings.database_url
+# Если URL не содержит драйвер — добавляем asyncpg
+if not async_url.startswith("postgresql+") and async_url.startswith("postgresql://"):
+    async_url = async_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+config.set_main_option("sqlalchemy.url", async_url)
 
 # Логирование Alembic
 if config.config_file_name is not None:

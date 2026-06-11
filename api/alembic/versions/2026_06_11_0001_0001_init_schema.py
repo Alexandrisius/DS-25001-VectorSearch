@@ -39,7 +39,7 @@ def upgrade() -> None:
         sa.Column("description", sa.Text, nullable=True),
         sa.Column(
             "columns_mapping",
-            postgresql.JSONB(astext_type=sa.Text()),
+            postgresql.JSONB(),
             nullable=False,
             server_default=sa.text("'{\"code\": \"code\", \"description\": \"description\"}'::jsonb"),
         ),
@@ -77,7 +77,7 @@ def upgrade() -> None:
         sa.Column("enabled", sa.Boolean, nullable=False, server_default=sa.true()),
         sa.Column(
             "apply_to_columns",
-            postgresql.JSONB(astext_type=sa.Text()),
+            postgresql.JSONB(),
             nullable=False,
             server_default=sa.text("'[\"*\"]'::jsonb"),
         ),
@@ -112,10 +112,10 @@ def upgrade() -> None:
         sa.Column("description", sa.Text, nullable=True),
         sa.Column("full_description", sa.Text, nullable=True),
         sa.Column("context_description", sa.Text, nullable=True),
-        sa.Column("path_levels", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column("path_levels", postgresql.JSONB(), nullable=True),
         sa.Column("path_depth", sa.Integer, nullable=False, server_default="0"),
-        sa.Column("payload", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
-        sa.Column("qdrant_point_id", postgresql.UUID(astext_type=sa.Text()), nullable=False),
+        sa.Column("payload", postgresql.JSONB(), nullable=True),
+        sa.Column("qdrant_point_id", postgresql.UUID(), nullable=False),
         sa.Column("status_id", sa.String(32), nullable=False, server_default="active"),
         sa.Column("version", sa.Integer, nullable=False, server_default="1"),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
@@ -140,7 +140,7 @@ def upgrade() -> None:
         sa.Column("parent_id", sa.BigInteger, nullable=True),
         sa.Column("level", sa.Integer, nullable=False),
         sa.Column("items_count", sa.Integer, nullable=False, server_default="0"),
-        sa.Column("qdrant_point_id", postgresql.UUID(astext_type=sa.Text()), nullable=True),
+        sa.Column("qdrant_point_id", postgresql.UUID(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
         sa.ForeignKeyConstraint(["collection_id"], ["collections.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["parent_id"], ["folders.id"], ondelete="CASCADE"),
@@ -169,7 +169,7 @@ def upgrade() -> None:
     job_status.create(op.get_bind(), checkfirst=True)
     op.create_table(
         "background_jobs",
-        sa.Column("id", postgresql.UUID(astext_type=sa.Text()), primary_key=True),
+        sa.Column("id", postgresql.UUID(), primary_key=True),
         sa.Column("type", sa.String(64), nullable=False),
         sa.Column(
             "status",
@@ -180,8 +180,8 @@ def upgrade() -> None:
         sa.Column("progress", sa.Integer, nullable=False, server_default="0"),
         sa.Column("total", sa.Integer, nullable=False, server_default="0"),
         sa.Column("details", sa.Text, nullable=False, server_default=""),
-        sa.Column("params", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
-        sa.Column("result", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column("params", postgresql.JSONB(), nullable=True),
+        sa.Column("result", postgresql.JSONB(), nullable=True),
         sa.Column("error", sa.Text, nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
         sa.Column("started_at", sa.DateTime(timezone=True), nullable=True),
@@ -211,7 +211,8 @@ def upgrade() -> None:
     )
     op.create_index("idx_feedback_collection_ts", "feedback_events", ["collection", "ts"])
     op.create_index("idx_feedback_action", "feedback_events", ["action"])
-    op.create_index("idx_feedback_query_trgm", "feedback_events", ["query"], postgresql_using="gin")
+    # NOTE: GIN index on text требует pg_trgm extension — убрано для упрощения деплоя
+    # Если нужен full-text search, добавьте: CREATE EXTENSION pg_trgm; в отдельной миграции
 
     # =====================================================================
     # Сидинг: дефолтные статусы
@@ -253,3 +254,4 @@ def downgrade() -> None:
     op.drop_table("statuses")
     op.drop_table("collections")
     op.execute("DROP TYPE IF EXISTS job_status")
+
