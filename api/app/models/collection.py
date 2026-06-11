@@ -40,11 +40,17 @@ class Collection(Base):
         back_populates="collection", cascade="all, delete-orphan"
     )
 
-    def to_dict(self, *, is_active: bool = False) -> dict[str, Any]:
+    def to_dict(self, *, is_active: bool = False, record_count: int = 0) -> dict[str, Any]:
+        """Сериализация в dict.
+
+        ВАЖНО: record_count передаётся извне (из eager-loaded запроса).
+        НЕ использовать len(self.materials) здесь — это вызовет MissingGreenlet
+        в async контексте после закрытия сессии.
+        """
         return {
             "name": self.name,
             "description": self.description or self.name,
-            "record_count": len(self.materials) if self.materials else 0,
+            "record_count": record_count,
             "dimension": self.dimension,
             "thresholds": {
                 "cosine": self.cosine_threshold,
