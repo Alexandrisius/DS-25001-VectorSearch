@@ -8,6 +8,11 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
+from app.cache.excel_cache import (
+    CACHE_TTL_SECONDS,
+    load_excel_from_cache,
+    save_excel_to_cache,
+)
 from app.core.exceptions import NotFoundError
 from app.deps import DBSession, get_current_admin
 from app.models.background_job import JobStatus
@@ -32,11 +37,39 @@ async def admin_import(
     session: DBSession,
     _: dict = Depends(get_current_admin),
 ) -> ImportResponse:
-    """Запуск фоновой задачи импорта (через Celery)."""
+    """Запуск фоновой задачи импорта (через Celery).
+
+    Поддерживает 2 варианта:
+    1. cache_key: данные лежат в Redis (рекомендуется для >10k строк)
+    2. records/data: данные приходят напрямую (для маленьких импортов или тестов)
+    """
     job_svc = JobService(session)
     coll = await CollectionService(session).get_or_404(req.collection_name)
 
-    records = req.get_records()
+    # Определяем records: либо из cache, либо из payload
+    records: list[dict[str, Any]] = []
+
+    if req.cache_key:
+        cached = await load_excel_from_cache(req.cache_key)
+        if not cached:
+            raise HTTPException(
+                status_code=404,
+                detail=(
+                    f"Данные по cache_key '{req.cache_key}' не найдены или истекли "
+                    f"(TTL {CACHE_TTL_SECONDS} сек). Загрузите Excel заново."
+                ),
+            )
+        records = cached.get("data", [])
+        # НЕ удаляем cache здесь — worker удалит после успешного импорта
+    else:
+        # Fallback: records пришли напрямую
+        records = req.get_records()
+
+    if not records:
+        raise HTTPException(
+            status_code=400,
+            detail="Нет данных для импорта (records пустой и cache_key не указан)",
+        )
 
     job = await job_svc.create(
         job_type="import_batch",
@@ -45,15 +78,17 @@ async def admin_import(
             "total_records": len(records),
             "recreate": req.recreate,
             "folders_to_delete": req.folders_to_delete,
+            "cache_key": req.cache_key,  # может быть None
         },
     )
     await session.commit()  # фиксируем job_id
 
-    # Запускаем Celery
+    # Запускаем Celery. Передаём cache_key (если есть) — worker прочитает сам.
     import_task.delay(
         job_id=str(job.id),
         collection_id=coll.id,
-        records=records,
+        cache_key=req.cache_key,
+        records=records,  # fallback если cache_key=None
     )
     return ImportResponse(job_id=str(job.id), status="queued")
 
@@ -65,25 +100,19 @@ async def admin_upload_excel(
     session: DBSession = None,
     _: dict = Depends(get_current_admin),
 ) -> UploadExcelResponse:
-    """Загрузка Excel с preview + кэшированием данных для последующего импорта."""
+    """Загрузка Excel с preview + кэшированием данных в Redis для последующего импорта."""
     result = await parse_excel(file, sheet=sheet, preview_rows=100)
     cache_key = uuid_mod.uuid4().hex[:16]
-    # Сохраняем все данные в app.state (in-memory cache)
-    from fastapi import Request as _Req
-
-    # Простой способ — положим в redis (TODO) или app.state
-    # Здесь — сохраним в app.state через Depends
-    if not hasattr(_app_state_holder, "excel_cache"):
-        _app_state_holder.excel_cache = {}
-    _app_state_holder.excel_cache[cache_key] = {
-        "headers": result["headers"],
-        "data": result["data"],
-        "filename": result["filename"],
-        "ts": datetime.now(timezone.utc).isoformat(),
-    }
-    if len(_app_state_holder.excel_cache) > 5:
-        first = next(iter(_app_state_holder.excel_cache))
-        _app_state_holder.excel_cache.pop(first, None)
+    # Сохраняем все данные в Redis (TTL 1 час) — общий для API и Celery worker
+    await save_excel_to_cache(
+        cache_key,
+        {
+            "headers": result["headers"],
+            "data": result["data"],
+            "filename": result["filename"],
+            "ts": datetime.now(timezone.utc).isoformat(),
+        },
+    )
     return UploadExcelResponse(
         filename=result["filename"],
         sheets=result["sheets"],
@@ -101,15 +130,16 @@ async def admin_get_excel_data(
     cache_key: str,
     _: dict = Depends(get_current_admin),
 ) -> dict:
-    if not hasattr(_app_state_holder, "excel_cache") or cache_key not in _app_state_holder.excel_cache:
+    """Получить preview данных по cache_key (без полного payload)."""
+    cached = await load_excel_from_cache(cache_key)
+    if not cached:
         raise HTTPException(
-            status_code=404, detail="Данные не найдены в кэше. Загрузите файл заново."
+            status_code=404,
+            detail=f"Данные не найдены в кэше (TTL {CACHE_TTL_SECONDS} сек). Загрузите файл заново.",
         )
-    cached = _app_state_holder.excel_cache[cache_key]
     return {
         "headers": cached["headers"],
-        "data": cached["data"],
-        "total_rows": len(cached["data"]),
+        "total_rows": len(cached.get("data", [])),
         "filename": cached.get("filename", ""),
     }
 
@@ -127,7 +157,7 @@ async def admin_list_jobs(
             JobInfo(
                 id=str(j.id),
                 type=j.type,
-                status=j.status,
+                status=j.status.value if hasattr(j.status, "value") else str(j.status),
                 progress=j.progress,
                 total=j.total,
                 details=j.details,
@@ -155,9 +185,4 @@ async def admin_stop_job(
     return {"status": "success", "message": f"Задача {job_id} остановлена"}
 
 
-# Placeholder для app.state (заполняется в main.py)
-class _AppStateHolder:
-    excel_cache: dict = {}
-
-
-_app_state_holder = _AppStateHolder()
+__all__ = ["router"]

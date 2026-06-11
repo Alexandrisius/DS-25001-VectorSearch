@@ -9,13 +9,19 @@ from pydantic import BaseModel, ConfigDict, Field
 class ImportRequest(BaseModel):
     """Запрос на импорт записей.
 
-    Поддерживает ОБА варианта имени поля: "data" (v1/v2 имя) и "records"
-    (используется в новом UI). v2.1.0 — backward compat.
+    Поддерживает 3 варианта получения данных:
+    1. cache_key: данные лежат в Redis (рекомендуется для >10k строк)
+    2. records: алиас для data (новое имя в UI v2.1.0)
+    3. data: старое имя поля (v1/v2)
     """
     collection_name: str
+    cache_key: str | None = Field(
+        default=None,
+        description="Ключ в Redis с данными Excel (рекомендуется для больших файлов)",
+    )
     data: list[dict[str, Any]] | None = Field(
         default=None,
-        description="[{code, description, hierarchy?, meta?}] (v1/v2 имя поля)",
+        description="[{code, description, hierarchy?, meta?}] (старое имя поля)",
     )
     records: list[dict[str, Any]] | None = Field(
         default=None,

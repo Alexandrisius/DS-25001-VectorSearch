@@ -4144,36 +4144,64 @@ function truncate(text, maxLength) {
  * Полная загрузка всех записей (перезапись).
  */
 async function performFullUpload() {
-    // Если был загружен Excel — подгружаем ВСЕ данные из кэша (не только preview)
-    if (state.importData.cacheKey) {
-        const loaded = await loadFullExcelData();
-        if (!loaded) return;  // Ошибка загрузки — прерываем
+    // Если был загружен Excel — загружаем ВСЕ данные на СЕРВЕР через /admin/upload_excel
+    // (если ещё не загружено), получаем cache_key и передаём только его в /admin/import.
+    // Это решает проблему огромных payload (142k строк = 28 MB JSON в Celery).
+    let cacheKey = state.importData.cacheKey;
+
+    if (state.importData.excelFile && !cacheKey) {
+        // Excel файл загружен через UI но ещё не отправлен на сервер
+        const loaded = await uploadExcelFileToServer();
+        if (!loaded) return;
+        cacheKey = loaded;
     }
 
-    const records = buildRecordsFromMapping();
-
-    if (records.length === 0) {
-        alert('Нет записей для загрузки.');
+    if (!cacheKey) {
+        // Нет Excel — собираем записи вручную (fallback)
+        const records = buildRecordsFromMapping();
+        if (records.length === 0) {
+            alert('Нет записей для загрузки. Сначала загрузите Excel.');
+            return;
+        }
+        // Используем старый путь с records (для теста / небольших данных)
+        const hierarchyCols = getOrderedSelection('hierarchy');
+        const payload = {
+            collection_name: state.activeCollection,
+            records: records.map(r => ({
+                code: r.code,
+                description: r.description,
+                hierarchy: hierarchyCols.length > 0 ? r.hierarchy : undefined,
+                meta: r.meta
+            })),
+            recreate: false
+        };
+        showImportStep('progress');
+        els.importStatusText.innerText = 'Отправка задачи...';
+        try {
+            const res = await authFetch('/admin/import', {
+                method: 'POST',
+                body: JSON.stringify(payload)
+            });
+            const json = await res.json();
+            pollJob(json.job_id);
+        } catch (e) {
+            if (e.message !== 'Unauthorized') {
+                els.importStatusText.innerText = 'Ошибка отправки';
+                alert('Ошибка импорта: ' + e.message);
+            }
+        }
         return;
     }
 
-    // Получаем колонки иерархии для сервера
-    const hierarchyCols = getOrderedSelection('hierarchy');
-
+    // Импорт через cache_key (оптимально для больших файлов)
     const payload = {
         collection_name: state.activeCollection,
-        records: records.map(r => ({
-            code: r.code,
-            description: r.description,
-            // Если иерархия отличается от описания, передаём её
-            hierarchy: hierarchyCols.length > 0 ? r.hierarchy : undefined,
-            meta: r.meta
-        })),
+        cache_key: cacheKey,
         recreate: false
     };
 
     showImportStep('progress');
-    els.importStatusText.innerText = 'Отправка задачи...';
+    els.importStatusText.innerText = 'Отправка задачи (через cache_key)...';
 
     try {
         const res = await authFetch('/admin/import', {
@@ -4188,6 +4216,33 @@ async function performFullUpload() {
             els.importStatusText.innerText = 'Ошибка отправки';
             alert('Ошибка импорта: ' + e.message);
         }
+    }
+}
+
+/**
+ * Загрузить Excel файл на сервер, получить cache_key.
+ * Возвращает cache_key или null при ошибке.
+ */
+async function uploadExcelFileToServer() {
+    if (!state.importData.excelFile) return null;
+    const fd = new FormData();
+    fd.append('file', state.importData.sourceFile);
+    els.importStatusText.innerText = 'Загрузка файла на сервер...';
+    try {
+        const res = await authFetch('/admin/upload_excel', {
+            method: 'POST',
+            body: fd  // НЕ устанавливать Content-Type — браузер сам добавит multipart boundary
+        });
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.detail || 'Ошибка загрузки файла');
+        }
+        const json = await res.json();
+        state.importData.cacheKey = json.cache_key;
+        return json.cache_key;
+    } catch (e) {
+        alert('Ошибка загрузки файла: ' + e.message);
+        return null;
     }
 }
 

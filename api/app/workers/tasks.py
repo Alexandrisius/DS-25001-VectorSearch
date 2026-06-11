@@ -10,6 +10,7 @@ from typing import Any
 from loguru import logger
 from sqlalchemy import update
 
+from app.cache.excel_cache import delete_excel_from_cache, load_excel_from_cache
 from app.db.postgres import session_scope
 from app.models.background_job import BackgroundJob, JobStatus
 from app.models.collection import Collection
@@ -21,12 +22,48 @@ from app.workers.celery_app import celery_app
 
 
 def _run_async(coro):
-    return asyncio.run(coro)
+    """Запустить async корутину из синхронного контекста Celery worker.
+
+    Celery worker использует свой event loop для prefork, и asyncio.run()
+    может конфликтовать с ним. Создаём новый loop вручную.
+    """
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_closed():
+            raise RuntimeError("loop is closed")
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    return loop.run_until_complete(coro)
 
 
 @celery_app.task(name="app.workers.tasks.import_task", bind=True)
-def import_task(self, job_id: str, collection_id: int, records: list[dict]) -> dict:
-    """Массовый импорт (вызывается из API)."""
+def import_task(
+    self,
+    job_id: str,
+    collection_id: int,
+    cache_key: str | None = None,
+    records: list[dict] | None = None,
+) -> dict:
+    """Массовый импорт (вызывается из API).
+
+    Передаётся либо cache_key (тогда данные читаются из Redis), либо records
+    напрямую. cache_key предпочтительнее для больших файлов (>10k строк)
+    чтобы не класть 28 MB JSON в Redis message queue.
+    """
+    # Получаем записи
+    if cache_key:
+        # В worker — синхронный контекст, используем _run_async
+        cached = _run_async(load_excel_from_cache(cache_key))
+        if not cached:
+            raise ValueError(
+                f"Cache '{cache_key}' не найден или истёк. "
+                f"Загрузите Excel заново."
+            )
+        records = cached.get("data", [])
+        logger.info(f"Loaded {len(records)} records from Redis cache '{cache_key}'")
+    elif records is None:
+        records = []
     logger.info(f"Import job {job_id}: {len(records)} records for coll {collection_id}")
 
     async def _run():
@@ -80,6 +117,9 @@ def import_task(self, job_id: str, collection_id: int, records: list[dict]) -> d
                         result=result,
                     )
                 )
+                # Очищаем cache после успешного импорта
+                if cache_key:
+                    await delete_excel_from_cache(cache_key)
                 return result
             except Exception as e:
                 logger.exception(f"Import job {job_id} failed")
