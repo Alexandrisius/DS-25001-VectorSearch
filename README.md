@@ -6,6 +6,24 @@
 
 ---
 
+## 📖 Документация
+
+**`docs/`** — пошаговые инструкции для обычной работы (без жаргона):
+
+- **[docs/01-first-run.md](docs/01-first-run.md)** — первый запуск сайта
+- **[docs/02-daily-work.md](docs/02-daily-work.md)** — ежедневная работа (запустить/остановить/обновить UI)
+- **[docs/04-api-key.md](docs/04-api-key.md)** — ввести API ключ OpenRouter
+- **[docs/05-lm-studio.md](docs/05-lm-studio.md)** — подключить LM Studio
+- **[docs/06-tunnel.md](docs/06-tunnel.md)** — открыть сайт друзьям
+- **[docs/07-data.md](docs/07-data.md)** — загрузить Excel / бэкап
+- **[docs/08-deploy-vps.md](docs/08-deploy-vps.md)** — развернуть на VPS
+
+Или **набери `make help`** — там все команды с описаниями.
+
+**Если у тебя Windows и нет `make`** — используй `.\make.ps1 help`.
+
+---
+
 ## 🚀 Быстрый старт (локально)
 
 ```bash

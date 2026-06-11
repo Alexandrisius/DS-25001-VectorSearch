@@ -123,22 +123,11 @@ services:
     networks:
       - ksr_net
 
-  # === Cloudflare Tunnel (активируется, если задан TUNNEL_TOKEN в .env) ===
-  # Создайте туннель в Cloudflare Dashboard → Zero Trust → Networks → Tunnels
-  # Скопируйте TUNNEL_TOKEN в .env — контейнер поднимется автоматически.
-  cloudflared:
-    image: cloudflare/cloudflared:latest
-    container_name: ksr_cloudflared
-    restart: unless-stopped
-    command: tunnel --no-autoupdate run
-    environment:
-      TUNNEL_TOKEN: ${TUNNEL_TOKEN:-}
-    profiles:
-      - tunnel
-    depends_on:
-      - api
-    networks:
-      - ksr_net
+  # === Cloudflare Tunnel ===
+  # Поднимается через `make tunnel-up` (использует docker-compose.cloudflared.yml)
+  # Документация: docs/06-tunnel.md
+  # Удалено из основного compose, чтобы избежать Docker Compose v1 incompatibility
+  # (--profile не поддерживается в v1). Используйте override-файл.
 
 volumes:
   pgdata:
