@@ -44,13 +44,18 @@ def import_task(
     collection_id: int,
     cache_key: str | None = None,
     records: list[dict] | None = None,
+    column_mapping: dict | None = None,
 ) -> dict:
     """Массовый импорт (вызывается из API).
 
     Передаётся либо cache_key (тогда данные читаются из Redis), либо records
     напрямую. cache_key предпочтительнее для больших файлов (>10k строк)
     чтобы не класть 28 MB JSON в Redis message queue.
+
+    column_mapping — маппинг колонок Excel → поля (если не указан, записи
+    должны уже иметь ключи code/description/hierarchy).
     """
+    logger.info(f"[import_task] START job_id={job_id} collection_id={collection_id} cache_key={cache_key!r} has_records={records is not None} has_mapping={column_mapping is not None}")
     # Получаем записи
     if cache_key:
         # В worker — синхронный контекст, используем _run_async
@@ -61,10 +66,24 @@ def import_task(
                 f"Загрузите Excel заново."
             )
         records = cached.get("data", [])
-        logger.info(f"Loaded {len(records)} records from Redis cache '{cache_key}'")
+        logger.info(f"[import_task] Loaded {len(records)} records from Redis cache '{cache_key}'")
     elif records is None:
         records = []
-    logger.info(f"Import job {job_id}: {len(records)} records for coll {collection_id}")
+    logger.info(f"[import_task] Import job {job_id}: {len(records)} records for coll {collection_id}")
+    if records:
+        first_keys = list(records[0].keys())
+        logger.info(f"[import_task] first record keys: {first_keys}")
+        sample = {k: str(records[0].get(k, ""))[:100] for k in first_keys}
+        logger.info(f"[import_task] first record sample: {json.dumps(sample, ensure_ascii=False)}")
+
+    # Применяем column_mapping к records (если задан)
+    if column_mapping and records:
+        from app.services.import_service import apply_column_mapping
+        before = len(records)
+        records = apply_column_mapping(records, column_mapping)
+        logger.info(f"[import_task] column_mapping applied: {before} -> {len(records)} records")
+        if records:
+            logger.info(f"[import_task] after mapping first record: {json.dumps({k: str(v)[:80] for k, v in records[0].items()}, ensure_ascii=False)}")
 
     async def _run():
         async with session_scope() as session:
@@ -106,7 +125,19 @@ def import_task(
             import_svc = ImportService(session, embedding_service=embedding, cleaning=cleaning)
 
             try:
-                result = await import_svc.import_records(coll, records, job=job)
+                # Outer chunk = batch_size × max_workers.
+                # EmbeddingService разобьёт outer chunk на max_workers под-chunks
+                # по batch_size и пошлёт их параллельно через Semaphore.
+                # Пример: batch=100, workers=10 → outer=1000 за раз.
+                outer_chunk = prov.batch_size * prov.max_workers
+                logger.info(
+                    f"[import_task] using outer_chunk={outer_chunk} "
+                    f"(batch={prov.batch_size} × workers={prov.max_workers})"
+                )
+                result = await import_svc.import_records(
+                    coll, records, job=job,
+                    batch_size=outer_chunk,
+                )
                 await session.execute(
                     update(BackgroundJob)
                     .where(BackgroundJob.id == uuid.UUID(job_id))

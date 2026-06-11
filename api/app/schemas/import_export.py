@@ -6,6 +6,20 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 
+class ColumnMapping(BaseModel):
+    """Маппинг колонок Excel → стандартные поля записи.
+
+    Применяется на сервере (в Celery worker) к raw records из Redis.
+    Склеивает несколько колонок в одно поле через separator.
+    Пример: code: ["Код КСР", "Номер материала ЕХ"], code_separator: "."
+    """
+    code: list[str] = Field(default_factory=list)
+    description: list[str] = Field(default_factory=list)
+    hierarchy: list[str] = Field(default_factory=list)
+    code_separator: str = "."
+    description_separator: str = " "
+
+
 class ImportRequest(BaseModel):
     """Запрос на импорт записей.
 
@@ -26,6 +40,10 @@ class ImportRequest(BaseModel):
     records: list[dict[str, Any]] | None = Field(
         default=None,
         description="Алиас для data (новое имя в UI)",
+    )
+    column_mapping: ColumnMapping | None = Field(
+        default=None,
+        description="Маппинг колонок Excel → поля (если cache_key, применяется на сервере)",
     )
     recreate: bool = False
     folders_to_delete: list[str] = Field(

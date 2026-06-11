@@ -4194,9 +4194,29 @@ async function performFullUpload() {
     }
 
     // Импорт через cache_key (оптимально для больших файлов)
+    // Собираем column_mapping из UI selection
+    const codeCols = getOrderedSelection('code');
+    const descCols = getOrderedSelection('desc');
+    const hierarchyCols = getOrderedSelection('hierarchy');
+
+    if (codeCols.length === 0 || descCols.length === 0) {
+        alert('Не выбраны колонки для кода или описания.\n\nОткройте маппинг колонок в шаге 2.');
+        return;
+    }
+
+    const columnMapping = {
+        code: codeCols,
+        description: descCols,
+        hierarchy: hierarchyCols,
+        code_separator: state.importData.codeSeparator || '.',
+        description_separator: state.importData.descSeparator || ' '
+    };
+    console.log('[performFullUpload] columnMapping:', columnMapping);
+
     const payload = {
         collection_name: state.activeCollection,
         cache_key: cacheKey,
+        column_mapping: columnMapping,
         recreate: false
     };
 
@@ -4210,7 +4230,7 @@ async function performFullUpload() {
         });
 
         const json = await res.json();
-        pollJob(json.job_id);
+        watchJob(json.job_id);
     } catch (e) {
         if (e.message !== 'Unauthorized') {
             els.importStatusText.innerText = 'Ошибка отправки';
@@ -4522,51 +4542,167 @@ async function pollJobUntilComplete(jobId, progressStart, progressEnd) {
 }
 
 /**
- * Опрос статуса фоновой задачи.
+ * Подписка на прогресс задачи через WebSocket.
+ * Используется вместо polling — мгновенные обновления, без задержки 1.5с.
+ * Автоматически переподключается при разрыве.
+ */
+function watchJob(jobId) {
+    // Очищаем предыдущее подключение если было
+    if (state.jobWs) {
+        try { state.jobWs.close(); } catch (e) {}
+        state.jobWs = null;
+    }
+    if (state.jobInterval) {
+        clearInterval(state.jobInterval);
+        state.jobInterval = null;
+    }
+
+    els.importStatusText.innerText = 'В очереди...';
+    els.importProgress.style.width = '0%';
+
+    // Определяем протокол
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    // ВАЖНО: ключ в localStorage — `adminToken` (camelCase), не `admin_token`
+    const token = localStorage.getItem('adminToken') || sessionStorage.getItem('adminToken') || '';
+    const url = `${proto}://${location.host}/admin/jobs/${jobId}/ws?token=${encodeURIComponent(token)}`;
+    console.log('[watchJob] connecting to', url);
+
+    let ws;
+    try {
+        ws = new WebSocket(url);
+    } catch (e) {
+        console.error('[watchJob] WebSocket construction failed:', e);
+        pollJob(jobId);  // fallback to polling
+        return;
+    }
+    state.jobWs = ws;
+
+    // Таймаут 60 сек на pending без обновлений
+    let lastUpdate = Date.now();
+    const watchDog = setInterval(() => {
+        if (Date.now() - lastUpdate > 60_000) {
+            console.warn('[watchJob] no updates for 60s, fallback to polling');
+            try { ws.close(); } catch (e) {}
+            state.jobWs = null;
+            pollJob(jobId);
+            clearInterval(watchDog);
+        }
+    }, 10_000);
+
+    const statusText = {
+        'pending': 'Ожидание',
+        'processing': 'Обработка',
+        'completed': 'Завершено',
+        'error': 'Ошибка',
+        'cancelled': 'Отменено'
+    };
+
+    ws.onopen = () => {
+        console.log('[watchJob] WebSocket open');
+        lastUpdate = Date.now();
+    };
+
+    ws.onmessage = (ev) => {
+        lastUpdate = Date.now();
+        let msg;
+        try { msg = JSON.parse(ev.data); } catch (e) { return; }
+        console.log('[watchJob] update:', msg);
+        if (msg.type === 'progress' || msg.type === 'status') {
+            const j = msg.data || msg;
+            els.importProgress.style.width = `${j.progress || 0}%`;
+            const st = j.status || 'pending';
+            const detail = j.details ? ` — ${j.details}` : '';
+            els.importStatusText.innerText = `${statusText[st] || st} (${j.progress || 0}%)${detail}`;
+        } else if (msg.type === 'done') {
+            const j = msg.data || msg;
+            els.importProgress.style.width = '100%';
+            els.importStatusText.innerText = 'Завершено';
+            try { ws.close(); } catch (e) {}
+            state.jobWs = null;
+            clearInterval(watchDog);
+
+            fetch(`/hierarchy/${state.activeCollection}/invalidate`, { method: 'POST' })
+                .then(() => console.log('✅ Кэш иерархии очищен'))
+                .catch(e => console.warn('⚠️ Не удалось очистить кэш иерархии:', e));
+
+            const result = j.result || {};
+            const m = result.materials || 0;
+            const f = result.folders || {};
+            setTimeout(() => {
+                alert(`Импорт завершён!\n\nМатериалов: ${m}\nПапок создано: ${f.created || 0}\nУдалено: ${f.deleted || 0}`);
+                closeModal('import');
+                loadCollections();
+            }, 300);
+        } else if (msg.type === 'error') {
+            els.importStatusText.innerText = `Ошибка: ${msg.message || 'unknown'}`;
+            try { ws.close(); } catch (e) {}
+            state.jobWs = null;
+            clearInterval(watchDog);
+            setTimeout(() => {
+                alert(`Ошибка импорта: ${msg.message || 'unknown'}`);
+                closeModal('import');
+            }, 100);
+        }
+    };
+
+    ws.onerror = (e) => {
+        console.warn('[watchJob] WebSocket error, fallback to polling', e);
+        try { ws.close(); } catch (e) {}
+        state.jobWs = null;
+        clearInterval(watchDog);
+        pollJob(jobId);
+    };
+
+    ws.onclose = (ev) => {
+        console.log('[watchJob] WebSocket closed', ev.code, ev.reason);
+        state.jobWs = null;
+        clearInterval(watchDog);
+    };
+}
+
+/**
+ * Fallback: опрос статуса фоновой задачи (если WebSocket не работает).
  */
 async function pollJob(jobId) {
-    // Очищаем предыдущий интервал если был
     if (state.jobInterval) clearInterval(state.jobInterval);
-
     els.importStatusText.innerText = 'В очереди...';
     els.importProgress.style.width = '0%';
 
     state.jobInterval = setInterval(async () => {
         try {
             const res = await authFetch('/admin/jobs');
-            const jobs = await res.json();
+            const data = await res.json();
+            const jobs = data.jobs || [];
             const job = jobs.find(j => j.id === jobId);
 
             if (job) {
-                els.importProgress.style.width = `${job.progress}%`;
-
+                els.importProgress.style.width = `${job.progress || 0}%`;
                 const statusText = {
                     'pending': 'Ожидание',
                     'processing': 'Обработка',
                     'completed': 'Завершено',
-                    'error': 'Ошибка'
+                    'error': 'Ошибка',
+                    'cancelled': 'Отменено'
                 };
-
-                els.importStatusText.innerText = `${statusText[job.status] || job.status} (${job.progress}%)`;
+                els.importStatusText.innerText = `${statusText[job.status] || job.status} (${job.progress || 0}%) — ${job.details || ''}`;
 
                 if (job.status === 'completed') {
                     clearInterval(state.jobInterval);
                     state.jobInterval = null;
-
-                    // Инвалидируем кэш иерархии для обновлённой коллекции
                     fetch(`/hierarchy/${state.activeCollection}/invalidate`, { method: 'POST' })
                         .then(() => console.log('✅ Кэш иерархии очищен'))
                         .catch(e => console.warn('⚠️ Не удалось очистить кэш иерархии:', e));
-
                     setTimeout(() => {
-                        alert('Импорт завершён!\n\nПоля path_level_N автоматически сгенерированы для иерархического каталога.');
+                        const m = job.result?.materials || 0;
+                        const f = job.result?.folders || {};
+                        alert(`Импорт завершён!\n\nМатериалов: ${m}\nПапок создано: ${f.created || 0}`);
                         closeModal('import');
                         loadCollections();
                     }, 500);
                 } else if (job.status === 'error') {
                     clearInterval(state.jobInterval);
                     state.jobInterval = null;
-                    alert(`Ошибка: ${job.error}`);
+                    alert(`Ошибка: ${job.error || 'unknown'}`);
                     closeModal('import');
                 } else if (job.status === 'cancelled') {
                     clearInterval(state.jobInterval);
@@ -4581,14 +4717,15 @@ async function pollJob(jobId) {
                 state.jobInterval = null;
             }
         }
-    }, 1500);
+    }, 2000);
 }
 
 // === JOBS VIEW ===
 async function loadJobs() {
     try {
         const res = await authFetch('/admin/jobs');
-        const jobs = await res.json();
+        const data = await res.json();
+        const jobs = data.jobs || [];  // backend returns {jobs: [...]}
 
         const statusText = {
             'pending': 'Ожидание',
@@ -4600,17 +4737,20 @@ async function loadJobs() {
 
         els.jobsTableBody.innerHTML = jobs.map(j => {
             const canStop = j.status === 'pending' || j.status === 'processing';
+            const createdAt = j.created_at ? new Date(j.created_at).toLocaleString('ru-RU') : '—';
             return `
             <tr>
                 <td style="font-family:monospace; font-size:0.8rem">${j.id.slice(0, 8)}...</td>
                 <td>${j.type === 'import_batch' ? 'Импорт' : j.type}</td>
-                <td><span class="status-badge ${j.status === 'completed' ? 'status-visible' : 'status-hidden'}">${statusText[j.status] || j.status}</span></td>
+                <td><span class="status-badge status-${j.status}">${statusText[j.status] || j.status}</span></td>
                 <td>
                     <div class="progress-bar-container" style="width: 100px; height: 6px;">
-                        <div class="progress-bar-fill" style="width: ${j.progress}%"></div>
+                        <div class="progress-bar-fill" style="width: ${j.progress || 0}%"></div>
                     </div>
+                    <small>${j.progress || 0}% ${j.total ? `/ ${j.total}` : ''}</small>
                 </td>
-                <td>${new Date(j.created_at * 1000).toLocaleString('ru-RU')}</td>
+                <td title="${j.details || ''}">${j.details || '—'}</td>
+                <td>${createdAt}</td>
                 <td>
                     ${canStop ? `<button class="btn btn-danger" style="padding: 4px 8px; font-size: 0.8rem;" onclick="stopJob('${j.id}')" title="Остановить"><i class="fas fa-stop"></i></button>` : ''}
                 </td>

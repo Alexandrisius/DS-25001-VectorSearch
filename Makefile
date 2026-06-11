@@ -123,10 +123,10 @@ shell-qdrant:
 # UPDATE CODE
 # =============================================================================
 rebuild-api:
-	@echo "[BUILD] Rebuilding API..."
-	docker compose build api
+	@echo "[BUILD] Rebuilding API + celery_worker (один Dockerfile)..."
+	docker compose build api celery_worker
 	@echo "[RESTART] Restarting api + celery_worker..."
-	docker compose up -d api celery_worker
+	docker compose up -d --force-recreate --no-deps api celery_worker
 	@echo "[OK] Done. UI does not need restart (volume mount)."
 
 rebuild:

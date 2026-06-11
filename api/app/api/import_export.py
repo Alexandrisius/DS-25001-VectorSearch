@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from loguru import logger
 
 from app.cache.excel_cache import (
     CACHE_TTL_SECONDS,
@@ -48,6 +49,10 @@ async def admin_import(
 
     # Определяем records: либо из cache, либо из payload
     records: list[dict[str, Any]] = []
+    logger.info(
+        f"[admin_import] START collection={req.collection_name!r} cache_key={req.cache_key!r} "
+        f"has_payload_records={req.records is not None} payload_len={len(req.records) if req.records else 0}"
+    )
 
     if req.cache_key:
         cached = await load_excel_from_cache(req.cache_key)
@@ -70,6 +75,10 @@ async def admin_import(
             status_code=400,
             detail="Нет данных для импорта (records пустой и cache_key не указан)",
         )
+    logger.info(
+        f"[admin_import] records_to_import: count={len(records)} first_keys={list(records[0].keys()) if records else None} "
+        f"first_sample={json.dumps({k: str(v)[:80] for k, v in records[0].items()}, ensure_ascii=False) if records else None}"
+    )
 
     job = await job_svc.create(
         job_type="import_batch",
@@ -89,6 +98,7 @@ async def admin_import(
         collection_id=coll.id,
         cache_key=req.cache_key,
         records=records,  # fallback если cache_key=None
+        column_mapping=req.column_mapping.model_dump() if req.column_mapping else None,
     )
     return ImportResponse(job_id=str(job.id), status="queued")
 
@@ -104,6 +114,14 @@ async def admin_upload_excel(
     result = await parse_excel(file, sheet=sheet, preview_rows=100)
     cache_key = uuid_mod.uuid4().hex[:16]
     # Сохраняем все данные в Redis (TTL 1 час) — общий для API и Celery worker
+    data_first = result["data"][:1] if result["data"] else []
+    first_keys = list(data_first[0].keys()) if data_first else []
+    logger.info(
+        f"[upload_excel] file={result['filename']!r} sheet={result['selected_sheet']!r} "
+        f"headers={result['headers']} total_rows={result['total_rows']} cache_key={cache_key}"
+    )
+    if data_first:
+        logger.info(f"[upload_excel] first row keys: {first_keys}, sample: {json.dumps({k: str(v)[:80] for k, v in data_first[0].items()}, ensure_ascii=False)}")
     await save_excel_to_cache(
         cache_key,
         {
@@ -113,6 +131,7 @@ async def admin_upload_excel(
             "ts": datetime.now(timezone.utc).isoformat(),
         },
     )
+    logger.info(f"[upload_excel] saved to cache: key={cache_key} rows={len(result['data'])} bytes≈{len(json.dumps(result['data'], ensure_ascii=False)) // 1024}KB")
     return UploadExcelResponse(
         filename=result["filename"],
         sheets=result["sheets"],
@@ -130,7 +149,7 @@ async def admin_get_excel_data(
     cache_key: str,
     _: dict = Depends(get_current_admin),
 ) -> dict:
-    """Получить preview данных по cache_key (без полного payload)."""
+    """Получить данные по cache_key (нужно для UI: прочитать все строки и применить маппинг)."""
     cached = await load_excel_from_cache(cache_key)
     if not cached:
         raise HTTPException(
@@ -139,6 +158,7 @@ async def admin_get_excel_data(
         )
     return {
         "headers": cached["headers"],
+        "data": cached.get("data", []),  # ВСЕ строки (не только preview)
         "total_rows": len(cached.get("data", [])),
         "filename": cached.get("filename", ""),
     }

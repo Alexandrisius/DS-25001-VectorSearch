@@ -16,6 +16,7 @@ from app.api import (
     feedback,
     hierarchy,
     import_export,
+    jobs_ws,
     materials,
     search,
     settings as settings_api,
@@ -89,6 +90,7 @@ def create_app() -> FastAPI:
     app.include_router(admin_data.router)
     app.include_router(settings_api.router)
     app.include_router(import_export.router)
+    app.include_router(jobs_ws.router)
 
     # Web UI (HTML)
     @app.get("/", response_class=HTMLResponse, include_in_schema=False)

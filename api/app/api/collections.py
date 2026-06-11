@@ -5,8 +5,10 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from qdrant_client.http import models as qm
+from sqlalchemy import func, select
 
 from app.deps import DBSession, get_current_admin, get_qdrant
+from app.models.material import Material
 from app.schemas.collection import (
     CollectionConfigUpdate,
     CollectionInfo,
@@ -27,12 +29,28 @@ async def admin_list_collections(
 ) -> CollectionListResponse:
     all_coll = await svc.list_all()
     current = await svc.get_current_active(None)
+
+    # Считаем реальное количество материалов для каждой коллекции
+    # одним запросом (вместо N запросов в цикле).
+    from app.models.collection import Collection
+    coll_ids = [c.id for c in all_coll]
+    counts_by_id: dict[int, int] = {}
+    if coll_ids:
+        rows = await session.execute(
+            select(Material.collection_id, func.count(Material.id))
+            .where(Material.collection_id.in_(coll_ids))
+            .where(Material.status_id == "active")
+            .group_by(Material.collection_id)
+        )
+        for cid, cnt in rows.all():
+            counts_by_id[cid] = cnt
+
     return CollectionListResponse(
         collections=[
             CollectionInfo(
                 name=c.name,
                 description=c.description or c.name,
-                record_count=0,  # упрощённо, можно посчитать через Qdrant
+                record_count=counts_by_id.get(c.id, 0),
                 dimension=c.dimension,
                 thresholds={
                     "cosine": c.cosine_threshold,
