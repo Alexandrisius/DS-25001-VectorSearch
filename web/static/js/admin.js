@@ -90,6 +90,7 @@ const state = {
 // === DOM ELEMENTS ===
 const els = {
     loginScreen: document.getElementById('loginScreen'),
+    authSplash: document.getElementById('authSplash'),
     adminApp: document.getElementById('adminApp'),
     authPassword: document.getElementById('authPassword'),
     authBtn: document.getElementById('authBtn'),
