@@ -4,11 +4,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>Админ-панель | KSR Matcher</title>
-    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg?v=3">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/css/font-awesome.min.css">
-    <link rel="stylesheet" href="/static/css/admin.css">
+    <link rel="stylesheet" href="/static/css/font-awesome.min.css?v=3">
+    <link rel="stylesheet" href="/static/css/admin.css?v=3">
 </head>
 
 <body>
@@ -330,11 +333,27 @@
                                 </p>
                             </div>
 
-                            <!-- Статус подключения -->
+                            <!-- Статус подключения: Embed + Rerank -->
                             <div class="openrouter-status-section" id="openrouterStatus">
-                                <div class="status-indicator" id="openrouterStatusIndicator">
-                                    <i class="fas fa-circle"></i>
-                                    <span id="openrouterStatusText">Не настроено</span>
+                                <div class="status-row" id="openrouterEmbedStatus">
+                                    <div class="status-indicator" id="openrouterEmbedIndicator">
+                                        <i class="fas fa-circle"></i>
+                                    </div>
+                                    <div class="status-text-block">
+                                        <div class="status-label">Эмбеддинги:</div>
+                                        <div class="status-model" id="openrouterEmbedModel">—</div>
+                                        <div class="status-message" id="openrouterEmbedMessage">Нажмите «Проверить подключение»</div>
+                                    </div>
+                                </div>
+                                <div class="status-row" id="openrouterRerankStatus">
+                                    <div class="status-indicator" id="openrouterRerankIndicator">
+                                        <i class="fas fa-circle"></i>
+                                    </div>
+                                    <div class="status-text-block">
+                                        <div class="status-label">Реранкер:</div>
+                                        <div class="status-model" id="openrouterRerankModelText">—</div>
+                                        <div class="status-message" id="openrouterRerankMessage">Нажмите «Проверить подключение»</div>
+                                    </div>
                                 </div>
                             </div>
 
@@ -859,7 +878,7 @@
         </div>
     </div>
 
-    <script src="/static/js/admin.js?v=2.0.2"></script>
+    <script src="/static/js/admin.js?v=2.1.0"></script>
 </body>
 
 </html>

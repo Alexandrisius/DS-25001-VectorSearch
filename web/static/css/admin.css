@@ -3052,3 +3052,43 @@ body.resizing-columns .data-table-full th {
     border-top: 1px solid var(--adm-border);
     margin-top: 8px;
 }
+/* New status row layout (embed + rerank) */
+.openrouter-status-section .status-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--adm-border, #e2e8f0);
+}
+.openrouter-status-section .status-row:last-child {
+    border-bottom: none;
+}
+.openrouter-status-section .status-text-block {
+    flex: 1;
+    min-width: 0;
+}
+.openrouter-status-section .status-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--adm-text-sec, #64748b);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.openrouter-status-section .status-model {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--adm-text, #1e293b);
+    margin: 2px 0;
+    word-break: break-all;
+}
+.openrouter-status-section .status-message {
+    font-size: 0.85rem;
+    color: var(--adm-text-sec, #64748b);
+    word-break: break-word;
+}
+.openrouter-status-section .status-message.is-error {
+    color: #ef4444;
+}
+.openrouter-status-section .status-message.is-success {
+    color: #10b981;
+}

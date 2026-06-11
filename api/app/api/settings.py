@@ -179,60 +179,184 @@ async def update_openrouter_settings(
 
 @router.post("/openrouter-test", dependencies=[Depends(get_current_admin)])
 async def test_openrouter(session: DBSession) -> dict:
-    """Тест подключения к эмбеддинг endpoint.
+    """Тест подключения к эмбеддинг И реранк endpoint.
 
-    Использует кастомный base_url если указан, иначе OpenRouter.
+    Возвращает структурированный результат для каждой модели отдельно:
+    {
+        "embed": {"status": "success|error", "model": "...", "message": "..."},
+        "rerank": {"status": "success|error|skipped", "model": "...", "message": "..."},
+    }
     """
     import httpx
     from app.core.security import decrypt_secret
     from app.services.embedding_service import _resolve_embed_url
+    from app.services.rerank_service import _resolve_rerank_url
 
     svc = SettingsService(session)
     prov = await svc.get_provider("openrouter")
     if not prov or not prov.api_key_encrypted:
-        return {"status": "error", "message": "API ключ не настроен"}
-    api_key = decrypt_secret(prov.api_key_encrypted)
-    endpoint = _resolve_embed_url(prov.base_url)
-    try:
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
+        return {
+            "embed": {"status": "error", "model": "", "message": "API ключ не настроен"},
+            "rerank": {"status": "error", "model": "", "message": "API ключ не настроен"},
         }
-        if not prov.base_url:
-            headers["HTTP-Referer"] = "https://ksr-matcher.local"
-            headers["X-Title"] = "KSR Matcher"
 
+    api_key = decrypt_secret(prov.api_key_encrypted)
+    common_headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    if not prov.base_url:
+        common_headers["HTTP-Referer"] = "https://ksr-matcher.local"
+        common_headers["X-Title"] = "KSR Matcher"
+
+    async def test_embed() -> dict:
+        endpoint = _resolve_embed_url(prov.base_url)
         payload: dict = {"model": prov.model_embed, "input": "test connection"}
         if not prov.base_url or "openrouter.ai" in prov.base_url:
             payload["encoding_format"] = "float"
-
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post(endpoint, headers=headers, json=payload)
-        if resp.status_code == 200:
-            data = resp.json()
-            if "error" in data:
-                return {"status": "error", "message": data["error"].get("message", "Error")}
-            if "data" in data and data["data"]:
-                dim = len(data["data"][0].get("embedding", []))
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                resp = await client.post(endpoint, headers=common_headers, json=payload)
+            if resp.status_code == 200:
+                data = resp.json()
+                if "error" in data:
+                    return {
+                        "status": "error",
+                        "model": prov.model_embed,
+                        "message": data["error"].get("message", "Error"),
+                    }
+                if "data" in data and data["data"]:
+                    dim = len(data["data"][0].get("embedding", []))
+                    return {
+                        "status": "success",
+                        "model": prov.model_embed,
+                        "message": f"OK! Размерность: {dim}",
+                    }
                 return {
-                    "status": "success",
-                    "message": f"OK! Размерность: {dim}",
+                    "status": "error",
+                    "model": prov.model_embed,
+                    "message": "Неожиданный формат ответа",
                 }
-            return {"status": "error", "message": "Неожиданный формат ответа"}
-        if resp.status_code == 401:
-            return {"status": "error", "message": "Неверный API ключ"}
-        if resp.status_code == 404:
-            return {"status": "error", "message": f"Endpoint не найден: {endpoint}"}
-        return {
-            "status": "error",
-            "message": f"Ошибка API ({resp.status_code}): {resp.text[:200]}",
+            if resp.status_code == 401:
+                return {
+                    "status": "error",
+                    "model": prov.model_embed,
+                    "message": "Неверный API ключ",
+                }
+            if resp.status_code == 404:
+                return {
+                    "status": "error",
+                    "model": prov.model_embed,
+                    "message": f"Endpoint не найден: {endpoint}",
+                }
+            return {
+                "status": "error",
+                "model": prov.model_embed,
+                "message": f"Ошибка API ({resp.status_code}): {resp.text[:200]}",
+            }
+        except httpx.TimeoutException:
+            return {
+                "status": "error",
+                "model": prov.model_embed,
+                "message": "Таймаут подключения",
+            }
+        except httpx.ConnectError as e:
+            return {
+                "status": "error",
+                "model": prov.model_embed,
+                "message": f"Не удалось подключиться: {e}",
+            }
+        except Exception as e:
+            return {
+                "status": "error",
+                "model": prov.model_embed,
+                "message": f"Ошибка: {e}",
+            }
+
+    async def test_rerank() -> dict:
+        endpoint = _resolve_rerank_url(prov.base_url)
+        payload: dict = {
+            "model": prov.model_rerank,
+            "query": "test",
+            "documents": ["document 1", "document 2"],
         }
-    except httpx.TimeoutException:
-        return {"status": "error", "message": "Таймаут подключения"}
-    except httpx.ConnectError as e:
-        return {"status": "error", "message": f"Не удалось подключиться: {e}"}
-    except Exception as e:
-        return {"status": "error", "message": f"Ошибка: {e}"}
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                resp = await client.post(endpoint, headers=common_headers, json=payload)
+            if resp.status_code == 200:
+                data = resp.json()
+                if "error" in data:
+                    return {
+                        "status": "error",
+                        "model": prov.model_rerank,
+                        "message": data["error"].get("message", "Error"),
+                    }
+                if "results" in data and isinstance(data["results"], list):
+                    return {
+                        "status": "success",
+                        "model": prov.model_rerank,
+                        "message": f"OK! Получено {len(data['results'])} оценок",
+                    }
+                if "scores" in data and isinstance(data["scores"], list):
+                    return {
+                        "status": "success",
+                        "model": prov.model_rerank,
+                        "message": f"OK! Получено {len(data['scores'])} оценок",
+                    }
+                return {
+                    "status": "error",
+                    "model": prov.model_rerank,
+                    "message": "Неожиданный формат ответа",
+                }
+            if resp.status_code == 401:
+                return {
+                    "status": "error",
+                    "model": prov.model_rerank,
+                    "message": "Неверный API ключ",
+                }
+            if resp.status_code == 404:
+                return {
+                    "status": "error",
+                    "model": prov.model_rerank,
+                    "message": f"Модель не поддерживает /rerank или endpoint не найден",
+                }
+            return {
+                "status": "error",
+                "model": prov.model_rerank,
+                "message": f"Ошибка API ({resp.status_code}): {resp.text[:200]}",
+            }
+        except httpx.TimeoutException:
+            return {
+                "status": "error",
+                "model": prov.model_rerank,
+                "message": "Таймаут подключения",
+            }
+        except httpx.ConnectError as e:
+            return {
+                "status": "error",
+                "model": prov.model_rerank,
+                "message": f"Не удалось подключиться: {e}",
+            }
+        except Exception as e:
+            return {
+                "status": "error",
+                "model": prov.model_rerank,
+                "message": f"Ошибка: {e}",
+            }
+
+    embed_result = await test_embed()
+    rerank_result = await test_rerank()
+
+    # Общий статус
+    overall = "success"
+    if embed_result["status"] != "success" or rerank_result["status"] != "success":
+        overall = "error"
+
+    return {
+        "status": overall,
+        "embed": embed_result,
+        "rerank": rerank_result,
+    }
 
 
 @router.get("/embedding_dimension", dependencies=[Depends(get_current_admin)])

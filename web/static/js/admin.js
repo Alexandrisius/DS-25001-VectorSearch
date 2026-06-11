@@ -576,7 +576,9 @@ const openrouterState = {
     modelEmbed: 'qwen/qwen3-embedding-4b',
     modelRerank: 'cohere/rerank-4-pro',
     batch_size: 10,
-    max_workers: 3
+    max_workers: 3,
+    embedTest: { status: 'idle', message: '' },
+    rerankTest: { status: 'idle', message: '' }
 };
 
 /**
@@ -587,8 +589,8 @@ async function loadOpenRouterSettings() {
         const res = await fetch('/admin/openrouter-settings');
         if (res.ok) {
             const data = await res.json();
-            openrouterState.enabled = data.enabled || false;
-            openrouterState.apiKeySet = data.api_key_set || false;
+            openrouterState.enabled = data.enabled === true;
+            openrouterState.apiKeySet = data.api_key_set === true;
             openrouterState.baseUrl = data.base_url || '';
             openrouterState.modelEmbed = data.model_embed || 'qwen/qwen3-embedding-4b';
             openrouterState.modelRerank = data.model_rerank || 'cohere/rerank-4-pro';
@@ -596,10 +598,16 @@ async function loadOpenRouterSettings() {
             openrouterState.max_workers = data.max_workers || 3;
 
             updateOpenRouterUI();
-            console.log('✅ Настройки LLM API загружены');
+            console.log('LLM API settings loaded:', {
+                modelEmbed: openrouterState.modelEmbed,
+                modelRerank: openrouterState.modelRerank,
+                baseUrl: openrouterState.baseUrl
+            });
+        } else {
+            console.warn('Failed to load LLM settings, status:', res.status);
         }
     } catch (e) {
-        console.warn('⚠️ Не удалось загрузить настройки LLM API:', e);
+        console.warn('Failed to load LLM API settings:', e);
     }
 }
 
@@ -612,8 +620,6 @@ function updateOpenRouterUI() {
     const baseUrlInput = document.getElementById('openrouterBaseUrl');
     const modelEmbedInput = document.getElementById('openrouterModel');
     const modelRerankInput = document.getElementById('openrouterRerankModel');
-    const statusIndicator = document.getElementById('openrouterStatusIndicator');
-    const statusText = document.getElementById('openrouterStatusText');
 
     if (enabledCheckbox) {
         enabledCheckbox.checked = openrouterState.enabled;
@@ -628,11 +634,11 @@ function updateOpenRouterUI() {
     }
 
     if (modelEmbedInput) {
-        modelEmbedInput.value = openrouterState.modelEmbed;
+        modelEmbedInput.value = openrouterState.modelEmbed || '';
     }
 
     if (modelRerankInput) {
-        modelRerankInput.value = openrouterState.modelRerank;
+        modelRerankInput.value = openrouterState.modelRerank || '';
     }
 
     const batchSizeInput = document.getElementById('openrouterBatchSize');
@@ -644,20 +650,50 @@ function updateOpenRouterUI() {
         maxWorkersInput.value = openrouterState.max_workers || 3;
     }
 
-    // Статус
-    if (statusIndicator && statusText) {
-        const isCustom = openrouterState.baseUrl && openrouterState.baseUrl.trim();
-        if (openrouterState.enabled && openrouterState.apiKeySet) {
-            statusIndicator.className = 'status-indicator status-active';
-            statusText.textContent = isCustom
-                ? 'Активен (кастомный endpoint)'
-                : 'Активен (OpenRouter)';
-        } else if (openrouterState.apiKeySet) {
-            statusIndicator.className = 'status-indicator status-configured';
-            statusText.textContent = 'Настроен (выключен)';
+    // Обновляем модель в статусных блоках
+    updateModelDisplay('Embed', openrouterState.modelEmbed, openrouterState.embedTest);
+    updateModelDisplay('Rerank', openrouterState.modelRerank, openrouterState.rerankTest);
+}
+
+function updateModelDisplay(kind, model, testResult) {
+    const isEmbed = kind === 'Embed';
+    const modelEl = document.getElementById(isEmbed ? 'openrouterEmbedModel' : 'openrouterRerankModelText');
+    const msgEl = document.getElementById(isEmbed ? 'openrouterEmbedMessage' : 'openrouterRerankMessage');
+    const indEl = document.getElementById(isEmbed ? 'openrouterEmbedIndicator' : 'openrouterRerankIndicator');
+
+    if (modelEl) {
+        modelEl.textContent = model || '—';
+    }
+    if (msgEl) {
+        if (!openrouterState.enabled) {
+            msgEl.textContent = 'Провайдер выключен';
+            msgEl.className = 'status-message';
+        } else if (!openrouterState.apiKeySet) {
+            msgEl.textContent = 'API ключ не задан';
+            msgEl.className = 'status-message';
+        } else if (testResult && testResult.status && testResult.status !== 'idle') {
+            msgEl.textContent = testResult.message || '';
+            msgEl.className = 'status-message ' + (testResult.status === 'success' ? 'is-success' : 'is-error');
         } else {
-            statusIndicator.className = 'status-indicator status-inactive';
-            statusText.textContent = 'Не настроено';
+            msgEl.textContent = 'Готов к проверке';
+            msgEl.className = 'status-message';
+        }
+    }
+    if (indEl) {
+        const i = indEl.querySelector('i');
+        if (!i) return;
+        if (!openrouterState.enabled || !openrouterState.apiKeySet) {
+            indEl.className = 'status-indicator status-inactive';
+            i.className = 'fas fa-circle';
+        } else if (testResult && testResult.status === 'success') {
+            indEl.className = 'status-indicator status-success';
+            i.className = 'fas fa-check-circle';
+        } else if (testResult && testResult.status === 'error') {
+            indEl.className = 'status-indicator status-error';
+            i.className = 'fas fa-times-circle';
+        } else {
+            indEl.className = 'status-indicator status-configured';
+            i.className = 'fas fa-circle';
         }
     }
 }
@@ -735,11 +771,11 @@ async function saveOpenRouterSettings() {
 
         if (res.ok) {
             const data = await res.json();
-            openrouterState.enabled = data.enabled;
-            openrouterState.apiKeySet = data.api_key_set;
+            openrouterState.enabled = data.enabled === true;
+            openrouterState.apiKeySet = data.api_key_set === true;
             openrouterState.baseUrl = data.base_url || '';
-            openrouterState.modelEmbed = data.model_embed;
-            openrouterState.modelRerank = data.model_rerank;
+            openrouterState.modelEmbed = data.model_embed || '';
+            openrouterState.modelRerank = data.model_rerank || '';
             openrouterState.batch_size = data.batch_size || 10;
             openrouterState.max_workers = data.max_workers || 3;
 
@@ -777,26 +813,20 @@ async function saveOpenRouterSettings() {
 
 /**
  * Тестирование подключения к OpenRouter API.
- * Выполняет тестовый запрос с текущими сохранёнными настройками.
+ * Проверяет ОБА endpoint: embeddings и rerank.
  */
 async function testOpenRouterConnection() {
     const testBtn = document.getElementById('testOpenrouterBtn');
-    const statusIndicator = document.getElementById('openrouterStatusIndicator');
-    const statusText = document.getElementById('openrouterStatusText');
-
     if (!testBtn) return;
 
-    // Показываем индикатор загрузки
     const originalText = testBtn.innerHTML;
     testBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Проверка...';
     testBtn.disabled = true;
 
-    if (statusIndicator) {
-        statusIndicator.className = 'status-indicator status-testing';
-    }
-    if (statusText) {
-        statusText.textContent = 'Проверка...';
-    }
+    // Показываем "проверка" для обоих
+    openrouterState.embedTest = { status: 'testing', message: 'Проверка...' };
+    openrouterState.rerankTest = { status: 'testing', message: 'Проверка...' };
+    updateOpenRouterUI();
 
     try {
         const res = await authFetch('/admin/openrouter-test', {
@@ -805,55 +835,50 @@ async function testOpenRouterConnection() {
 
         const data = await res.json();
 
-        if (data.status === 'success') {
-            // Успешное подключение
-            if (statusIndicator) {
-                statusIndicator.className = 'status-indicator status-success';
-            }
-            if (statusText) {
-                statusText.textContent = data.message || 'Подключение успешно!';
-            }
+        // Обрабатываем embed
+        if (data.embed) {
+            openrouterState.embedTest = {
+                status: data.embed.status,
+                message: data.embed.message || ''
+            };
+        }
+        // Обрабатываем rerank
+        if (data.rerank) {
+            openrouterState.rerankTest = {
+                status: data.rerank.status,
+                message: data.rerank.message || ''
+            };
+        }
 
-            testBtn.innerHTML = '<i class="fas fa-check"></i> Успешно!';
+        // Обновляем UI
+        updateOpenRouterUI();
+
+        // Кнопка — общий статус
+        if (data.status === 'success') {
+            testBtn.innerHTML = '<i class="fas fa-check"></i> Оба OK';
             testBtn.style.background = 'var(--adm-success)';
             testBtn.style.borderColor = 'var(--adm-success)';
             testBtn.style.color = 'white';
         } else {
-            // Ошибка подключения
-            if (statusIndicator) {
-                statusIndicator.className = 'status-indicator status-error';
-            }
-            if (statusText) {
-                statusText.textContent = data.message || 'Ошибка подключения';
-            }
-
-            testBtn.innerHTML = '<i class="fas fa-times"></i> Ошибка';
+            testBtn.innerHTML = '<i class="fas fa-times"></i> Есть ошибки';
             testBtn.style.background = 'var(--adm-danger)';
             testBtn.style.borderColor = 'var(--adm-danger)';
             testBtn.style.color = 'white';
         }
 
-        // Возвращаем оригинальный вид кнопки через 3 секунды
         setTimeout(() => {
             testBtn.innerHTML = originalText;
             testBtn.style.background = '';
             testBtn.style.borderColor = '';
             testBtn.style.color = '';
             testBtn.disabled = false;
-
-            // Обновляем статус на основе состояния
-            updateOpenRouterUI();
         }, 3000);
 
     } catch (e) {
         console.error('Ошибка тестирования OpenRouter:', e);
-
-        if (statusIndicator) {
-            statusIndicator.className = 'status-indicator status-error';
-        }
-        if (statusText) {
-            statusText.textContent = 'Ошибка сети';
-        }
+        openrouterState.embedTest = { status: 'error', message: 'Ошибка сети: ' + e.message };
+        openrouterState.rerankTest = { status: 'error', message: 'Ошибка сети: ' + e.message };
+        updateOpenRouterUI();
 
         testBtn.innerHTML = '<i class="fas fa-times"></i> Ошибка';
         testBtn.style.background = 'var(--adm-danger)';
