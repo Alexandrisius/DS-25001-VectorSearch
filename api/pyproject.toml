@@ -34,6 +34,8 @@ dependencies = [
 
     # ===== Security =====
     "passlib[bcrypt]>=1.7.4",
+    # Pin bcrypt<4.0 — passlib 1.7.4 несовместим с bcrypt 4.x (нет __about__)
+    "bcrypt>=3.2,<4.0",
     "python-jose[cryptography]>=3.3.0",
     "cryptography>=44.0.0",
 

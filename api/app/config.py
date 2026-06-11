@@ -1,25 +1,50 @@
 """Application configuration (Pydantic v2 Settings)."""
 from __future__ import annotations
 
+import os
 from functools import lru_cache
 from typing import Literal
 
+from dotenv import load_dotenv
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Загружаем .env ДО создания Settings.
+# Pydantic v2 имеет баг с `$` в env-файлах — интерпретирует `$2b$`
+# (bcrypt-хеш) и Fernet-ключи как переменные окружения, ломая секреты.
+# python-dotenv НЕ интерполирует переменные, поэтому загружаем через него.
+load_dotenv(override=True)
 
 
 class Settings(BaseSettings):
     """Централизованная конфигурация приложения.
 
-    Все настройки читаются из переменных окружения / .env файла.
+    Все настройки читаются из переменных окружения.
+    Секреты (ADMIN_PASSWORD_HASH, JWT_SECRET_KEY, ENCRYPTION_KEY) — через @property,
+    чтобы избежать проблем с интерполяцией `$` в pydantic.
     """
 
     model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
+        env_file=None,  # Загружаем через load_dotenv() выше
         case_sensitive=False,
         extra="ignore",
     )
+
+    # ===== Secrets (через @property — НЕ поля!) =====
+    @property
+    def admin_password_hash(self) -> str:
+        """Bcrypt хеш пароля админа (os.getenv чтобы избежать `$`-интерполяции)."""
+        return os.getenv("ADMIN_PASSWORD_HASH", "")
+
+    @property
+    def jwt_secret_key(self) -> str:
+        """JWT signing key (os.getenv)."""
+        return os.getenv("JWT_SECRET_KEY", "change-me")
+
+    @property
+    def encryption_key(self) -> str:
+        """Fernet encryption key (os.getenv)."""
+        return os.getenv("ENCRYPTION_KEY", "")
 
     # ===== General =====
     env: Literal["development", "staging", "production"] = "production"
@@ -44,12 +69,9 @@ class Settings(BaseSettings):
     celery_broker_url: str = "redis://redis:6379/0"
     celery_result_backend: str = "redis://redis:6379/1"
 
-    # ===== Security =====
-    admin_password_hash: str = ""
-    jwt_secret_key: str = "change-me"
+    # ===== JWT =====
     jwt_expire_hours: int = 8
     jwt_algorithm: str = "HS256"
-    encryption_key: str = ""  # Fernet key for api_key encryption
 
     # ===== Rate limit =====
     login_max_attempts: int = 5

@@ -10,6 +10,10 @@ class ImportRequest(BaseModel):
     collection_name: str
     data: list[dict[str, Any]] = Field(..., description="[{code, description, hierarchy?, meta?}]")
     recreate: bool = False
+    folders_to_delete: list[str] = Field(
+        default_factory=list,
+        description="Список full_path папок для удаления (опционально)",
+    )
 
 
 class ImportResponse(BaseModel):

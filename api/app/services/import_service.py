@@ -152,7 +152,25 @@ class ImportService:
 
         folder_stats = await self._rebuild_folders(collection, all_path_levels)
 
-        # 6. Финал
+        # 6. Удалить папки по списку из params (если передан)
+        folders_to_delete = []
+        # Получаем из job.params (если был передан при создании job)
+        if job and job.params:
+            folders_to_delete = job.params.get("folders_to_delete", [])
+
+        if folders_to_delete:
+            if job:
+                job.details = f"Удаление {len(folders_to_delete)} папок…"
+                await self.session.flush()
+            for fp in folders_to_delete:
+                fid = deterministic_folder_uuid(fp)
+                try:
+                    self.qdrant.delete(collection.name, [fid])
+                except Exception:
+                    pass
+            folder_stats["deleted_by_request"] = len(folders_to_delete)
+
+        # 7. Финал
         collection.last_updated = datetime.now(timezone.utc).date()
         if job:
             job.progress = 100

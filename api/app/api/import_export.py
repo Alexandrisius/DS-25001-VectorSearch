@@ -42,6 +42,7 @@ async def admin_import(
             "collection_name": req.collection_name,
             "total_records": len(req.data),
             "recreate": req.recreate,
+            "folders_to_delete": req.folders_to_delete,
         },
     )
     await session.commit()  # фиксируем job_id
