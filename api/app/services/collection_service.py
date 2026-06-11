@@ -53,11 +53,22 @@ class CollectionService:
         return list(result.scalars().all())
 
     async def get_current_active(self, requested_name: str | None) -> Collection | None:
-        """Получить активную (или запрошенную) коллекцию."""
+        """Получить активную (или запрошенную) коллекцию.
+
+        ВАЖНО: НЕ использовать list_visible() здесь — он selectinload'ит
+        ВСЕ материалы каждой коллекции (142k+ записей) только чтобы
+        взять первый. Это вызывает 6+ сек лаг на /admin/collections.
+        Берём первую visible коллекцию БЕЗ selectinload.
+        """
         if requested_name:
             return await self.get_by_name(requested_name)
-        visible = await self.list_visible()
-        return visible[0] if visible else None
+        result = await self.session.execute(
+            select(Collection)
+            .where(Collection.visible == True)  # noqa: E712
+            .order_by(Collection.name)
+            .limit(1)
+        )
+        return result.scalars().first()
 
     async def create(
         self,

@@ -931,21 +931,16 @@ function checkMobileDevice() {
  * Проверяет сохранённый токен и настраивает обработчики.
  */
 function initAuth() {
-    // Если есть сохранённый токен — валидируем через API.
-    // Пока идёт валидация — показываем splash (НЕ форму входа),
-    // иначе пользователь видит форму логина на 100-500мс ("flash").
+    // Если есть токен — сразу показываем adminApp (мгновенный UX).
+    // validateToken идёт в фоне — если токен невалидный, выкинем на login.
+    // Это убирает auth flash (splash) полностью — мгновенный показ как
+    // в оригинальной версии до рефакторинга v2.
     if (state.token) {
-        // loginScreen скрыт, authSplash виден (по умолчанию)
+        showApp();
         validateToken().then(valid => {
-            if (valid) {
-                showApp();
-            } else {
-                // Токен невалиден - очищаем и показываем форму входа
-                logout();
-            }
+            if (!valid) logout();
         });
     } else {
-        // Токена нет — сразу показываем форму входа
         els.loginScreen.classList.remove('hidden');
         els.authSplash.classList.add('hidden');
     }

@@ -108,12 +108,14 @@ class RerankService:
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
-            "User-Agent": "KSR-Matcher/2.0",
         }
         if not self.base_url:
             # OpenRouter требует эти headers для non-localhost ключей
             # (иначе возвращает 403 Forbidden через guardrail)
             # Используем X-Title (старое имя) — X-OpenRouter-Title ломает
+            # ВАЖНО: НЕ добавляем User-Agent — Cloudflare блокирует custom UA.
+            # Проверено в backup/feature-qdrant-snapshot-2026-06-11: работает
+            # только с HTTP-Referer + X-Title (httpx шлёт свой дефолтный UA).
             headers["HTTP-Referer"] = "https://ksrmatch.online/"
             headers["X-Title"] = "KSR Matcher"
 
