@@ -18,58 +18,58 @@
 # ПОМОЩЬ
 # =============================================================================
 help:
-	@echo "╔════════════════════════════════════════════════════════════╗"
-	@echo "║  KSR Vector Search v2 — команды                            ║"
-	@echo "╚════════════════════════════════════════════════════════════╝"
+	@echo "+============================================================╗"
+	@echo "|  KSR Vector Search v2 - команды                            |"
+	@echo "+============================================================+"
 	@echo ""
-	@echo "📖 Документация: docs/README.md"
+	@echo "[DOCS] Документация: docs/README.md"
 	@echo ""
-	@echo "━━━ БАЗОВЫЕ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "--- БАЗОВЫЕ -----------------------------------------------"
 	@echo "  make up              Поднять весь стек (api, postgres, qdrant, redis, worker, flower)"
 	@echo "  make down            Остановить стек"
 	@echo "  make restart         Перезапустить стек"
 	@echo "  make ps              Статус контейнеров"
 	@echo ""
-	@echo "━━━ ЛОГИ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "--- ЛОГИ --------------------------------------------------"
 	@echo "  make logs            Все сервисы"
 	@echo "  make logs-api        Только API"
 	@echo "  make logs-celery     Только Celery worker"
 	@echo "  make logs-db         Postgres + Qdrant"
 	@echo ""
-	@echo "━━━ ОБНОВЛЕНИЕ КОДА ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "--- ОБНОВЛЕНИЕ КОДА --------------------------------------"
 	@echo "  make rebuild-api     Пересобрать API (после правок api/app/*.py)"
 	@echo "  make rebuild         Пересобрать ВСЁ"
-	@echo "  ⚠️  Для UI (web/*) рестарт НЕ нужен — обнови вкладку браузера"
+	@echo "  [WARN]  Для UI (web/*) рестарт НЕ нужен - обнови вкладку браузера"
 	@echo ""
-	@echo "━━━ БД ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "--- БД ----------------------------------------------------"
 	@echo "  make migrate         Применить миграции Alembic"
 	@echo "  make revision msg=…  Создать новую миграцию"
 	@echo "  make shell-postgres  Войти в psql"
 	@echo "  make shell-qdrant    Войти в Qdrant"
 	@echo ""
-	@echo "━━━ БЭКАП ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "--- БЭКАП -------------------------------------------------"
 	@echo "  make backup          Бэкап PostgreSQL"
 	@echo "  make backup-full     Бэкап PostgreSQL + Qdrant"
 	@echo "  make restore FILE=…  Восстановить из дампа"
 	@echo ""
-	@echo "━━━ CLOUDFLARE TUNNEL ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "--- CLOUDFLARE TUNNEL -------------------------------------"
 	@echo "  make tunnel-up       Запустить cloudflared (нужен TUNNEL_TOKEN в .env)"
 	@echo "  make tunnel-down     Остановить cloudflared"
 	@echo "  make tunnel-logs     Логи cloudflared"
 	@echo ""
-	@echo "━━━ BROWSER ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "--- BROWSER -----------------------------------------------"
 	@echo "  make open-site       Открыть сайт (localhost:8000)"
 	@echo "  make open-admin      Открыть админку (localhost:8000/admin)"
 	@echo "  make open-flower     Открыть Flower (localhost:5555)"
 	@echo "  make open-docs       Открыть документацию (docs/README.md)"
 	@echo ""
-	@echo "━━━ DEV ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "--- DEV ---------------------------------------------------"
 	@echo "  make shell-api       Войти в контейнер API (bash)"
 	@echo "  make test            pytest"
 	@echo "  make lint            ruff check"
 	@echo "  make format          ruff format"
 	@echo "  make clean           Удалить __pycache__"
-	@echo "  make prune           ⚠️  Удалить ВСЕ ДАННЫЕ"
+	@echo "  make prune           [WARN]  Удалить ВСЕ ДАННЫЕ"
 
 # =============================================================================
 # СТЕК
@@ -77,13 +77,13 @@ help:
 up:
 	docker compose up -d --build
 	@echo ""
-	@echo "✅ Стек поднят:"
-	@echo "   🌐 Сайт:    http://localhost:8000"
-	@echo "   ⚙️  Админка:  http://localhost:8000/admin (admin/admin)"
-	@echo "   📚 API docs: http://localhost:8000/docs"
-	@echo "   🌸 Flower:   http://localhost:5555 (admin/admin)"
+	@echo "[OK] Стек поднят:"
+	@echo "   [NET] Сайт:    http://localhost:8000"
+	@echo "   [CFG]  Админка:  http://localhost:8000/admin (admin/admin)"
+	@echo "   [API] API docs: http://localhost:8000/docs"
+	@echo "   [FL] Flower:   http://localhost:5555 (admin/admin)"
 	@echo ""
-	@echo "💡 Следующий шаг: make migrate"
+	@echo "[TIP] Следующий шаг: make migrate"
 
 down:
 	docker compose down
@@ -130,18 +130,18 @@ shell-qdrant:
 # ОБНОВЛЕНИЕ КОДА
 # =============================================================================
 rebuild-api:
-	@echo "🔨 Пересобираю API..."
+	@echo "[BUILD] Пересобираю API..."
 	docker compose build api
-	@echo "🔄 Перезапускаю api + celery_worker..."
+	@echo "[RESTART] Перезапускаю api + celery_worker..."
 	docker compose up -d api celery_worker
-	@echo "✅ Готово. UI не требует рестарта (volume mount)."
+	@echo "[OK] Готово. UI не требует рестарта (volume mount)."
 
 rebuild:
-	@echo "🔨 Пересобираю все сервисы..."
+	@echo "[BUILD] Пересобираю все сервисы..."
 	docker compose build
-	@echo "🔄 Перезапускаю..."
+	@echo "[RESTART] Перезапускаю..."
 	docker compose up -d
-	@echo "✅ Готово."
+	@echo "[OK] Готово."
 
 # =============================================================================
 # БД
@@ -160,8 +160,8 @@ backup:
 	@TS=$$(date +%Y%m%d_%H%M%S); \
 	docker compose exec -T postgres pg_dump -U $${POSTGRES_USER:-ksr} $${POSTGRES_DB:-ksr} \
 		> data/backups/ksr_$${TS}.sql
-	@echo "✅ Бэкап: data/backups/ksr_$$(date +%Y%m%d_%H%M%S).sql"
-	@echo "💡 Для полного бэкапа (с Qdrant): make backup-full"
+	@echo "[OK] Бэкап: data/backups/ksr_$$(date +%Y%m%d_%H%M%S).sql"
+	@echo "[TIP] Для полного бэкапа (с Qdrant): make backup-full"
 
 backup-full:
 	@mkdir -p data/backups
@@ -169,36 +169,36 @@ backup-full:
 	docker compose exec -T postgres pg_dump -U $${POSTGRES_USER:-ksr} $${POSTGRES_DB:-ksr} \
 		> data/backups/pg_$${TS}.sql; \
 	docker compose exec -T qdrant tar czf - /qdrant/storage > data/backups/qdrant_$${TS}.tar.gz
-	@echo "✅ Полный бэкап:"
+	@echo "[OK] Полный бэкап:"
 	@echo "   data/backups/pg_$$(date +%Y%m%d_%H%M%S).sql"
 	@echo "   data/backups/qdrant_$$(date +%Y%m%d_%H%M%S).tar.gz"
 
 restore:
-	@if [ -z "$(FILE)" ]; then echo "❌ Использование: make restore FILE=path/to/dump.sql"; exit 1; fi
-	@echo "⚠️  Это УДАЛИТ текущие данные и заменит их на данные из $(FILE)"
+	@if [ -z "$(FILE)" ]; then echo "[X] Использование: make restore FILE=path/to/dump.sql"; exit 1; fi
+	@echo "[WARN]  Это УДАЛИТ текущие данные и заменит их на данные из $(FILE)"
 	@read -p "Продолжить? [y/N] " r && [ "$$r" = "y" ] || exit 1
 	docker compose exec -T postgres psql -U $${POSTGRES_USER:-ksr} -d $${POSTGRES_DB:-ksr} < $(FILE)
-	@echo "✅ БД восстановлена из $(FILE)"
+	@echo "[OK] БД восстановлена из $(FILE)"
 
 # =============================================================================
 # CLOUDFLARE TUNNEL
 # =============================================================================
 tunnel-up:
 	@if [ -z "$$TUNNEL_TOKEN" ] && ! grep -q "^TUNNEL_TOKEN=." .env 2>/dev/null; then \
-		echo "❌ TUNNEL_TOKEN не задан в .env"; \
-		echo "   1. Создай туннель: https://one.dash.cloudflare.com/ → Zero Trust → Networks → Tunnels"; \
+		echo "[X] TUNNEL_TOKEN не задан в .env"; \
+		echo "   1. Создай туннель: https://one.dash.cloudflare.com/ -> Zero Trust -> Networks -> Tunnels"; \
 		echo "   2. Скопируй токен в .env: TUNNEL_TOKEN=eyJh..."; \
 		echo "   3. Повтори make tunnel-up"; \
 		exit 1; \
 	fi
-	@echo "🌐 Запускаю Cloudflare Tunnel..."
+	@echo "[NET] Запускаю Cloudflare Tunnel..."
 	docker compose -f docker-compose.yml -f docker-compose.cloudflared.yml up -d cloudflared
-	@echo "✅ Tunnel запущен. Смотри логи: make tunnel-logs"
+	@echo "[OK] Tunnel запущен. Смотри логи: make tunnel-logs"
 
 tunnel-down:
 	docker compose -f docker-compose.yml -f docker-compose.cloudflared.yml stop cloudflared
 	docker compose -f docker-compose.yml -f docker-compose.cloudflared.yml rm -f cloudflared
-	@echo "✅ Tunnel остановлен"
+	@echo "[OK] Tunnel остановлен"
 
 tunnel-logs:
 	docker compose -f docker-compose.yml -f docker-compose.cloudflared.yml logs -f cloudflared
@@ -208,19 +208,19 @@ tunnel-logs:
 # =============================================================================
 open-site:
 	@cmd /c start http://localhost:8000 2>nul || xdg-open http://localhost:8000 2>nul || open http://localhost:8000
-	@echo "🌐 Открыл http://localhost:8000"
+	@echo "[NET] Открыл http://localhost:8000"
 
 open-admin:
 	@cmd /c start http://localhost:8000/admin 2>nul || xdg-open http://localhost:8000/admin 2>nul || open http://localhost:8000/admin
-	@echo "⚙️  Открыл http://localhost:8000/admin (admin/admin)"
+	@echo "[CFG]  Открыл http://localhost:8000/admin (admin/admin)"
 
 open-flower:
 	@cmd /c start http://localhost:5555 2>nul || xdg-open http://localhost:5555 2>nul || open http://localhost:5555
-	@echo "🌸 Открыл http://localhost:5555 (admin/admin)"
+	@echo "[FL] Открыл http://localhost:5555 (admin/admin)"
 
 open-docs:
 	@cmd /c start docs/README.md 2>nul || xdg-open docs/README.md 2>nul || open docs/README.md
-	@echo "📖 Открыл docs/README.md"
+	@echo "[DOCS] Открыл docs/README.md"
 
 # =============================================================================
 # DEV / TEST
@@ -240,11 +240,11 @@ format:
 clean:
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name "*.pyc" -delete 2>/dev/null || true
-	@echo "✅ Кэш Python очищен"
+	@echo "[OK] Кэш Python очищен"
 
 prune:
-	@echo "⚠️  Это УДАЛИТ все контейнеры, volumes и данные!"
+	@echo "[WARN]  Это УДАЛИТ все контейнеры, volumes и данные!"
 	@read -p "Точно? [y/N] " r && [ "$$r" = "y" ] || exit 1
 	docker compose down -v
 	docker system prune -f
-	@echo "✅ Очищено"
+	@echo "[OK] Очищено"
