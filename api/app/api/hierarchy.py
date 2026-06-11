@@ -45,20 +45,9 @@ async def get_children(
     svc: HierarchyService = Depends(get_hierarchy_service),
 ) -> HierarchyChildrenResponse:
     coll = await _resolve_coll(session, database_name)
-    # Определяем parent_level автоматически для 2-уровневой схемы данных.
-    # В ОРИГИНАЛЬНОМ коде (backup/feature-qdrant) parent_path всегда содержал
-    # полный путь через "→" (например "Раздел → Группа"), и parent_level
-    # = кол-во "→" в пути.
-    # В v2 parent_path хранится БЕЗ "→" (например "Раздел"), и frontend
-    # НЕ передаёт level параметр для вложенных кликов. Поэтому:
-    # - root: parent_path="" → parent_level=0 (дети = path_level_1)
-    # - вложенный: parent_path="Раздел" → parent_level=1 (дети = path_level_2)
-    # Это совпадает с path_depth всех материалов в БД (= 2).
-    if parent_path:
-        parent_level = 1
-    else:
-        parent_level = 0
-    result = await svc.get_children(coll, parent_path=parent_path, parent_level=parent_level)
+    # parent_level определяется динамически в get_children() по данным —
+    # level параметр не используется. Оставлен для обратной совместимости.
+    result = await svc.get_children(coll, parent_path=parent_path, parent_level=0)
     return HierarchyChildrenResponse(**result)
 
 
