@@ -63,16 +63,21 @@ async def set_database(database_name: str, session: DBSession) -> dict:
 
 @router.get("/databases")
 async def list_databases(session: DBSession) -> dict:
-    """Список visible коллекций (публичный, для UI поиска)."""
+    """Список visible коллекций (публичный, для UI поиска).
+
+    Использует list_visible_fast() (без selectinload) + stored counter
+    Collection.materials_count — иначе SELECT COUNT для 142k записей
+    даёт 6+ сек лаг при каждом открытии главной страницы.
+    """
     svc = CollectionService(session)
-    visible = await svc.list_visible()
+    visible = await svc.list_visible_fast()
     current = await svc.get_current_active(None)
     return {
         "databases": [
             {
                 "name": c.name,
                 "description": c.description or c.name,
-                "record_count": len(c.materials) if c.materials is not None else 0,
+                "record_count": c.materials_count or 0,
                 "dimension": c.dimension,
                 "thresholds": {
                     "cosine": c.cosine_threshold,

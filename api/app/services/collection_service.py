@@ -70,6 +70,20 @@ class CollectionService:
         )
         return result.scalars().first()
 
+    async def list_visible_fast(self) -> list[Collection]:
+        """Быстрый список visible коллекций БЕЗ selectinload materials.
+
+        Использовать в endpoints где нужен только список (не нужен
+        list of materials). record_count берётся из stored counter
+        Collection.materials_count (см. Alembic 0003).
+        """
+        result = await self.session.execute(
+            select(Collection)
+            .where(Collection.visible == True)  # noqa: E712
+            .order_by(Collection.name)
+        )
+        return list(result.scalars().all())
+
     async def create(
         self,
         name: str,
