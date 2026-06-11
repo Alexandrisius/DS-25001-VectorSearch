@@ -383,7 +383,7 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 ```
 
 ### 10.5 Session.get() with non-PK column
-**Problem:** `AsyncSession.get(Model, "name")` doesn't work - `get()` only takes primary key.
+**Problem:** `AsyncSession.get(Model, "name")` doesn't work — `get()` only takes primary key.
 **Solution:** Use `select()` for non-PK lookups:
 ```python
 # WRONG:
@@ -395,6 +395,28 @@ result = await self.session.execute(
     select(ApiProvider).where(ApiProvider.name == name)
 )
 return result.scalars().first()
+```
+
+### 10.5.1 Lazy loading in async context (MissingGreenlet)
+**Problem:** Accessing `c.materials` after the session closed (or in non-async path) raises `MissingGreenlet`.
+**Solution:** Use `selectinload()` to eager-load relations in async:
+```python
+# WRONG:
+result = await session.execute(select(Collection).where(...))
+collections = result.scalars().all()
+for c in collections:
+    count = len(c.materials)  # MissingGreenlet here!
+
+# CORRECT:
+from sqlalchemy.orm import selectinload
+result = await session.execute(
+    select(Collection)
+    .where(...)
+    .options(selectinload(Collection.materials))
+)
+collections = result.scalars().all()
+for c in collections:
+    count = len(c.materials)  # OK - already loaded
 ```
 
 ### 10.6 Qdrant alpine has no wget/curl

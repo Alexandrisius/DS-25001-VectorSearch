@@ -29,7 +29,11 @@ class CollectionService:
         return list(result.scalars().all())
 
     async def get_by_name(self, name: str) -> Collection | None:
-        return await self.session.get(Collection, name=name)  # type: ignore[arg-type]
+        from sqlalchemy import select
+        result = await self.session.execute(
+            select(Collection).where(Collection.name == name)
+        )
+        return result.scalars().first()
 
     async def get_or_404(self, name: str) -> Collection:
         coll = await self.get_by_name(name)
@@ -38,8 +42,13 @@ class CollectionService:
         return coll
 
     async def list_visible(self) -> list[Collection]:
+        # selectinload materials чтобы избежать MissingGreenlet (lazy load в async)
+        from sqlalchemy.orm import selectinload
         result = await self.session.execute(
-            select(Collection).where(Collection.visible == True).order_by(Collection.name)  # noqa: E712
+            select(Collection)
+            .where(Collection.visible == True)  # noqa: E712
+            .options(selectinload(Collection.materials))
+            .order_by(Collection.name)
         )
         return list(result.scalars().all())
 
