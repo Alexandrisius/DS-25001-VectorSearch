@@ -123,9 +123,9 @@
     font-size: 0.65rem;
     font-weight: 600;
     border-radius: 5px;
-    background: rgba(99, 102, 241, 0.1);
+    background: rgba(79, 70, 229, 0.1);
     color: var(--adm-primary);
-    border: 1px solid rgba(99, 102, 241, 0.2);
+    border: 1px solid rgba(79, 70, 229, 0.2);
     text-transform: uppercase;
     letter-spacing: 0.2px;
     line-height: 1.3;
@@ -137,7 +137,7 @@
 
 /* === ADD RULE TOGGLE (collapsible) === */
 .add-rule-section {
-    background: linear-gradient(135deg, rgba(99, 102, 241, 0.05) 0%, rgba(99, 102, 241, 0.02) 100%);
+    background: linear-gradient(135deg, rgba(79, 70, 229, 0.05) 0%, rgba(79, 70, 229, 0.02) 100%);
     border: 2px dashed var(--adm-border);
     border-radius: var(--radius-md);
     padding: 20px;
@@ -189,7 +189,7 @@
 
 .add-rule-toggle:hover {
     border-color: var(--adm-primary);
-    background: rgba(99, 102, 241, 0.04);
+    background: rgba(79, 70, 229, 0.04);
     color: var(--adm-primary);
 }
 
@@ -238,7 +238,7 @@
 
 .add-rule-form input:focus {
     border-color: var(--adm-primary);
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
     outline: none;
 }
 
@@ -311,7 +311,7 @@
     border-color: var(--adm-primary);
     color: var(--adm-primary);
     transform: translateY(-1px);
-    box-shadow: 0 2px 6px rgba(99, 102, 241, 0.1);
+    box-shadow: 0 2px 6px rgba(79, 70, 229, 0.1);
 }
 
 .template-chip i {
@@ -362,7 +362,7 @@
 }
 
 .target-pill.checked {
-    background: rgba(99, 102, 241, 0.12);
+    background: rgba(79, 70, 229, 0.12);
     border-color: var(--adm-primary);
     color: var(--adm-primary);
 }
@@ -446,7 +446,7 @@
 
 .preview-input:focus {
     border-color: var(--adm-primary);
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
     outline: none;
 }
 

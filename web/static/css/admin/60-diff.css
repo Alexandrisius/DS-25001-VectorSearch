@@ -36,7 +36,7 @@
 }
 
 .diff-stat.folders {
-    background: rgba(99, 102, 241, 0.1);
+    background: rgba(79, 70, 229, 0.1);
     color: var(--adm-primary);
 }
 
@@ -86,7 +86,7 @@
 }
 
 .diff-tab-btn.active .badge {
-    background: rgba(99, 102, 241, 0.15);
+    background: rgba(79, 70, 229, 0.15);
     color: var(--adm-primary);
 }
 

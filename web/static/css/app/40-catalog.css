@@ -346,7 +346,7 @@
 
 /* Multi-selected via Ctrl+click — "active filter" visual */
 .tree-node-header.multi-selected {
-    background: rgba(99, 102, 241, 0.15);
+    background: rgba(79, 70, 229, 0.15);
     border-left: 3px solid var(--primary);
 }
 
@@ -671,7 +671,7 @@
 }
 
 .catalog-search-result.selected {
-    background: rgba(99, 102, 241, 0.1);
+    background: rgba(79, 70, 229, 0.1);
     border-left: 3px solid var(--primary);
 }
 

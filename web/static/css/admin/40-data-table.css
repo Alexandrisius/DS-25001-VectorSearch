@@ -250,7 +250,7 @@ tr:hover td {
 }
 
 .data-table-full .col-hierarchy:hover {
-    background: rgba(99, 102, 241, 0.08);
+    background: rgba(79, 70, 229, 0.08);
 }
 
 .col-hierarchy-header {
@@ -268,7 +268,7 @@ tr:hover td {
 }
 
 .data-table-full .col-description:hover {
-    background: rgba(99, 102, 241, 0.08);
+    background: rgba(79, 70, 229, 0.08);
 }
 
 /* Code column — centered, mono font, primary color */
@@ -281,7 +281,7 @@ tr:hover td {
 }
 
 .data-table-full .col-code:hover {
-    background: rgba(99, 102, 241, 0.08);
+    background: rgba(79, 70, 229, 0.08);
 }
 
 .data-table-full th[data-sort="code"] {
@@ -354,7 +354,7 @@ th.sortable:hover {
 }
 
 .editable:hover {
-    background-color: rgba(99, 102, 241, 0.08);
+    background-color: rgba(79, 70, 229, 0.08);
 }
 
 .editable.editing {
@@ -453,12 +453,12 @@ th.sortable:hover {
 }
 
 .sort-trigger:hover {
-    background: rgba(99, 102, 241, 0.1);
+    background: rgba(79, 70, 229, 0.1);
     color: var(--adm-primary);
 }
 
 .sort-trigger:active {
-    background: rgba(99, 102, 241, 0.2);
+    background: rgba(79, 70, 229, 0.2);
 }
 
 .th-resizer {
@@ -640,11 +640,11 @@ body.resizing-columns .data-table-full th {
 }
 
 .status-option:hover {
-    background: rgba(99, 102, 241, 0.08);
+    background: rgba(79, 70, 229, 0.08);
 }
 
 .status-option.selected {
-    background: rgba(99, 102, 241, 0.12);
+    background: rgba(79, 70, 229, 0.12);
 }
 
 .status-option:last-child {

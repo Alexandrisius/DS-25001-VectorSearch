@@ -68,7 +68,7 @@
 
 .form-select-modern:focus {
     border-color: var(--adm-primary);
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
 }
 
 /* === Multi-Select Dropdown (legacy) === */
@@ -99,7 +99,7 @@
 
 .select-trigger.active {
     border-color: var(--adm-primary);
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
 }
 
 .select-options {
@@ -523,7 +523,7 @@
 
 .source-tab.active {
     border-color: var(--adm-primary);
-    background: rgba(99, 102, 241, 0.08);
+    background: rgba(79, 70, 229, 0.08);
     color: var(--adm-primary);
     font-weight: 600;
 }
@@ -564,7 +564,7 @@
     padding: 40px 20px;
     border: 3px dashed var(--adm-border);
     border-radius: var(--radius-lg);
-    background: linear-gradient(135deg, rgba(99, 102, 241, 0.03) 0%, rgba(99, 102, 241, 0.01) 100%);
+    background: linear-gradient(135deg, rgba(79, 70, 229, 0.03) 0%, rgba(79, 70, 229, 0.01) 100%);
     text-align: center;
     cursor: pointer;
     transition: all 0.3s;
@@ -574,7 +574,7 @@
 .excel-drop-zone:hover,
 .excel-drop-zone.drag-over {
     border-color: var(--adm-primary);
-    background: linear-gradient(135deg, rgba(99, 102, 241, 0.08) 0%, rgba(99, 102, 241, 0.04) 100%);
+    background: linear-gradient(135deg, rgba(79, 70, 229, 0.08) 0%, rgba(79, 70, 229, 0.04) 100%);
 }
 
 .excel-drop-zone.drag-over {

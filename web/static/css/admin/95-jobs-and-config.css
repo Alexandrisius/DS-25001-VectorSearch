@@ -100,7 +100,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(99, 102, 241, 0.12);
+    background: rgba(79, 70, 229, 0.12);
     color: var(--adm-primary);
     border-radius: 6px;
     font-size: 0.75rem;
