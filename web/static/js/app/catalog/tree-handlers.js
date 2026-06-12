@@ -10,7 +10,7 @@
  */
 
 import { filterState } from '../state.js';
-import { catalogState } from './state.js';
+import { catalogState } from '../state.js';
 import { toggleMultiSelect, showLongPressToast } from '../filter.js';
 import { loadChildren } from './tree.js';
 import { updateStickyCategoryHeader } from './breadcrumbs.js';

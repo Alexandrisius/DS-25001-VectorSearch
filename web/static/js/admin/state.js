@@ -56,7 +56,6 @@ export const state = {
     // a small reference here so closeModal('import') can stop them.
     jobWs: null,
     jobInterval: null,
-    jobPoller: null,                       // interval id for the jobs-view poller (see startJobPoller)
 
     // --- records / statuses ---
     statuses: [],

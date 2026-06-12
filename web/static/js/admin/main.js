@@ -12,10 +12,6 @@
  * extract the shared concept into its own module.
  */
 
-// --- shared helpers (also re-exported for the import-wizard convenience) ---
-import { state } from './state.js';
-import { els } from './els.js';
-
 // --- core ---
 import { initAuth } from './auth.js';
 import { initNavigation } from './navigation.js';
@@ -23,10 +19,7 @@ import { initModals, initModalResize } from './modals.js';
 import { checkMobileDevice } from './mobile.js';
 
 // --- collections ---
-import {
-    initCollectionsCardHandler,
-    loadCollections,
-} from './collections/list.js';
+import { initCollectionsCardHandler } from './collections/list.js';
 import { initConfigForm } from './collections/config.js';
 import { initCreateCollection } from './collections/create.js';
 import { initDeleteHandlers } from './collections/delete.js';
@@ -39,7 +32,7 @@ import { initSorting } from './data-table/sort.js';
 
 // --- import wizard ---
 import { initImportWizard } from './import/wizard.js';
-import { initJobStopHandler, startJobPoller } from './import/jobs.js';
+import { initJobStopHandler } from './import/jobs.js';
 
 // --- cleaning rules ---
 import { initCleaningRulesEvents } from './cleaning-rules/events.js';
@@ -93,9 +86,3 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- cleaning rules data ---
     CleaningRulesModule.load();
 });
-
-// silence unused
-void state;
-void els;
-void loadCollections;
-void startJobPoller;

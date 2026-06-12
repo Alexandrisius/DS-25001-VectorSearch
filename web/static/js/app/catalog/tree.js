@@ -10,7 +10,6 @@ import { els } from '../els.js';
 import { appState, filterState, catalogState } from '../state.js';
 import { escapeHtml } from '../../shared/dom.js';
 import { clearFilter } from '../filter.js';
-import { updateStickyCategoryHeader } from './breadcrumbs.js';
 import {
     attachSingleNodeHandler,
     attachTreeEventHandlersForContainer,
@@ -238,7 +237,3 @@ export function attachTreeEventHandlers() {
         attachSingleNodeHandler(header);
     });
 }
-
-/* silence unused (these re-exports are intentional for the
-   breadcrumbs / tree-handlers modules) */
-void updateStickyCategoryHeader;

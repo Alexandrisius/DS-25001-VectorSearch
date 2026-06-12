@@ -6,10 +6,6 @@ function $id(id) {
     return document.getElementById(id);
 }
 
-function $all(selector) {
-    return document.querySelectorAll(selector);
-}
-
 const themeToggle = $id('themeToggle');
 const themeIcon = themeToggle ? themeToggle.querySelector('i') : null;
 const themeText = themeToggle ? themeToggle.querySelector('span') : null;
@@ -68,6 +64,3 @@ export const els = {
     collapseAllBtn: $id('collapseAllBtn'),
     refreshCatalogBtn: $id('refreshCatalogBtn'),
 };
-
-/* silence unused */
-void $all;

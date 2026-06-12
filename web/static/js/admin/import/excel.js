@@ -10,7 +10,6 @@
 import { state } from '../state.js';
 import { els } from '../els.js';
 import { importData } from './state.js';
-import { getAuthHeaders } from '../../shared/api.js';
 import { renderNumberedCheckboxes, renderPreviewTable, updateAllPreviews } from './preview.js';
 import { showImportStep } from './wizard.js';
 
@@ -193,6 +192,3 @@ export async function uploadExcelFile(file, sheet = null) {
         resetExcelUploadUI();
     }
 }
-
-/* silence unused */
-void getAuthHeaders;

@@ -6,15 +6,14 @@
  */
 
 import { els } from './els.js';
-import { appState, filterState } from './state.js';
+import { appState } from './state.js';
 
 import { initTheme } from './theme.js';
 import { loadAvailableDatabases } from './database.js';
-import { initCustomSelect } from './custom-select.js';
 import { initCatalogSidebar } from './catalog/sidebar.js';
 import { initCatalogSearch } from './catalog/search.js';
 
-import { performSearch, setLoading } from './search.js';
+import { performSearch } from './search.js';
 import { clearResults } from './results.js';
 import { sendAnalytics } from './analytics.js';
 import { clearFilter } from './filter.js';
@@ -27,7 +26,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // Bootstrap data.
     loadAvailableDatabases();
     initTheme();
-    initCustomSelect();
     initCatalogSidebar();
     initCatalogSearch();
 
@@ -125,7 +123,3 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 });
-
-/* silence unused */
-void setLoading;
-void filterState;

@@ -7,7 +7,7 @@
 
 import { els } from '../els.js';
 import { escapeHtml } from '../../shared/dom.js';
-import { catalogState } from './state.js';
+import { catalogState } from '../state.js';
 import { STICKY_HYSTERESIS } from '../../shared/constants.js';
 
 /**

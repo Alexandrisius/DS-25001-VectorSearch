@@ -6,7 +6,6 @@
  * fetch the full dataset by cache_key and overwrite importData.raw.
  */
 
-import { els } from '../../els.js';
 import { importData } from '../state.js';
 import { authFetch } from '../../../shared/api.js';
 
@@ -39,6 +38,3 @@ export async function loadFullExcelData() {
         return false;
     }
 }
-
-/* silence unused */
-void els;

@@ -9,11 +9,11 @@
  */
 
 import { els } from '../els.js';
-import { filterState, appState } from '../state.js';
+import { filterState } from '../state.js';
 import { toggleMultiSelect, updateMultiSelectUI } from '../filter.js';
 import { toggleSidebar } from './sidebar.js';
 import { loadChildren } from './tree.js';
-import { catalogState } from './state.js';
+import { catalogState } from '../state.js';
 
 const HIGHLIGHT_TIMEOUT_MS = 5000;
 const SCROLLEND_HOLD_MS = 1500;
@@ -170,6 +170,4 @@ export async function navigateToCategoryInCatalog(categoryPath) {
     }
 }
 
-/* silence unused (appState is read in navigation to support future
-   highlighting of cross-database paths) */
-void appState;
+

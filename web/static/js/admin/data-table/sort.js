@@ -31,10 +31,16 @@ export function updateSortIcons() {
 }
 
 /**
- * Wire up delegated click handler for the sort triggers. Installed
- * once at bootstrap.
+ * Wire up delegated click handler for the sort triggers. The handler
+ * is installed exactly once on the document; subsequent calls are
+ * no-ops (the original code's per-trigger `replaceWith` trick was
+ * unnecessary once we use a single delegated listener).
  */
+let sortHandlerInstalled = false;
 export function initSorting() {
+    if (sortHandlerInstalled) return;
+    sortHandlerInstalled = true;
+
     document.addEventListener('click', (e) => {
         const trigger = e.target.closest('.sort-trigger');
         if (!trigger) return;

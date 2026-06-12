@@ -42,7 +42,6 @@ export const appState = {
 /*  Filter state (sidebar multi-select)                               */
 /* ------------------------------------------------------------------ */
 
-let hierarchyTree = null;   // dead code in the original; kept for parity but unused
 let selectedPaths = [];
 let currentFilterPath = null;
 let currentFilterLevel = null;
@@ -62,9 +61,6 @@ let touchStartX = 0;
 let touchStartY = 0;
 
 export const filterState = {
-    get hierarchyTree() { return hierarchyTree; },
-    set hierarchyTree(v) { hierarchyTree = v; },
-
     get selectedPaths() { return selectedPaths; },
     set selectedPaths(v) { selectedPaths = v; },
 

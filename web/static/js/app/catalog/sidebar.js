@@ -6,7 +6,6 @@ import { els } from '../els.js';
 import { appState, filterState, catalogState } from '../state.js';
 import { STORAGE_KEYS } from '../../shared/constants.js';
 import { loadHierarchy } from './tree.js';
-import { updateStickyCategoryHeader } from './breadcrumbs.js';
 import { clearAllSelections } from '../filter.js';
 
 /**
@@ -202,6 +201,3 @@ export async function refreshCatalog() {
         if (refreshBtn) refreshBtn.disabled = false;
     }
 }
-
-/* silence unused */
-void updateStickyCategoryHeader;

@@ -11,7 +11,7 @@
 import { state } from '../state.js';
 import { els } from '../els.js';
 import { openModal } from '../modals.js';
-import { importData, diffData, diffActiveTab, resetImportState } from './state.js';
+import { importData, resetImportState } from './state.js';
 import { processPastedData } from './paste.js';
 import { resetExcelUploadUI } from './excel.js';
 import { initImportSourceTabs } from './source-tabs.js';
@@ -109,10 +109,6 @@ export function initImportWizard() {
     initImportSourceTabs();
     initExcelUpload();
     initDiffTabs();
-
-    // silence unused
-    void diffData;
-    void diffActiveTab;
 }
 
 /**

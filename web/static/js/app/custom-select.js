@@ -4,10 +4,16 @@
  * Reads the options from the underlying native <select> (which is the
  * source of truth — when the server list changes, we re-build the
  * <select> and then re-render the custom UI on top of it).
+ *
+ * The "select database" logic lives in `database.js#setCurrentDatabase`
+ * — this module only handles the click-to-select interaction and the
+ * open/close UI. Delegating to the canonical implementation keeps the
+ * Phase 4 metrics, db-card active state and processing-info banner
+ * in sync.
  */
 
 import { els } from './els.js';
-import { appState } from './state.js';
+import { setCurrentDatabase } from './database.js';
 
 /**
  * Replace the custom dropdown with a fresh list mirroring the native
@@ -37,6 +43,9 @@ export function initCustomSelect() {
             wrapper.classList.remove('open');
 
             els.databaseSelect.value = this.dataset.value;
+            // Delegate to the canonical setCurrentDatabase — it
+            // updates Phase 4 metrics, the active db-card, the
+            // processingInfo banner, and refreshes the hierarchy.
             setCurrentDatabase(this.dataset.value);
         });
 
@@ -65,37 +74,4 @@ function setupToggleBehavior() {
             wrapper.classList.remove('open');
         }
     });
-}
-
-/**
- * Set the active database and update the custom-select UI to match.
- *
- * @param {string} name
- */
-export function setCurrentDatabase(name) {
-    appState.currentDatabase = name;
-    if (els.databaseSelect) els.databaseSelect.value = name;
-
-    // Re-sync the custom dropdown.
-    if (els.customOptionsContainer && els.customOptionsContainer.children.length > 0) {
-        const selectedOption = Array.from(els.customOptionsContainer.children)
-            .find((div) => div.dataset.value === name);
-        if (selectedOption) {
-            if (els.customSelectValue) els.customSelectValue.textContent = selectedOption.textContent;
-            Array.from(els.customOptionsContainer.children).forEach((el) => el.classList.remove('selected'));
-            selectedOption.classList.add('selected');
-        }
-    }
-
-    // Trigger async hierarchy refresh — deferred so the UI thread can
-    // settle first (the original code used setTimeout(..., 0) for the
-    // same reason).
-    setTimeout(() => {
-        // Lazy-import to avoid a cycle: database.js -> catalog/tree.js
-        // (tree is also lazy-loaded so search.js doesn't pull it in
-        // before the user is ready for it).
-        import('./catalog/tree.js').then((m) => m.loadHierarchy(name));
-    }, 0);
-
-    void appState; // keep import non-pruned
 }
