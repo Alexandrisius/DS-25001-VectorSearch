@@ -1310,13 +1310,17 @@
         
         /* Временная подсветка при переходе к категории из поиска */
         .tree-node-header.highlight-pulse {
-            animation: highlight-pulse-anim 1.5s ease-out;
+            animation: highlight-pulse-anim 4.5s ease-out;
         }
-        
+
         @keyframes highlight-pulse-anim {
             0% {
                 background: var(--success);
-                box-shadow: 0 0 15px var(--success);
+                box-shadow: 0 0 18px var(--success);
+            }
+            60% {
+                background: rgba(16, 185, 129, 0.18);
+                box-shadow: 0 0 12px rgba(16, 185, 129, 0.5);
             }
             100% {
                 background: transparent;

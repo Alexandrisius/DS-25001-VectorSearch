@@ -1945,13 +1945,28 @@ document.addEventListener('DOMContentLoaded', function () {
         
         // 3. Скроллим и подсвечиваем
         if (targetHeader) {
-            targetHeader.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            
-            // Лёгкая зеленоватая подсветка
+            // Подсвечиваем СРАЗУ (до окончания smooth scroll), чтобы пользователь
+            // увидел, что scroll идёт в нужное место. Анимация 4.5s покрывает
+            // время scroll + даёт ~3s на рассмотрение. При scrollend анимация
+            // остаётся ещё ~1s — этого достаточно, чтобы глаз зафиксировал узел.
             targetHeader.classList.add('highlight-pulse');
-            setTimeout(() => {
+            targetHeader.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+            const cleanup = () => {
                 targetHeader.classList.remove('highlight-pulse');
-            }, 2000);
+                clearTimeout(timer);
+                window.removeEventListener('scrollend', cleanup);
+            };
+            const timer = setTimeout(cleanup, 5000);
+            // Если браузер поддерживает scrollend — убрать подсветку как только
+            // скролл реально закончился, и продлить ещё на 1.5s.
+            if ('onscrollend' in window) {
+                const onEnd = () => {
+                    setTimeout(cleanup, 1500);
+                    window.removeEventListener('scrollend', onEnd);
+                };
+                setTimeout(() => window.addEventListener('scrollend', onEnd, { once: true }), 50);
+            }
         } else {
             console.warn(`⚠️ Целевой узел "${path}" не найден в DOM после раскрытия`);
         }
@@ -1992,15 +2007,25 @@ document.addEventListener('DOMContentLoaded', function () {
             .find(h => h.dataset.path === categoryPath);
         
         if (targetHeader) {
-            // Скроллим к категории
-            targetHeader.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            
-            // Добавляем подсветку
+            // Подсветка до scroll (4.5s CSS + 5s JS timeout) — пользователь
+            // успевает увидеть куда идёт scroll, даже если дерево длинное.
             targetHeader.classList.add('highlight-pulse');
-            setTimeout(() => {
+            targetHeader.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+            const cleanup = () => {
                 targetHeader.classList.remove('highlight-pulse');
-            }, 2500);
-            
+                clearTimeout(timer);
+                window.removeEventListener('scrollend', cleanup);
+            };
+            const timer = setTimeout(cleanup, 5000);
+            if ('onscrollend' in window) {
+                const onEnd = () => {
+                    setTimeout(cleanup, 1500);
+                    window.removeEventListener('scrollend', onEnd);
+                };
+                setTimeout(() => window.addEventListener('scrollend', onEnd, { once: true }), 50);
+            }
+
             console.log(`✅ Перешли к категории: "${categoryPath}"`);
         } else {
             // Категория не найдена - возможно путь неполный или данные ещё не загружены
@@ -2014,11 +2039,23 @@ document.addEventListener('DOMContentLoaded', function () {
                     .find(h => h.dataset.path === parentPath);
                 
                 if (parentHeader) {
-                    parentHeader.scrollIntoView({ behavior: 'smooth', block: 'center' });
                     parentHeader.classList.add('highlight-pulse');
-                    setTimeout(() => {
+                    parentHeader.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+                    const cleanupP = () => {
                         parentHeader.classList.remove('highlight-pulse');
-                    }, 2500);
+                        clearTimeout(timerP);
+                        window.removeEventListener('scrollend', cleanupP);
+                    };
+                    const timerP = setTimeout(cleanupP, 5000);
+                    if ('onscrollend' in window) {
+                        const onEndP = () => {
+                            setTimeout(cleanupP, 1500);
+                            window.removeEventListener('scrollend', onEndP);
+                        };
+                        setTimeout(() => window.addEventListener('scrollend', onEndP, { once: true }), 50);
+                    }
+
                     console.log(`📁 Показана родительская категория: "${parentPath}"`);
                 }
             }
