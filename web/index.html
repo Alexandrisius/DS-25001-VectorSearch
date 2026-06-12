@@ -1,1055 +1,241 @@
 <!DOCTYPE html>
 <html lang="ru">
+
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>⚡ KSR Matcher Ultra</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-        :root {
-            --primary: #2196F3;
-            --primary-dark: #1976D2;
-            --success: #4CAF50;
-            --danger: #f44336;
-            --warning: #ff9800;
-            --dark: #2c3e50;
-            --light: #f8f9fa;
-            --gray: #e9ecef;
-            --border: #dee2e6;
-            --database-bg: #e3f2fd;
-        }
-        
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-        
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            background: linear-gradient(135deg, #f5f7fa 0%, #e4edf5 100%);
-            padding: 15px;
-            min-height: 100vh;
-        }
-        
-        .container {
-            max-width: 1600px;
-            margin: 0 auto;
-        }
-        
-        header {
-            text-align: center;
-            margin-bottom: 25px;
-            padding: 15px 0;
-        }
-        
-        h1 {
-            color: var(--dark);
-            margin-bottom: 10px;
-            font-size: 2.4rem;
-            font-weight: 700;
-            text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
-        }
-        
-        .subtitle {
-            color: #666;
-            font-size: 1.2rem;
-            margin-top: 5px;
-            font-weight: 300;
-        }
-        
-        .main-card {
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-            overflow: hidden;
-            margin-bottom: 25px;
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
-        }
-        
-        .main-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 25px rgba(0,0,0,0.12);
-        }
-        
-        .card-header {
-            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
-            color: white;
-            padding: 15px 25px;
-            font-size: 1.3rem;
-            font-weight: 600;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        
-        .database-selector {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            background-color: rgba(255,255,255,0.2);
-            padding: 5px 10px;
-            border-radius: 15px;
-            font-size: 0.9rem;
-        }
-        
-        .database-selector select {
-            background: none;
-            border: none;
-            color: white;
-            font-weight: bold;
-            padding: 2px 5px;
-            border-radius: 5px;
-            cursor: pointer;
-        }
-        
-        .database-selector select:focus {
-            outline: none;
-            background-color: rgba(0,0,0,0.1);
-        }
-        
-        .database-info-tooltip {
-            color: rgba(255,255,255,0.8);
-            cursor: help;
-            font-size: 0.9rem;
-        }
-        
-        .input-section {
-            padding: 25px;
-        }
-        
-        .database-selection {
-            background-color: var(--database-bg);
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            border: 1px solid var(--border);
-        }
-        
-        .database-title {
-            font-weight: bold;
-            margin-bottom: 8px;
-            color: var(--dark);
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        
-        .database-options {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-            margin-top: 10px;
-        }
-        
-        .database-option {
-            background: white;
-            border: 2px solid var(--border);
-            border-radius: 8px;
-            padding: 10px 15px;
-            cursor: pointer;
-            transition: all 0.2s;
-            min-width: 200px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-        }
-        
-        .database-option:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 3px 6px rgba(0,0,0,0.1);
-        }
-        
-        .database-option.active {
-            border-color: var(--primary);
-            background-color: rgba(33, 150, 243, 0.1);
-            box-shadow: 0 0 0 2px var(--primary);
-        }
-        
-        .database-option .name {
-            font-weight: bold;
-            color: var(--primary-dark);
-            margin-bottom: 3px;
-        }
-        
-        .database-option .description {
-            font-size: 0.85rem;
-            color: #666;
-            margin-bottom: 5px;
-        }
-        
-        .database-option .stats {
-            font-size: 0.8rem;
-            color: var(--dark);
-        }
-        
-        .input-container {
-            position: relative;
-            margin-bottom: 20px;
-        }
-        
-        textarea {
-            width: 100%;
-            min-height: 100px;
-            padding: 16px;
-            border: 2px solid var(--border);
-            border-radius: 8px;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            font-size: 16px;
-            resize: vertical;
-            transition: all 0.3s;
-            line-height: 1.5;
-        }
-        
-        textarea:focus {
-            outline: none;
-            border-color: var(--primary);
-            box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.2);
-        }
-        
-        textarea::placeholder {
-            color: #aaa;
-            font-style: italic;
-        }
-        
-        .button-group {
-            display: flex;
-            gap: 15px;
-            margin-top: 20px;
-            flex-wrap: wrap;
-        }
-        
-        .btn {
-            padding: 12px 24px;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            font-weight: 600;
-            font-size: 1rem;
-            transition: all 0.3s;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-        }
-        
-        .btn:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
-        }
-        
-        .btn:active {
-            transform: translateY(1px);
-        }
-        
-        .btn-primary {
-            background: linear-gradient(135deg, var(--success) 0%, #43a047 100%);
-            color: white;
-            font-size: 1.1rem;
-        }
-        
-        .btn-primary:hover {
-            background: linear-gradient(135deg, #43a047 0%, #3d8b40 100%);
-        }
-        
-        .btn-danger {
-            background: linear-gradient(135deg, var(--danger) 0%, #e53935 100%);
-            color: white;
-        }
-        
-        .btn-danger:hover {
-            background: linear-gradient(135deg, #e53935 0%, #d32f2f 100%);
-        }
-        
-        .results-section {
-            padding: 0 25px 25px;
-        }
-        
-        .results-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-            padding-bottom: 10px;
-            border-bottom: 2px solid var(--border);
-        }
-        
-        .results-title {
-            font-size: 1.4rem;
-            color: var(--dark);
-            font-weight: 600;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        
-        .current-database {
-            background-color: var(--database-bg);
-            padding: 3px 10px;
-            border-radius: 15px;
-            font-size: 0.9rem;
-            font-weight: bold;
-            color: var(--primary-dark);
-        }
-        
-        .status-info {
-            background-color: var(--light);
-            padding: 3px 10px;
-            border-radius: 15px;
-            font-size: 0.9rem;
-            color: var(--dark);
-        }
-        
-        .ksr-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 10px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-            border-radius: 8px;
-            overflow: hidden;
-        }
-        
-        .ksr-table th {
-            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
-            color: white;
-            text-align: left;
-            padding: 14px 16px;
-            font-weight: 600;
-            font-size: 0.95rem;
-            position: sticky;
-            top: 0;
-        }
-        
-        .ksr-table td {
-            padding: 14px 16px;
-            border-bottom: 1px solid var(--border);
-            font-size: 0.95rem;
-            transition: background-color 0.2s;
-        }
-        
-        .ksr-table tr:hover td {
-            background-color: rgba(33, 150, 243, 0.05);
-        }
-        
-        .ksr-table tr:first-child td {
-            font-weight: 600;
-            background-color: rgba(76, 175, 80, 0.08);
-        }
-        
-        .rank {
-            font-weight: 700;
-            min-width: 40px;
-            text-align: center;
-        }
-        
-        .code-cell {
-            font-family: 'Courier New', monospace;
-            font-weight: 600;
-            color: var(--primary-dark);
-            min-width: 150px;
-        }
-        
-        .code-cell .copy-btn {
-            background: none;
-            border: none;
-            color: var(--primary);
-            cursor: pointer;
-            opacity: 0.7;
-            transition: all 0.2s;
-            padding: 2px 5px;
-            border-radius: 4px;
-            margin-left: 8px;
-        }
-        
-        .code-cell .copy-btn:hover {
-            opacity: 1;
-            background-color: rgba(33, 150, 243, 0.1);
-        }
-        
-        .description-cell {
-            max-width: 700px;
-            word-wrap: break-word;
-        }
-        
-        .scores-cell {
-            min-width: 180px;
-        }
-        
-        .score-bar {
-            height: 6px;
-            background-color: #e9ecef;
-            border-radius: 3px;
-            margin-top: 3px;
-            overflow: hidden;
-        }
-        
-        .score-fill {
-            height: 100%;
-            background: linear-gradient(90deg, var(--primary) 0%, #4CAF50 100%);
-            border-radius: 3px;
-        }
-        
-        .score-value {
-            font-weight: 600;
-            color: var(--dark);
-        }
-        
-        .status-bar {
-            background-color: white;
-            padding: 12px 25px;
-            border-top: 1px solid var(--border);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            font-size: 0.95rem;
-            color: #666;
-        }
-        
-        .metrics {
-            display: flex;
-            gap: 20px;
-        }
-        
-        .metric-item {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-        
-        .metric-value {
-            font-weight: 700;
-            font-size: 1.1rem;
-            color: var(--primary-dark);
-        }
-        
-        .metric-label {
-            font-size: 0.85rem;
-            color: #666;
-        }
-        
-        .loading {
-            display: inline-block;
-            width: 24px;
-            height: 24px;
-            border: 3px solid rgba(33,150,243,0.3);
-            border-radius: 50%;
-            border-top-color: var(--primary);
-            animation: spin 1s linear infinite;
-            margin-right: 10px;
-        }
-        
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-        
-        .hidden {
-            display: none;
-        }
-        
-        footer {
-            text-align: center;
-            margin-top: 20px;
-            padding: 15px;
-            color: #666;
-            font-size: 0.9rem;
-        }
-        
-        @media (max-width: 1200px) {
-            .ksr-table {
-                font-size: 0.85rem;
-            }
-            
-            .code-cell, .scores-cell {
-                font-size: 0.8rem;
-            }
-        }
-        
-        @media (max-width: 768px) {
-            body {
-                padding: 10px;
-            }
-            
-            .button-group {
-                flex-direction: column;
-            }
-            
-            .btn {
-                width: 100%;
-                justify-content: center;
-            }
-            
-            .metrics {
-                flex-direction: column;
-                gap: 5px;
-            }
-            
-            .ksr-table {
-                display: block;
-                overflow-x: auto;
-            }
-            
-            h1 {
-                font-size: 2rem;
-            }
-            
-            .database-options {
-                flex-direction: column;
-            }
-        }
-        
-        .error-message {
-            background-color: #ffebee;
-            color: var(--danger);
-            padding: 15px;
-            border-radius: 8px;
-            margin: 15px 0;
-            border-left: 4px solid var(--danger);
-        }
-        
-        .success-highlight {
-            animation: highlight 1.5s ease;
-        }
-        
-        @keyframes highlight {
-            0% { background-color: rgba(76, 175, 80, 0.3); }
-            100% { background-color: transparent; }
-        }
-        
-        .stats-container {
-            display: flex;
-            justify-content: space-between;
-            margin: 10px 0;
-            font-size: 0.9rem;
-            color: #666;
-        }
-        
-        .tooltip {
-            position: relative;
-            display: inline-block;
-            cursor: help;
-        }
-        
-        .tooltip .tooltip-text {
-            visibility: hidden;
-            width: 300px;
-            background-color: #333;
-            color: #fff;
-            text-align: center;
-            border-radius: 6px;
-            padding: 10px;
-            position: absolute;
-            z-index: 1;
-            bottom: 125%;
-            left: 50%;
-            margin-left: -150px;
-            opacity: 0;
-            transition: opacity 0.3s;
-            font-size: 0.9rem;
-            line-height: 1.4;
-        }
-        
-        .tooltip .tooltip-text::after {
-            content: "";
-            position: absolute;
-            top: 100%;
-            left: 50%;
-            margin-left: -5px;
-            border-width: 5px;
-            border-style: solid;
-            border-color: #333 transparent transparent transparent;
-        }
-        
-        .tooltip:hover .tooltip-text {
-            visibility: visible;
-            opacity: 1;
-        }
-        
-        .database-badge {
-            display: inline-block;
-            padding: 2px 8px;
-            border-radius: 12px;
-            font-size: 0.8rem;
-            font-weight: bold;
-            margin-left: 8px;
-        }
-        
-        .database-badge.ksr {
-            background-color: rgba(33, 150, 243, 0.2);
-            color: var(--primary-dark);
-        }
-        
-        .database-badge.smr {
-            background-color: rgba(76, 175, 80, 0.2);
-            color: #2e7d32;
-        }
-        
-        .database-badge.extended {
-            background-color: rgba(255, 152, 0, 0.2);
-            color: #e65100;
-        }
-    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>⚡ KSR Matcher AI</title>
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg?v=3">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/font-awesome.min.css?v=3">
+    <link rel="stylesheet" href="/static/css/styles.css?v=3">
 </head>
+
 <body>
     <div class="container">
         <header>
-            <h1><i class="fas fa-bolt"></i> KSR Matcher Ultra</h1>
-            <p class="subtitle">Сверхбыстрый подбор кодов с поддержкой <span class="tooltip">нескольких векторных баз<span class="tooltip-text">Выбирайте нужную базу данных для поиска: основную КСР, расширенную или другие доступные базы</span></span></p>
+            <div class="header-controls">
+                <!-- Кнопка админки (шестерёнка) -->
+                <a href="/admin" class="admin-header-btn" title="Настройка коллекций">
+                    <i class="fas fa-cog"></i>
+                </a>
+                <!-- Переключатель темы -->
+                <div class="theme-toggle" id="themeToggle" title="Переключить тему">
+                    <i class="fas fa-sun"></i>
+                </div>
+            </div>
+
+            <h1><i class="fas fa-bolt" style="color: #f59e0b;"></i> KSR Matcher</h1>
+            <p class="subtitle">Векторный поиск строительных ресурсов</p>
         </header>
+
+        <!-- === ОСНОВНОЙ LAYOUT С SIDEBAR === -->
+        <div class="app-layout sidebar-open" id="appLayout">
+            
+            <!-- === КАТАЛОГ (SIDEBAR) === -->
+            <aside class="catalog-sidebar" id="catalogSidebar">
+                <!-- Resizer для изменения ширины -->
+                <div class="sidebar-resizer" id="sidebarResizer"></div>
+                
+                <!-- Индикатор активного фильтра (виден только в collapsed) -->
+                <div class="filter-indicator" id="filterIndicator" title="Активен фильтр по категориям"></div>
+                
+                <div class="sidebar-header">
+                    <div class="sidebar-title">
+                        <i class="fas fa-folder-tree"></i>
+                        <span>Каталог</span>
+                    </div>
+                    <button class="sidebar-toggle-btn" id="sidebarToggle" title="Свернуть/Развернуть каталог">
+                        <span class="toggle-text">Свернуть</span>
+                        <i class="fas fa-angles-left"></i>
+                    </button>
+                </div>
+                
+                <!-- Поиск по каталогу -->
+                <div class="catalog-search" id="catalogSearch">
+                    <div class="catalog-search-input-wrapper">
+                        <i class="fas fa-search catalog-search-icon"></i>
+                        <input type="text" 
+                               id="catalogSearchInput" 
+                               class="catalog-search-input" 
+                               placeholder="Поиск категорий..."
+                               autocomplete="off">
+                        <button class="catalog-search-clear hidden" id="catalogSearchClear" title="Очистить">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div class="catalog-search-results hidden" id="catalogSearchResults">
+                        <!-- Результаты поиска категорий -->
+                    </div>
+                </div>
+                
+                <!-- Подсказка о множественном выборе -->
+                <div class="multi-select-hint hidden" id="multiSelectHint">
+                    <i class="fas fa-info-circle"></i>
+                    <span>Выбрано категорий: <strong id="selectedCount">0</strong></span>
+                    <button class="clear-selection-btn" id="clearSelectionBtn">
+                        <i class="fas fa-times"></i> Сбросить
+                    </button>
+                </div>
+                
+                <div class="sidebar-content" id="sidebarContent">
+                    <!-- Контейнер для многоуровневых sticky breadcrumbs -->
+                    <div class="sticky-breadcrumbs hidden" id="stickyBreadcrumbs">
+                        <!-- Динамически заполняется через JS -->
+                    </div>
+                    
+                    <!-- Дерево категорий -->
+                    <div class="tree-view" id="hierarchyTree">
+                        <div class="tree-loading">
+                            <i class="fas fa-spinner fa-spin"></i>
+                            <div>Загрузка каталога...</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="sidebar-footer">
+                    <div class="sidebar-footer-row">
+                        <div class="sidebar-stats">
+                            <span class="sidebar-stat">
+                                <i class="fas fa-folder"></i>
+                                <strong id="totalCategories">0</strong> категорий
+                            </span>
+                            <span class="sidebar-stat">
+                                <i class="fas fa-file-alt"></i>
+                                <strong id="totalItems">0</strong> записей
+                            </span>
+                        </div>
+                        <div class="sidebar-buttons-group">
+                            <button class="refresh-catalog-btn" id="refreshCatalogBtn" title="Обновить каталог">
+                                <i class="fas fa-sync-alt"></i>
+                            </button>
+                            <button class="collapse-all-btn" id="collapseAllBtn" title="Свернуть все категории">
+                                <i class="fas fa-compress-alt"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="sidebar-hint sidebar-hint-desktop">
+                        <i class="fas fa-keyboard"></i> Ctrl+клик для множественного выбора
+                    </div>
+                    <div class="sidebar-hint sidebar-hint-mobile">
+                        <i class="fas fa-hand-pointer"></i> Долгое нажатие для выбора
+                    </div>
+                </div>
+            </aside>
+            
+            <!-- === ОСНОВНОЙ КОНТЕНТ === -->
+            <div class="app-main">
         
         <div class="main-card">
             <div class="card-header">
-                <div>
-                    <i class="fas fa-search"></i> Поиск кода
-                    <span class="current-database" id="currentDatabase">Основная база КСР</span>
-                </div>
-                <div class="database-selector">
-                    <i class="fas fa-database"></i>
-                    <select id="databaseSelect">
-                        <option value="ksr_main">Основная КСР</option>
-                        <option value="ksr_extended">Расширенная КСР</option>
-                        <option value="smr_resources">Строительные материалы (СМР)</option>
-                    </select>
-                    <i class="fas fa-info-circle database-info-tooltip" title="Выберите векторную базу для поиска"></i>
+                <div class="header-top-row">
+                    <div class="header-title">
+                        <i class="fas fa-search" style="color: var(--primary);"></i> Поиск материалов
+                    </div>
+
+                    <div class="metrics-panel">
+                        <div class="metric-item">
+                            <i class="fas fa-wave-square" style="color: var(--success);"></i>
+                            Cosine: <strong id="cosineThreshold">0.30</strong>
+                        </div>
+                        <div class="metric-item">
+                            <i class="fas fa-bullseye" style="color: var(--primary);"></i>
+                            Confident ≥: <strong id="confidentMin">0.50</strong>
+                        </div>
+                        <div class="metric-item">
+                            <i class="fas fa-question-circle" style="color: var(--text-secondary);"></i>
+                            Uncertain ≥: <strong id="uncertainMin">0.15</strong>
+                        </div>
+                        <div class="metric-item">
+                            <i class="fas fa-clock" style="color: var(--text-secondary);"></i>
+                            Time: <strong id="processingTime">0.00s</strong>
+                        </div>
+                    </div>
+
+                    <div class="custom-select-wrapper" id="customSelect">
+                        <div class="custom-select-trigger">
+                            <span id="customSelectValue">Загрузка баз...</span>
+                            <i class="fas fa-chevron-down arrow"></i>
+                        </div>
+                        <div class="custom-options" id="customOptions"></div>
+                        <select id="databaseSelect">
+                            <option value="ksr_main">Основная КСР</option>
+                        </select>
+                    </div>
                 </div>
             </div>
-            
+
             <div class="input-section">
-                <div class="database-selection">
-                    <div class="database-title">
-                        <i class="fas fa-database"></i> Доступные векторные базы
-                    </div>
-                    <div class="database-options" id="databaseOptions">
-                        <!-- Базы будут загружены динамически -->
-                    </div>
-                </div>
-                
-                <div class="input-container">
-                    <textarea id="query" placeholder="Введите описание материала. Например: 'Радиатор стальной панельный'"></textarea>
-                </div>
-                
+                <div class="db-options-grid" id="databaseOptions"></div>
+
+                <textarea id="query"
+                    placeholder="Введите описание материала..."></textarea>
+
                 <div class="button-group">
                     <button id="clearBtn" class="btn btn-danger">
-                        <i class="fas fa-trash"></i> Очистить
+                        <i class="fas fa-eraser"></i> Очистить
                     </button>
                     <button id="searchBtn" class="btn btn-primary">
-                        <i class="fas fa-bolt"></i> Найти ТОП-20
+                        <i class="fas fa-bolt"></i> Найти
                     </button>
                 </div>
-                
-                <div class="stats-container">
-                    <div>⏱️ Среднее время поиска: <strong>3 секунды</strong></div>
-                    <div id="databaseStats">📊 Записей в базе: <strong>15,000+</strong></div>
-                </div>
             </div>
         </div>
-        
+
         <div class="main-card">
-            <div class="card-header">
-                <i class="fas fa-list-ol"></i> ТОП-20 результатов
-            </div>
-            
-            <div class="results-section">
-                <div class="results-header">
-                    <div class="results-title">
-                        <i class="fas fa-trophy"></i> Лучшие совпадения
-                        <span class="database-badge ksr" id="resultsDatabaseBadge">Основная КСР</span>
-                    </div>
-                    <div class="status-info" id="statusInfo">Готов к поиску</div>
-                </div>
-                
-                <div id="errorContainer" class="error-message hidden"></div>
-                
-                <div class="table-container">
-                    <table class="ksr-table">
-                        <thead>
-                            <tr>
-                                <th style="width: 5%;">#</th>
-                                <th style="width: 20%;">Код <i class="fas fa-copy" style="margin-left: 5px; font-size: 0.8em;" title="Нажмите на код для копирования"></i></th>
-                                <th style="width: 60%;">Описание</th>
-                                <th style="width: 15%;">Точность</th>
-                            </tr>
-                        </thead>
-                        <tbody id="resultsBody">
-                            <tr>
-                                <td colspan="4" style="text-align: center; padding: 40px; color: #888;">
-                                    <i class="fas fa-info-circle" style="font-size: 24px; margin-bottom: 10px;"></i><br>
-                                    Результаты поиска появятся здесь после выполнения запроса
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
+            <div class="results-header">
+                <div class="header-title">Результаты</div>
+                <div id="statusInfo" style="font-size: 0.9rem; color: var(--success); font-weight: 600;">Готов к работе
                 </div>
             </div>
-            
-            <div class="status-bar">
-                <div id="processingInfo">Готов к работе • База: Основная КСР</div>
-                <div class="metrics">
-                    <div class="metric-item">
-                        <span class="metric-value" id="rerankThreshold">0.60</span>
-                        <span class="metric-label">Reranker</span>
-                    </div>
-                    <div class="metric-item">
-                        <span class="metric-value" id="cosineThreshold">0.45</span>
-                        <span class="metric-label">Cosine</span>
-                    </div>
-                    <div class="metric-item">
-                        <span class="metric-value" id="processingTime">0.00</span>
-                        <span class="metric-label">Время (сек)</span>
-                    </div>
-                </div>
+
+            <div id="errorContainer" class="error-message hidden"></div>
+
+            <div class="table-container">
+                <table class="ksr-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 50px;">#</th>
+                            <th style="width: 200px;">Код</th>
+                            <th style="width: 50px;"></th>
+                            <th>Описание</th>
+                            <th style="width: 50px;"></th>
+                            <th style="width: 150px;">Точность</th>
+                        </tr>
+                    </thead>
+                    <tbody id="resultsBody">
+                        <tr>
+                            <td colspan="6"
+                                style="text-align: center; padding: 60px 20px; color: var(--text-secondary);">
+                                <i class="fas fa-search"
+                                    style="font-size: 32px; opacity: 0.3; margin-bottom: 10px;"></i>
+                                <div>Здесь появятся результаты поиска</div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="app-status-bar">
+                <div id="processingInfo">Ожидание запроса...</div>
             </div>
         </div>
         
-        <footer>
-            <p>© 2025 KSR Matcher Ultra | Версия 3.0 </p>
-            <p>⚡ Скорость | 🛡️ Надежность | 🔍 Точность</p>
+            </div><!-- /app-main -->
+        </div><!-- /app-layout -->
+
+        <footer style="text-align: center; margin-top: 30px; color: var(--text-secondary); font-size: 0.8rem;">
+            © 2025 KSR Matcher
         </footer>
     </div>
 
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            // DOM elements
-            const queryInput = document.getElementById('query');
-            const clearBtn = document.getElementById('clearBtn');
-            const searchBtn = document.getElementById('searchBtn');
-            const resultsBody = document.getElementById('resultsBody');
-            const errorContainer = document.getElementById('errorContainer');
-            const statusInfo = document.getElementById('statusInfo');
-            const processingInfo = document.getElementById('processingInfo');
-            const processingTimeElement = document.getElementById('processingTime');
-            const databaseSelect = document.getElementById('databaseSelect');
-            const databaseOptions = document.getElementById('databaseOptions');
-            const currentDatabaseElement = document.getElementById('currentDatabase');
-            const resultsDatabaseBadge = document.getElementById('resultsDatabaseBadge');
-            const databaseStats = document.getElementById('databaseStats');
-            
-            // State
-            let currentDatabase = 'ksr_main';
-            let databases = [];
-            
-            // Initialize
-            queryInput.focus();
-            loadAvailableDatabases();
-            
-            // Event listeners
-            databaseSelect.addEventListener('change', function() {
-                setCurrentDatabase(this.value);
-            });
-            
-            clearBtn.addEventListener('click', () => {
-                queryInput.value = '';
-                queryInput.style.height = 'auto';
-                queryInput.style.height = '100px';
-                queryInput.focus();
-                clearResults();
-                updateStatus('Поле ввода очищено', 'info');
-                updateProcessingInfo(`Готов к работе • База: ${getDatabaseDisplayName(currentDatabase)}`);
-            });
-            
-            searchBtn.addEventListener('click', performSearch);
-            
-            queryInput.addEventListener('keydown', (e) => {
-                if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-                    e.preventDefault();
-                    performSearch();
-                }
-            });
-            
-            document.addEventListener('click', function(e) {
-                if (e.target.classList.contains('copy-btn') || e.target.closest('.copy-btn')) {
-                    const button = e.target.closest('.copy-btn');
-                    const codeElement = button.closest('.code-cell').querySelector('.code-value');
-                    const code = codeElement.textContent;
-                    
-                    navigator.clipboard.writeText(code).then(() => {
-                        const originalIcon = button.innerHTML;
-                        button.innerHTML = '<i class="fas fa-check"></i>';
-                        button.style.color = '#4CAF50';
-                        
-                        setTimeout(() => {
-                            button.innerHTML = originalIcon;
-                            button.style.color = '';
-                        }, 1500);
-                        
-                        showNotification(`Код "${code}" скопирован в буфер обмена`, 'success');
-                    }).catch(err => {
-                        console.error('Ошибка копирования:', err);
-                        showNotification('Ошибка при копировании кода', 'error');
-                    });
-                }
-                
-                if (e.target.classList.contains('database-option')) {
-                    const dbName = e.target.dataset.name;
-                    setCurrentDatabase(dbName);
-                }
-            });
-            
-            function setLoading(loading) {
-                searchBtn.disabled = loading;
-                clearBtn.disabled = loading;
-                databaseSelect.disabled = loading;
-                
-                if (loading) {
-                    searchBtn.innerHTML = `<span class="loading"></span> Поиск...`;
-                    updateStatus('Поиск выполняется', 'info');
-                    updateProcessingInfo(`Обработка запроса в базе ${getDatabaseDisplayName(currentDatabase)}...`);
-                } else {
-                    searchBtn.innerHTML = `<i class="fas fa-bolt"></i> Найти ТОП-20`;
-                }
-            }
-            
-            function clearResults() {
-                resultsBody.innerHTML = `
-                    <tr>
-                        <td colspan="4" style="text-align: center; padding: 40px; color: #888;">
-                            <i class="fas fa-info-circle" style="font-size: 24px; margin-bottom: 10px;"></i><br>
-                            Результаты поиска появятся здесь после выполнения запроса
-                        </td>
-                    </tr>
-                `;
-                errorContainer.classList.add('hidden');
-                errorContainer.innerHTML = '';
-            }
-            
-            function updateStatus(message, type) {
-                statusInfo.textContent = message;
-                statusInfo.className = 'status-info';
-                
-                if (type === 'success') {
-                    statusInfo.style.backgroundColor = 'rgba(76, 175, 80, 0.2)';
-                    statusInfo.style.color = '#2e7d32';
-                } else if (type === 'error') {
-                    statusInfo.style.backgroundColor = 'rgba(244, 67, 54, 0.2)';
-                    statusInfo.style.color = '#c62828';
-                } else {
-                    statusInfo.style.backgroundColor = 'rgba(33, 150, 243, 0.2)';
-                    statusInfo.style.color = '#1565c0';
-                }
-            }
-            
-            function updateProcessingInfo(message) {
-                processingInfo.textContent = message;
-            }
-            
-            function showNotification(message, type) {
-                console.log(`[${type.toUpperCase()}] ${message}`);
-            }
-            
-            function formatNumber(num) {
-                return num.toFixed(4).replace(/\.?0+$/, '');
-            }
-            
-            function createScoreBar(value, max = 1.0) {
-                const percentage = Math.min(100, (value / max) * 100);
-                return `
-                    <div class="score-bar">
-                        <div class="score-fill" style="width: ${percentage}%"></div>
-                    </div>
-                    <div class="score-value">${formatNumber(value)}</div>
-                `;
-            }
-            
-            function getDatabaseDisplayName(dbName) {
-                const db = databases.find(d => d.name === dbName);
-                return db ? db.description.split(' (')[0] : dbName;
-            }
-            
-            function getDatabaseBadgeClass(dbName) {
-                if (dbName.includes('ksr')) return 'ksr';
-                if (dbName.includes('smr') || dbName.includes('material')) return 'smr';
-                return 'extended';
-            }
-            
-            function setCurrentDatabase(dbName) {
-                currentDatabase = dbName;
-                databaseSelect.value = dbName;
-                
-                // Обновляем отображение
-                currentDatabaseElement.textContent = getDatabaseDisplayName(dbName);
-                resultsDatabaseBadge.textContent = getDatabaseDisplayName(dbName);
-                resultsDatabaseBadge.className = `database-badge ${getDatabaseBadgeClass(dbName)}`;
-                
-                const db = databases.find(d => d.name === dbName);
-                if (db) {
-                    databaseStats.innerHTML = `📊 Записей в базе: <strong>${db.record_count.toLocaleString('ru')}</strong>`;
-                    updateProcessingInfo(`Готов к работе • База: ${getDatabaseDisplayName(dbName)}`);
-                }
-                
-                // Обновляем активный класс для опций
-                document.querySelectorAll('.database-option').forEach(option => {
-                    option.classList.toggle('active', option.dataset.name === dbName);
-                });
-            }
-            
-            async function loadAvailableDatabases() {
-                try {
-                    const response = await fetch('/databases');
-                    if (!response.ok) {
-                        throw new Error(`Ошибка загрузки баз: ${response.status}`);
-                    }
-                    
-                    const data = await response.json();
-                    databases = data.databases;
-                    currentDatabase = data.current_database || 'ksr_main';
-                    
-                    // Обновляем селектор
-                    databaseSelect.innerHTML = '';
-                    databases.forEach(db => {
-                        const option = document.createElement('option');
-                        option.value = db.name;
-                        option.textContent = db.description.split(' (')[0];
-                        if (db.name === currentDatabase) {
-                            option.selected = true;
-                        }
-                        databaseSelect.appendChild(option);
-                    });
-                    
-                    // Обновляем блок с опциями баз
-                    updateDatabaseOptions();
-                    
-                    // Устанавливаем текущую базу
-                    setCurrentDatabase(currentDatabase);
-                    
-                    console.log('Доступные векторные базы:', databases);
-                } catch (error) {
-                    console.error('Ошибка загрузки векторных баз:', error);
-                    updateStatus(`Ошибка загрузки баз: ${error.message}`, 'error');
-                }
-            }
-            
-            function updateDatabaseOptions() {
-                if (databases.length === 0) {
-                    databaseOptions.innerHTML = '<div class="error-message">Не удалось загрузить доступные векторные базы</div>';
-                    return;
-                }
-                
-                let html = '';
-                databases.forEach(db => {
-                    html += `
-                        <div class="database-option ${db.name === currentDatabase ? 'active' : ''}" 
-                             data-name="${db.name}"
-                             title="${db.description}">
-                            <div class="name">${db.description.split(' (')[0]}</div>
-                            <div class="description">${db.description.split(' (')[1] || ''}</div>
-                            <div class="stats">📝 Записей: ${db.record_count.toLocaleString('ru')}</div>
-                        </div>
-                    `;
-                });
-                
-                databaseOptions.innerHTML = html;
-            }
-            
-            function displayResults(data) {
-                processingTimeElement.textContent = data.processing_time.toFixed(2);
-                updateStatus(`Найдено ${data.candidates.length} совпадений`, 'success');
-                updateProcessingInfo(`Поиск выполнен за ${data.processing_time.toFixed(2)} сек в базе ${getDatabaseDisplayName(data.database)}`);
-                
-                // Обновляем отображение текущей базы
-                setCurrentDatabase(data.database);
-                
-                let tableHTML = '';
-                
-                data.candidates.forEach(candidate => {
-                    const isTopResult = candidate.rank === 1;
-                    const rowClass = isTopResult ? 'success-highlight' : '';
-                    
-                    tableHTML += `
-                        <tr class="${rowClass}">
-                            <td class="rank" style="${isTopResult ? 'color: #4CAF50; font-size: 1.1rem;' : ''}">
-                                ${candidate.rank}${isTopResult ? ' <i class="fas fa-crown" style="color: #FFD700; font-size: 0.8em;"></i>' : ''}
-                            </td>
-                            <td class="code-cell">
-                                <span class="code-value">${candidate.code}</span>
-                                <button class="copy-btn" title="Копировать код">
-                                    <i class="fas fa-copy"></i>
-                                </button>
-                            </td>
-                            <td class="description-cell">
-                                ${candidate.description}
-                            </td>
-                            <td class="scores-cell">
-                                <div style="margin-bottom: 8px;">
-                                    <small>Reranker:</small><br>
-                                    ${createScoreBar(candidate.reranker_score)}
-                                </div>
-                                <div>
-                                    <small>Cosine:</small><br>
-                                    ${createScoreBar(candidate.cosine_similarity)}
-                                </div>
-                            </td>
-                        </tr>
-                    `;
-                });
-                
-                resultsBody.innerHTML = tableHTML;
-                showNotification('Результаты успешно загружены!', 'success');
-            }
-            
-            function displayError(message) {
-                errorContainer.classList.remove('hidden');
-                errorContainer.innerHTML = `
-                    <i class="fas fa-exclamation-triangle"></i> <strong>Ошибка:</strong> ${message}
-                `;
-                updateStatus('Ошибка поиска', 'error');
-                updateProcessingInfo('Ошибка обработки запроса');
-                resultsBody.innerHTML = `
-                    <tr>
-                        <td colspan="4" style="text-align: center; padding: 40px; color: var(--danger);">
-                            <i class="fas fa-exclamation-circle" style="font-size: 28px; margin-bottom: 10px;"></i><br>
-                            ${message}
-                        </td>
-                    </tr>
-                `;
-            }
-            
-            async function performSearch() {
-                const query = queryInput.value.trim();
-                
-                if (!query) {
-                    showNotification('Пожалуйста, введите описание материала', 'error');
-                    queryInput.focus();
-                    return;
-                }
-                
-                setLoading(true);
-                clearResults();
-                
-                try {
-                    const response = await fetch('/match', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({ 
-                            text: query,
-                            database: currentDatabase
-                        })
-                    });
-                    
-                    if (!response.ok) {
-                        const errorData = await response.json();
-                        throw new Error(errorData.detail || `Ошибка сервера: ${response.status}`);
-                    }
-                    
-                    const data = await response.json();
-                    displayResults(data);
-                } catch (error) {
-                    console.error('Ошибка поиска:', error);
-                    displayError(error.message || 'Произошла неизвестная ошибка при поиске');
-                } finally {
-                    setLoading(false);
-                }
-            }
-            
-            // Auto-resize textarea
-            queryInput.addEventListener('input', function() {
-                this.style.height = 'auto';
-                this.style.height = (this.scrollHeight) + 'px';
-            });
-            
-            // Initial status
-            updateStatus('Готов к поиску', 'info');
-        });
-    </script>
+    <script src="/static/js/app.js?v=2.1.0"></script>
 </body>
+
 </html>

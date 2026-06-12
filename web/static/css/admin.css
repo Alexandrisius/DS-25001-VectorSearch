@@ -1,0 +1,3635 @@
+:root {
+    /* --- Admin Theme Variables --- */
+    --adm-primary: #6366f1;
+    --adm-primary-hover: #4f46e5;
+    --adm-bg: #f8fafc;
+    --adm-sidebar-bg: #1e293b;
+    --adm-sidebar-text: #e2e8f0;
+    --adm-surface: #ffffff;
+    --adm-border: #e2e8f0;
+    --adm-text: #0f172a;
+    --adm-text-sec: #64748b;
+
+    --adm-success: #10b981;
+    --adm-success-bg: #d1fae5;
+    --adm-danger: #ef4444;
+    --adm-danger-bg: #fee2e2;
+
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+
+    --radius-md: 8px;
+    --radius-lg: 12px;
+}
+
+[data-theme="dark"] {
+    --adm-bg: #0f172a;
+    --adm-sidebar-bg: #020617;
+    --adm-surface: #1e293b;
+    --adm-border: #334155;
+    --adm-text: #f1f5f9;
+    --adm-text-sec: #94a3b8;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    font-family: 'Inter', sans-serif;
+}
+
+body {
+    background-color: var(--adm-bg);
+    color: var(--adm-text);
+    height: 100vh;
+    overflow: hidden;
+}
+
+/* === UTILS === */
+.hidden {
+    display: none !important;
+}
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    border-radius: var(--radius-md);
+    border: 1px solid transparent;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 0.9rem;
+}
+
+.btn-primary {
+    background-color: var(--adm-primary);
+    color: white;
+}
+
+.btn-primary:hover {
+    background-color: var(--adm-primary-hover);
+}
+
+.btn-danger {
+    background-color: transparent;
+    border-color: var(--adm-danger);
+    color: var(--adm-danger);
+}
+
+.btn-danger:hover {
+    background-color: var(--adm-danger-bg);
+}
+
+.btn-outline {
+    background-color: transparent;
+    border-color: var(--adm-border);
+    color: var(--adm-text);
+}
+
+.btn-outline:hover {
+    border-color: var(--adm-primary);
+    color: var(--adm-primary);
+}
+
+input,
+select,
+textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--adm-border);
+    border-radius: var(--radius-md);
+    background: var(--adm-surface);
+    color: var(--adm-text);
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+    border-color: var(--adm-primary);
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+}
+
+/* === LOGIN SCREEN === */
+.login-container {
+    height: 100vh;
+    width: 100vw;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+}
+
+.login-card {
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    padding: 40px;
+    border-radius: 20px;
+    width: 100%;
+    max-width: 400px;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    text-align: center;
+}
+
+.login-card h2 {
+    color: white;
+    margin-bottom: 25px;
+    font-weight: 700;
+    font-size: 1.8rem;
+}
+
+.login-card input {
+    background: rgba(0, 0, 0, 0.3);
+    border-color: rgba(255, 255, 255, 0.2);
+    color: white;
+    margin-bottom: 20px;
+    height: 44px;
+}
+
+.login-card button {
+    width: 100%;
+    height: 44px;
+    justify-content: center;
+}
+
+/* === DASHBOARD LAYOUT === */
+.dashboard-layout {
+    display: flex;
+    height: 100vh;
+}
+
+/* Sidebar */
+.sidebar {
+    width: 260px;
+    background-color: var(--adm-sidebar-bg);
+    color: var(--adm-sidebar-text);
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.sidebar-header {
+    height: 70px;
+    display: flex;
+    align-items: center;
+    padding: 0 25px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: white;
+    gap: 10px;
+}
+
+.nav-links {
+    flex: 1;
+    padding: 20px 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.nav-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 15px;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    color: var(--adm-sidebar-text);
+    text-decoration: none;
+    transition: all 0.2s;
+}
+
+.nav-item:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+    color: white;
+}
+
+.nav-item.active {
+    background-color: var(--adm-primary);
+    color: white;
+}
+
+.sidebar-footer {
+    padding: 20px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* Main Content */
+.main-content {
+    flex: 1;
+    overflow-y: auto;
+    background-color: var(--adm-bg);
+    display: flex;
+    flex-direction: column;
+}
+
+.top-bar {
+    height: 70px;
+    background-color: var(--adm-surface);
+    border-bottom: 1px solid var(--adm-border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 30px;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.page-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+}
+
+.content-body {
+    padding: 30px;
+    flex: 1;
+}
+
+/* === COLLECTIONS GRID === */
+.collections-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 25px;
+}
+
+.collection-card {
+    background: var(--adm-surface);
+    border: 1px solid var(--adm-border);
+    border-radius: var(--radius-lg);
+    padding: 20px;
+    box-shadow: var(--shadow-sm);
+    transition: transform 0.2s, box-shadow 0.2s;
+    display: flex;
+    flex-direction: column;
+}
+
+.collection-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+    border-color: var(--adm-primary);
+}
+
+.card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 15px;
+}
+
+.card-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+}
+
+.status-badge {
+    padding: 4px 8px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.status-visible {
+    background: var(--adm-success-bg);
+    color: var(--adm-success);
+}
+
+.status-hidden {
+    background: var(--adm-danger-bg);
+    color: var(--adm-danger);
+}
+
+/* === DELETE CONFIRMATION MODAL === */
+.delete-warning {
+    text-align: center;
+    padding: 20px 0;
+    border-bottom: 1px solid var(--adm-border);
+    margin-bottom: 20px;
+}
+
+.confirm-input-section {
+    padding: 0 10px;
+}
+
+.confirm-input-section input {
+    transition: border-color 0.2s;
+}
+
+.confirm-input-section input:focus {
+    outline: none;
+    border-color: var(--adm-primary);
+}
+
+.confirm-input-section input.valid {
+    border-color: var(--adm-success);
+    background: var(--adm-success-bg);
+}
+
+.confirm-input-section input.invalid {
+    border-color: var(--adm-danger);
+}
+
+.confirm-hint code {
+    background: var(--adm-bg);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-family: monospace;
+    color: var(--adm-primary);
+    font-weight: 600;
+}
+
+#confirmDeleteBtn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* === LOCKED COLLECTION BUTTON === */
+.btn-locked {
+    opacity: 0.6;
+    cursor: not-allowed;
+    background: var(--adm-bg) !important;
+    border-color: var(--adm-border) !important;
+    color: var(--adm-text-sec) !important;
+}
+
+.btn-locked:hover {
+    transform: none !important;
+    box-shadow: none !important;
+}
+
+.card-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+    margin-bottom: 20px;
+    font-size: 0.85rem;
+    color: var(--adm-text-sec);
+}
+
+.stat-item strong {
+    display: block;
+    font-size: 1.1rem;
+    color: var(--adm-text);
+    margin-top: 4px;
+}
+
+.card-actions {
+    margin-top: auto;
+    display: flex;
+    gap: 8px;
+    border-top: 1px solid var(--adm-border);
+    padding-top: 15px;
+    flex-wrap: wrap;
+}
+
+.card-actions .btn {
+    flex: 1 1 auto;
+    justify-content: center;
+    font-size: 0.75rem;
+    padding: 8px 10px;
+    min-width: 70px;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.card-actions .btn i {
+    flex-shrink: 0;
+}
+
+/* === DATA TABLE === */
+.table-container {
+    background: var(--adm-surface);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--adm-border);
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+}
+
+.table-scroll {
+    overflow-x: auto;
+    max-height: calc(100vh - 250px);
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+th {
+    background: var(--adm-bg);
+    padding: 15px 20px;
+    text-align: left;
+    font-weight: 600;
+    color: var(--adm-text-sec);
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    border-bottom: 1px solid var(--adm-border);
+}
+
+/* === DATA TABLE WITH HIERARCHY (Таблица с иерархией) === */
+.data-table-container {
+    overflow: hidden;
+}
+
+.data-table-scroll {
+    overflow-x: auto;
+    overflow-y: auto;
+    max-height: calc(100vh - 250px);
+}
+
+.data-table-full {
+    min-width: max-content;
+}
+
+.data-table-full th,
+.data-table-full td {
+    white-space: nowrap;
+    padding: 12px 15px;
+    /* Визуальное разделение столбцов вертикальными границами */
+    border-right: 1px solid var(--adm-border);
+}
+
+/* Убираем границу справа у последнего столбца */
+.data-table-full th:last-child,
+.data-table-full td:last-child {
+    border-right: none;
+}
+
+/* Колонки иерархии (уровни категорий) - МНОГОСТРОЧНЫЙ РЕЖИМ */
+.data-table-full .col-hierarchy {
+    /* Сплошной фон как у остальных ячеек */
+    background: var(--adm-surface);
+    font-size: 0.85rem;
+    color: var(--adm-text);
+    min-width: 100px;
+    max-width: 250px;
+    /* Многострочный режим вместо обрезки */
+    white-space: normal !important;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    line-height: 1.4;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.data-table-full .col-hierarchy:hover {
+    background: rgba(99, 102, 241, 0.08);
+}
+
+/* Заголовок колонки иерархии - ИСПРАВЛЕНО: такой же фон как у остальных th */
+.col-hierarchy-header {
+    background: var(--adm-bg) !important;
+}
+
+/* Колонка описания - полный текст без обрезки */
+.data-table-full .col-description {
+    white-space: normal;
+    min-width: 250px;
+    max-width: 500px;
+    line-height: 1.4;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.data-table-full .col-description:hover {
+    background: rgba(99, 102, 241, 0.08);
+}
+
+/* Колонка кода - ВЫРАВНИВАНИЕ ПО ЦЕНТРУ */
+.data-table-full .col-code {
+    font-family: monospace;
+    font-weight: 600;
+    color: var(--adm-primary);
+    cursor: pointer;
+    text-align: center;
+}
+
+.data-table-full .col-code:hover {
+    background: rgba(99, 102, 241, 0.08);
+}
+
+/* Заголовок колонки Код - по центру */
+.data-table-full th[data-sort="code"] {
+    text-align: center;
+}
+
+/* Колонка Действия - по центру */
+.data-table-full .col-actions {
+    text-align: center;
+}
+
+.data-table-full th.col-actions-header {
+    text-align: center;
+}
+
+th.sortable {
+    cursor: pointer;
+    user-select: none;
+    transition: color 0.2s;
+}
+
+th.sortable:hover {
+    color: var(--adm-primary);
+}
+
+.sort-icon {
+    margin-left: 8px;
+    font-size: 0.75rem;
+    opacity: 0.4;
+    transition: opacity 0.2s;
+}
+
+.sort-icon.active {
+    opacity: 1;
+    color: var(--adm-primary);
+}
+
+td {
+    padding: 15px 20px;
+    border-bottom: 1px solid var(--adm-border);
+    color: var(--adm-text);
+}
+
+tr:hover td {
+    background-color: var(--adm-bg);
+}
+
+/* === MODALS === */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(5px);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s;
+}
+
+.modal-overlay.active {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.modal-window {
+    background: var(--adm-surface);
+    width: 100%;
+    max-width: 600px;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    transform: scale(0.95);
+    transition: transform 0.3s;
+    display: flex;
+    flex-direction: column;
+    max-height: 90vh;
+}
+
+.modal-overlay.active .modal-window {
+    transform: scale(1);
+}
+
+.modal-header {
+    padding: 20px 25px;
+    border-bottom: 1px solid var(--adm-border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modal-header h3 {
+    font-size: 1.2rem;
+    font-weight: 700;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: var(--adm-text-sec);
+}
+
+.modal-body {
+    padding: 25px;
+    overflow-y: auto;
+}
+
+.modal-footer {
+    padding: 20px 25px;
+    border-top: 1px solid var(--adm-border);
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+/* === WIZARD STEPS === */
+.step-content {
+    display: none;
+}
+
+.step-content.active {
+    display: block;
+    animation: fadeIn 0.3s;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.progress-bar-container {
+    background: var(--adm-bg);
+    height: 12px;
+    border-radius: 6px;
+    overflow: hidden;
+    margin-top: 10px;
+}
+
+.progress-bar-fill {
+    height: 100%;
+    background: var(--adm-primary);
+    width: 0%;
+    transition: width 0.3s ease;
+}
+
+/* === IMPORT WIZARD IMPROVED UI === */
+.column-mapper {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 25px;
+    margin-top: 20px;
+}
+
+.mapper-section {
+    display: flex;
+    flex-direction: column;
+}
+
+.mapper-section label {
+    font-weight: 600;
+    margin-bottom: 10px;
+    color: var(--adm-text);
+}
+
+/* Modern Select */
+.form-select-modern {
+    width: 100%;
+    padding: 12px 15px;
+    background: var(--adm-surface);
+    border: 1px solid var(--adm-border);
+    border-radius: var(--radius-md);
+    font-size: 0.95rem;
+    color: var(--adm-text);
+    appearance: none;
+    background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%2364748b%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E");
+    background-repeat: no-repeat;
+    background-position: right 15px top 50%;
+    background-size: 12px auto;
+    cursor: pointer;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.form-select-modern:focus {
+    border-color: var(--adm-primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+/* Multi-Select Dropdown */
+.multi-select-dropdown {
+    position: relative;
+    width: 100%;
+}
+
+.select-trigger {
+    width: 100%;
+    padding: 12px 15px;
+    background: var(--adm-surface);
+    border: 1px solid var(--adm-border);
+    border-radius: var(--radius-md);
+    font-size: 0.95rem;
+    color: var(--adm-text);
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    user-select: none;
+    transition: all 0.2s;
+}
+
+.select-trigger:hover {
+    border-color: var(--adm-primary-hover);
+}
+
+.select-trigger.active {
+    border-color: var(--adm-primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+.select-options {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    right: 0;
+    background: var(--adm-surface);
+    border: 1px solid var(--adm-border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    max-height: 250px;
+    overflow-y: auto;
+    z-index: 100;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-10px);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    padding: 5px;
+}
+
+.select-options.open {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+.option-item {
+    display: flex;
+    align-items: center;
+    padding: 10px 12px;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: background 0.1s;
+    gap: 10px;
+}
+
+.option-item:hover {
+    background: var(--adm-bg);
+}
+
+.option-item input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    min-width: 18px;
+    min-height: 18px;
+    margin: 0;
+    cursor: pointer;
+    border-radius: 4px;
+    border: 2px solid var(--adm-text-sec);
+    appearance: none;
+    position: relative;
+    background: transparent;
+    box-shadow: none;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.option-item input[type="checkbox"]:checked {
+    background: var(--adm-primary);
+    border-color: var(--adm-primary);
+}
+
+.option-item input[type="checkbox"]:checked::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 45%;
+    width: 5px;
+    height: 9px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+    transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.option-text {
+    font-size: 0.9rem;
+    color: var(--adm-text);
+    font-weight: 500;
+}
+
+.selected-count {
+    font-size: 0.85rem;
+    color: var(--adm-text-sec);
+}
+
+/* Inline Edit */
+.editable {
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.editable:hover {
+    background-color: rgba(99, 102, 241, 0.08);
+}
+
+.editable.editing {
+    padding: 0 !important;
+}
+
+.editable.editing input {
+    width: 100%;
+    height: 100%;
+    padding: 15px 20px;
+    border: 2px solid var(--adm-primary);
+    outline: none;
+    font-family: inherit;
+    font-size: inherit;
+    background: var(--adm-surface);
+    color: var(--adm-text);
+    border-radius: 0;
+}
+
+/* === DELIMITER SELECTOR === */
+.delimiter-selector {
+    background: var(--adm-bg);
+    border: 1px solid var(--adm-border);
+    border-radius: var(--radius-md);
+    padding: 15px;
+}
+
+.delimiter-options {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.delimiter-option {
+    cursor: pointer;
+}
+
+.delimiter-option input[type="radio"] {
+    display: none;
+}
+
+.delimiter-btn {
+    display: inline-block;
+    padding: 8px 16px;
+    border: 2px solid var(--adm-border);
+    border-radius: var(--radius-md);
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--adm-text-sec);
+    background: var(--adm-surface);
+    transition: all 0.2s;
+}
+
+.delimiter-option input[type="radio"]:checked+.delimiter-btn {
+    border-color: var(--adm-primary);
+    background: var(--adm-primary);
+    color: white;
+}
+
+.delimiter-option:hover .delimiter-btn {
+    border-color: var(--adm-primary);
+}
+
+/* === IMPORT WIZARD IMPROVED === */
+.import-mapper-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-bottom: 25px;
+}
+
+.mapper-card {
+    background: var(--adm-bg);
+    border: 1px solid var(--adm-border);
+    border-radius: var(--radius-lg);
+    padding: 20px;
+}
+
+.mapper-card-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 700;
+    font-size: 1rem;
+    margin-bottom: 15px;
+    color: var(--adm-text);
+}
+
+.mapper-card-header i {
+    color: var(--adm-primary);
+    font-size: 1.1rem;
+}
+
+.mapper-hint {
+    font-size: 0.8rem;
+    color: var(--adm-text-sec);
+    margin-top: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.mapper-hint i {
+    color: var(--adm-primary);
+}
+
+/* Preview Table */
+.import-preview {
+    background: var(--adm-bg);
+    border: 1px solid var(--adm-border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+}
+
+.preview-header {
+    padding: 12px 15px;
+    background: var(--adm-surface);
+    border-bottom: 1px solid var(--adm-border);
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--adm-text);
+}
+
+.preview-header i {
+    color: var(--adm-primary);
+}
+
+.preview-count {
+    margin-left: auto;
+    font-size: 0.85rem;
+    color: var(--adm-text-sec);
+    font-weight: 500;
+}
+
+.preview-table-wrap {
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.preview-table {
+    width: 100%;
+    font-size: 0.85rem;
+}
+
+.preview-table th {
+    background: var(--adm-surface);
+    padding: 10px 12px;
+    text-align: left;
+    font-weight: 600;
+    color: var(--adm-text-sec);
+    position: sticky;
+    top: 0;
+}
+
+.preview-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--adm-border);
+    color: var(--adm-text);
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.preview-table tr:nth-child(even) td {
+    background: rgba(0, 0, 0, 0.02);
+}
+
+/* === IMPORT MODAL WIDE & RESIZABLE (для 3 панелей) === */
+#importModal .modal-window {
+    max-width: 90vw;
+    width: 1200px;
+    min-width: 800px;
+    position: relative;
+}
+
+/* Ресайзабельное модальное окно */
+.modal-resizable {
+    /* CSS resize не работает хорошо с модалками, используем кастомный resizer */
+}
+
+/* Resizer элементы по бокам */
+.modal-resizer {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 8px;
+    cursor: ew-resize;
+    background: transparent;
+    z-index: 10;
+    transition: background 0.2s;
+}
+
+.modal-resizer:hover,
+.modal-resizer.active {
+    background: var(--adm-primary);
+    opacity: 0.5;
+}
+
+.modal-resizer-left {
+    left: 0;
+    border-radius: var(--radius-lg) 0 0 var(--radius-lg);
+}
+
+.modal-resizer-right {
+    right: 0;
+    border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+}
+
+/* Grid на 3 колонки для панелей маппинга */
+.import-mapper-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+/* Улучшенный предпросмотр для широкого окна */
+.preview-table td {
+    max-width: 300px;
+}
+
+.preview-table-wrap {
+    max-height: 250px;
+    overflow: auto;
+}
+
+/* === NUMBERED CHECKBOXES (Цифровые чек-боксы) === */
+.numbered-select-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 200px;
+    overflow-y: auto;
+    padding: 4px;
+}
+
+.numbered-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.15s;
+    user-select: none;
+}
+
+.numbered-option:hover {
+    background: var(--adm-surface);
+}
+
+/* Круглый badge с номером */
+.num-badge {
+    width: 24px;
+    height: 24px;
+    min-width: 24px;
+    border-radius: 50%;
+    border: 2px solid var(--adm-border);
+    background: var(--adm-surface);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--adm-text-sec);
+    transition: all 0.2s;
+}
+
+/* Выбранный badge с номером */
+.numbered-option.selected .num-badge {
+    background: var(--adm-primary);
+    border-color: var(--adm-primary);
+    color: white;
+}
+
+/* Hover эффект для невыбранных */
+.numbered-option:not(.selected):hover .num-badge {
+    border-color: var(--adm-primary);
+    color: var(--adm-primary);
+}
+
+.num-label {
+    font-size: 0.9rem;
+    color: var(--adm-text);
+    font-weight: 500;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* === HEADER SEPARATOR (Разделитель в заголовке панели) === */
+.header-separator {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+    font-size: 0.75rem;
+}
+
+.header-separator label {
+    color: var(--adm-text-sec);
+    white-space: nowrap;
+}
+
+.header-separator input {
+    width: 40px;
+    padding: 4px 8px;
+    text-align: center;
+    font-family: monospace;
+    font-size: 0.85rem;
+    font-weight: 600;
+    border-radius: 4px;
+}
+
+/* === PREVIEW ROW (Строка с превью) === */
+.preview-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 20px;
+    padding: 12px;
+    background: var(--adm-surface);
+    border: 1px solid var(--adm-border);
+    border-radius: var(--radius-md);
+}
+
+.preview-row .concat-preview {
+    flex: 1;
+    margin: 0;
+    min-width: 0;
+}
+
+/* Preview для склеенного значения */
+.concat-preview {
+    margin-top: 10px;
+    padding: 8px 12px;
+    background: var(--adm-bg);
+    border: 1px dashed var(--adm-border);
+    border-radius: 6px;
+    font-size: 0.8rem;
+    color: var(--adm-text-sec);
+}
+
+.concat-preview span {
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.concat-preview code {
+    display: block;
+    margin-top: 4px;
+    color: var(--adm-primary);
+    font-weight: 600;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    /* Не обрезаем текст, позволяем переносить */
+    white-space: normal;
+    line-height: 1.4;
+}
+
+/* === DIFF VIEW STYLES (Просмотр изменений) === */
+.diff-summary {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+.diff-stat {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 20px;
+    border-radius: var(--radius-md);
+    font-weight: 600;
+    font-size: 1rem;
+}
+
+.diff-stat.added {
+    background: var(--adm-success-bg);
+    color: var(--adm-success);
+}
+
+.diff-stat.modified {
+    background: #fef3c7;
+    color: #d97706;
+}
+
+.diff-stat.deleted {
+    background: var(--adm-danger-bg);
+    color: var(--adm-danger);
+}
+
+/* Статистика папок */
+.diff-stat.folders {
+    background: rgba(99, 102, 241, 0.1);
+    color: var(--adm-primary);
+}
+
+.diff-stat .count {
+    font-size: 1.25rem;
+    font-weight: 700;
+}
+
+/* Diff Tabs */
+.diff-tabs {
+    display: flex;
+    gap: 5px;
+    margin-bottom: 15px;
+    border-bottom: 2px solid var(--adm-border);
+    padding-bottom: 0;
+}
+
+.diff-tab-btn {
+    padding: 10px 20px;
+    border: none;
+    background: none;
+    color: var(--adm-text-sec);
+    font-weight: 500;
+    font-size: 0.9rem;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    transition: all 0.2s;
+}
+
+.diff-tab-btn:hover {
+    color: var(--adm-text);
+}
+
+.diff-tab-btn.active {
+    color: var(--adm-primary);
+    border-bottom-color: var(--adm-primary);
+}
+
+.diff-tab-btn .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.75rem;
+    margin-left: 6px;
+    background: var(--adm-bg);
+}
+
+.diff-tab-btn.active .badge {
+    background: rgba(99, 102, 241, 0.15);
+    color: var(--adm-primary);
+}
+
+/* Diff Table */
+.diff-table-wrap {
+    max-height: 350px;
+    overflow-y: auto;
+    border: 1px solid var(--adm-border);
+    border-radius: var(--radius-md);
+}
+
+.diff-table {
+    width: 100%;
+    font-size: 0.85rem;
+}
+
+.diff-table th {
+    background: var(--adm-bg);
+    padding: 10px 15px;
+    text-align: left;
+    font-weight: 600;
+    color: var(--adm-text-sec);
+    position: sticky;
+    top: 0;
+    z-index: 5;
+}
+
+.diff-table td {
+    padding: 10px 15px;
+    border-bottom: 1px solid var(--adm-border);
+    vertical-align: top;
+}
+
+.diff-table .code-col {
+    width: 180px;
+    font-family: monospace;
+    font-weight: 600;
+    color: var(--adm-primary);
+}
+
+.diff-table .desc-col {
+    max-width: 400px;
+    word-break: break-word;
+}
+
+/* Стили для изменённых записей (старое → новое) */
+.diff-old {
+    background: var(--adm-danger-bg);
+    color: var(--adm-danger);
+    padding: 4px 8px;
+    border-radius: 4px;
+    display: block;
+    margin-bottom: 6px;
+    text-decoration: line-through;
+    opacity: 0.8;
+}
+
+.diff-new {
+    background: var(--adm-success-bg);
+    color: var(--adm-success);
+    padding: 4px 8px;
+    border-radius: 4px;
+    display: block;
+}
+
+.diff-arrow {
+    color: var(--adm-text-sec);
+    margin: 4px 0;
+    font-size: 0.75rem;
+}
+
+/* Empty state для diff */
+.diff-empty {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--adm-text-sec);
+}
+
+.diff-empty i {
+    font-size: 2rem;
+    margin-bottom: 10px;
+    display: block;
+    opacity: 0.5;
+}
+
+/* Loading state */
+.diff-loading {
+    text-align: center;
+    padding: 40px 20px;
+}
+
+.diff-loading i {
+    font-size: 2rem;
+    color: var(--adm-primary);
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Checkbox для выбора записей в diff */
+.diff-checkbox {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+}
+
+/* Warning box для удалений */
+.diff-delete-warning {
+    background: var(--adm-danger-bg);
+    border: 1px solid var(--adm-danger);
+    border-radius: var(--radius-md);
+    padding: 12px 15px;
+    margin-bottom: 15px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--adm-danger);
+    font-size: 0.9rem;
+}
+
+.diff-delete-warning i {
+    font-size: 1.2rem;
+}
+
+/* === СТИЛИ ДЛЯ ПАПОК В DIFF === */
+
+/* Строка папки - добавленная (зелёный) */
+.diff-table tr.folder-added {
+    background: rgba(16, 185, 129, 0.08);
+}
+
+.diff-table tr.folder-added td:first-child::before {
+    content: "+";
+    display: inline-block;
+    width: 18px;
+    height: 18px;
+    line-height: 18px;
+    text-align: center;
+    background: var(--adm-success);
+    color: white;
+    border-radius: 50%;
+    font-weight: bold;
+    font-size: 0.75rem;
+    margin-right: 8px;
+}
+
+/* Строка папки - изменённая (жёлтый) */
+.diff-table tr.folder-modified {
+    background: rgba(217, 119, 6, 0.08);
+}
+
+.diff-table tr.folder-modified td:first-child::before {
+    content: "~";
+    display: inline-block;
+    width: 18px;
+    height: 18px;
+    line-height: 18px;
+    text-align: center;
+    background: #d97706;
+    color: white;
+    border-radius: 50%;
+    font-weight: bold;
+    font-size: 0.75rem;
+    margin-right: 8px;
+}
+
+/* Строка папки - удалённая (красный) */
+.diff-table tr.folder-deleted {
+    background: rgba(239, 68, 68, 0.08);
+}
+
+.diff-table tr.folder-deleted td:first-child::before {
+    content: "−";
+    display: inline-block;
+    width: 18px;
+    height: 18px;
+    line-height: 18px;
+    text-align: center;
+    background: var(--adm-danger);
+    color: white;
+    border-radius: 50%;
+    font-weight: bold;
+    font-size: 0.75rem;
+    margin-right: 8px;
+}
+
+/* Иконка папки в таблице */
+.folder-icon {
+    color: var(--adm-primary);
+    margin-right: 6px;
+}
+
+/* === НОВЫЕ СТИЛИ ТАБЛИЦЫ ПАПОК === */
+
+/* Подзаголовок таблицы папок */
+.folder-table-subheader th {
+    background: var(--adm-bg);
+    padding: 8px 12px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--adm-text-sec);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--adm-border);
+}
+
+/* Ячейка с названием папки */
+.folder-name-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+/* Название папки (leaf_name) - крупно */
+.folder-leaf-name {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--adm-text);
+}
+
+/* Полный путь папки - мелко, серым */
+.folder-full-path {
+    font-size: 0.75rem;
+    color: var(--adm-text-sec);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.folder-full-path i {
+    font-size: 0.65rem;
+    opacity: 0.7;
+}
+
+/* Ячейка со счётчиком материалов */
+.folder-count-cell {
+    text-align: center;
+    font-weight: 600;
+    font-size: 0.95rem;
+}
+
+/* Стрелка между было/стало */
+.count-arrow {
+    color: var(--adm-text-sec);
+    font-size: 0.7rem;
+    margin: 0 6px;
+}
+
+/* Старое значение */
+.count-old {
+    color: var(--adm-danger);
+    text-decoration: line-through;
+    opacity: 0.8;
+}
+
+/* Новое значение */
+.count-new {
+    color: var(--adm-success);
+    font-weight: 700;
+}
+
+/* Увеличение/уменьшение */
+.count-up {
+    color: var(--adm-success);
+}
+
+.count-down {
+    color: var(--adm-danger);
+}
+
+/* Статус-бейджи */
+.status-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+.status-badge.status-new {
+    background: var(--adm-success-bg);
+    color: var(--adm-success);
+}
+
+.status-badge.status-modified {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.status-badge.status-deleted {
+    background: var(--adm-danger-bg);
+    color: var(--adm-danger);
+}
+
+/* Строка "и ещё N папок" */
+.folder-more-row {
+    text-align: center;
+    color: var(--adm-text-sec);
+    font-style: italic;
+    padding: 12px !important;
+}
+
+/* Убираем старые ::before иконки для строк папок */
+.diff-table tr.folder-added td:first-child::before,
+.diff-table tr.folder-modified td:first-child::before,
+.diff-table tr.folder-deleted td:first-child::before {
+    display: none;
+}
+
+/* Обновлённые стили строк папок */
+.diff-table tr.folder-added td {
+    padding: 10px 12px;
+    vertical-align: middle;
+}
+
+.diff-table tr.folder-modified td {
+    padding: 10px 12px;
+    vertical-align: middle;
+}
+
+.diff-table tr.folder-deleted td {
+    padding: 10px 12px;
+    vertical-align: middle;
+}
+
+/* === SUCCESS BUTTON (Зеленая кнопка) === */
+.btn-success {
+    background-color: var(--adm-success);
+    color: white;
+    border-color: var(--adm-success);
+}
+
+.btn-success:hover {
+    background-color: #059669;
+    border-color: #059669;
+}
+
+/* === WARNING BUTTON (Оранжевая кнопка) === */
+.btn-warning {
+    background-color: #f59e0b;
+    color: white;
+    border-color: #f59e0b;
+}
+
+.btn-warning:hover {
+    background-color: #d97706;
+    border-color: #d97706;
+}
+
+/* Responsive для широкого модального окна */
+@media (max-width: 1250px) {
+    #importModal .modal-window {
+        max-width: 95vw;
+    }
+}
+
+@media (max-width: 900px) {
+    .import-mapper-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+@media (max-width: 600px) {
+    .import-mapper-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .diff-summary {
+        flex-direction: column;
+    }
+}
+
+/* === MOBILE WARNING OVERLAY === */
+.mobile-warning-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.9);
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.mobile-warning-overlay.hidden {
+    display: none;
+}
+
+.mobile-warning-card {
+    background: var(--adm-surface);
+    border-radius: var(--radius-lg);
+    padding: 40px 30px;
+    max-width: 400px;
+    text-align: center;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.mobile-warning-card i {
+    font-size: 4rem;
+    color: var(--adm-primary);
+    margin-bottom: 20px;
+    display: block;
+}
+
+.mobile-warning-card h2 {
+    font-size: 1.3rem;
+    margin-bottom: 15px;
+    color: var(--adm-text);
+}
+
+.mobile-warning-card p {
+    color: var(--adm-text-sec);
+    margin-bottom: 15px;
+    line-height: 1.5;
+}
+
+.mobile-warning-card .btn {
+    width: 100%;
+    margin-top: 10px;
+    justify-content: center;
+}
+
+/* === COLUMN RESIZER (Изменение ширины колонок) === */
+/* Заголовки таблицы с возможностью изменения ширины */
+.data-table-full th {
+    position: relative;
+}
+
+/* Контейнер для названия колонки (для отделения от resizer) */
+.th-content {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding-right: 12px;
+    /* Отступ для resizer */
+}
+
+/* Триггер сортировки - кликабельная область */
+.sort-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    padding: 4px 8px;
+    margin: -4px -8px;
+    border-radius: 6px;
+    transition: background-color 0.2s, color 0.2s;
+    user-select: none;
+}
+
+.sort-trigger:hover {
+    background: rgba(99, 102, 241, 0.1);
+    color: var(--adm-primary);
+}
+
+.sort-trigger:active {
+    background: rgba(99, 102, 241, 0.2);
+}
+
+/* Ручка для изменения ширины колонки - СОВРЕМЕННЫЙ СТИЛЬ */
+.th-resizer {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 12px;
+    /* Увеличенная область для удобства */
+    height: 100%;
+    cursor: col-resize;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Визуальная ручка resize - 3 точки */
+.th-resizer::before {
+    content: '';
+    width: 4px;
+    height: 24px;
+    border-radius: 2px;
+    background: linear-gradient(to bottom,
+            var(--adm-border) 0%,
+            var(--adm-border) 20%,
+            transparent 20%,
+            transparent 40%,
+            var(--adm-border) 40%,
+            var(--adm-border) 60%,
+            transparent 60%,
+            transparent 80%,
+            var(--adm-border) 80%,
+            var(--adm-border) 100%);
+    opacity: 0;
+    transition: opacity 0.2s, background 0.2s;
+}
+
+/* Показываем ручку при наведении на заголовок */
+.data-table-full th:hover .th-resizer::before {
+    opacity: 1;
+}
+
+/* Активное состояние resize */
+.th-resizer:hover::before,
+.th-resizer.active::before {
+    opacity: 1;
+    background: linear-gradient(to bottom,
+            var(--adm-primary) 0%,
+            var(--adm-primary) 20%,
+            transparent 20%,
+            transparent 40%,
+            var(--adm-primary) 40%,
+            var(--adm-primary) 60%,
+            transparent 60%,
+            transparent 80%,
+            var(--adm-primary) 80%,
+            var(--adm-primary) 100%);
+}
+
+/* Линия-индикатор при перетаскивании */
+.resize-line {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: var(--adm-primary);
+    box-shadow: 0 0 8px var(--adm-primary);
+    z-index: 9999;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+
+.resize-line.visible {
+    opacity: 1;
+}
+
+/* Во время изменения размера отключаем выделение */
+body.resizing-columns {
+    cursor: col-resize !important;
+    user-select: none !important;
+}
+
+body.resizing-columns * {
+    cursor: col-resize !important;
+}
+
+/* Подсветка границы при resize */
+body.resizing-columns .data-table-full th {
+    transition: none;
+}
+
+/* === INFINITE SCROLL LOADING (Индикатор загрузки) === */
+.infinite-scroll-loader {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    gap: 10px;
+    color: var(--adm-text-sec);
+}
+
+.infinite-scroll-loader i {
+    font-size: 1.2rem;
+    animation: spin 1s linear infinite;
+}
+
+.infinite-scroll-loader.hidden {
+    display: none;
+}
+
+/* Sentinel элемент для IntersectionObserver */
+.scroll-sentinel {
+    height: 1px;
+    width: 100%;
+}
+
+/* === НОВЫЕ КОЛОНКИ: Дата, Версия, Статус === */
+
+/* Колонка даты */
+.data-table-full .col-date {
+    min-width: 130px;
+    font-size: 0.85rem;
+    color: var(--adm-text-sec);
+    white-space: nowrap;
+    text-align: center;
+}
+
+/* Колонка версии */
+.data-table-full .col-version {
+    min-width: 70px;
+    text-align: center;
+}
+
+.version-badge {
+    display: inline-block;
+    padding: 2px 10px;
+    background: var(--adm-bg);
+    border: 1px solid var(--adm-border);
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--adm-text-sec);
+}
+
+/* Колонка статуса */
+.data-table-full .col-status {
+    min-width: 130px;
+    text-align: center;
+}
+
+/* === КАСТОМНЫЙ DROPDOWN СТАТУСОВ === */
+
+/* Контейнер для кастомного dropdown */
+.status-dropdown {
+    position: relative;
+    display: inline-block;
+    min-width: 130px;
+}
+
+/* Триггер dropdown - отображает текущий статус */
+.status-dropdown-trigger {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    background: var(--adm-surface);
+    border: 1px solid var(--adm-border);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    user-select: none;
+}
+
+.status-dropdown-trigger:hover {
+    border-color: var(--adm-primary);
+    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.15);
+}
+
+.status-dropdown.open .status-dropdown-trigger {
+    border-color: var(--adm-primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+}
+
+/* Цветной индикатор статуса */
+.status-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.8);
+}
+
+/* Название статуса */
+.status-label {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--adm-text);
+    flex: 1;
+    white-space: nowrap;
+}
+
+/* Стрелка dropdown */
+.status-arrow {
+    font-size: 0.7rem;
+    color: var(--adm-text-sec);
+    transition: transform 0.2s;
+    margin-left: auto;
+}
+
+.status-dropdown.open .status-arrow {
+    transform: rotate(180deg);
+}
+
+/* Выпадающий список опций */
+.status-dropdown-options {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--adm-surface);
+    border: 1px solid var(--adm-primary);
+    border-top: none;
+    border-radius: 0 0 8px 8px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+    z-index: 100;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-8px);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    overflow: hidden;
+}
+
+.status-dropdown.open .status-dropdown-options {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+/* Опция в dropdown */
+.status-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: background-color 0.15s;
+}
+
+.status-option:hover {
+    background: rgba(99, 102, 241, 0.08);
+}
+
+.status-option.selected {
+    background: rgba(99, 102, 241, 0.12);
+}
+
+.status-option:last-child {
+    border-radius: 0 0 8px 8px;
+}
+
+.status-option .status-dot {
+    box-shadow: none;
+}
+
+.status-option .status-label {
+    font-weight: 400;
+}
+
+.status-option.selected .status-label {
+    font-weight: 600;
+    color: var(--adm-primary);
+}
+
+/* Галочка для выбранной опции */
+.status-check {
+    margin-left: auto;
+    color: var(--adm-primary);
+    font-size: 0.8rem;
+    opacity: 0;
+    transform: scale(0.5);
+    transition: all 0.2s;
+}
+
+.status-option.selected .status-check {
+    opacity: 1;
+    transform: scale(1);
+}
+
+/* Цветовые индикаторы статусов - старый стиль для совместимости */
+.status-indicator {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 6px;
+}
+
+/* Старый select скрыт, но доступен для формы */
+.status-select-hidden {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* === УПРАВЛЕНИЕ СТАТУСАМИ (Современный дизайн) === */
+
+/* Список статусов */
+.status-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 24px;
+}
+
+/* Карточка отдельного статуса */
+.status-item {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px 20px;
+    background: var(--adm-bg);
+    border: 1px solid var(--adm-border);
+    border-radius: 12px;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+}
+
+.status-item:hover {
+    border-color: var(--adm-primary);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.1);
+    transform: translateY(-1px);
+}
+
+/* Цветная полоса слева */
+.status-item::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    border-radius: 12px 0 0 12px;
+    background: var(--status-color, var(--adm-primary));
+}
+
+/* Превью цвета - большой круг */
+.status-color-preview {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: var(--status-color, var(--adm-primary));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    position: relative;
+    transition: transform 0.2s, box-shadow 0.2s;
+    flex-shrink: 0;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.status-color-preview:hover {
+    transform: scale(1.05);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.status-color-preview i {
+    color: white;
+    font-size: 1rem;
+    opacity: 0;
+    transition: opacity 0.2s;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.status-color-preview:hover i {
+    opacity: 1;
+}
+
+/* Скрытый input цвета */
+.status-item .status-color-picker {
+    position: absolute;
+    width: 44px;
+    height: 44px;
+    opacity: 0;
+    cursor: pointer;
+}
+
+/* Контент статуса */
+.status-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+
+/* ID статуса (badge) */
+.status-id-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    background: var(--adm-surface);
+    border: 1px solid var(--adm-border);
+    border-radius: 6px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 0.75rem;
+    color: var(--adm-text-sec);
+    width: fit-content;
+}
+
+.status-id-badge i {
+    font-size: 0.65rem;
+    opacity: 0.6;
+}
+
+/* Поле ввода названия */
+.status-item .status-label-input {
+    padding: 10px 14px;
+    border: 2px solid var(--adm-border);
+    border-radius: 10px;
+    background: var(--adm-surface);
+    color: var(--adm-text);
+    font-size: 0.95rem;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.status-item .status-label-input:focus {
+    border-color: var(--adm-primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+    outline: none;
+}
+
+/* Кнопка удаления */
+.status-item .btn-remove-status {
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 2px solid var(--adm-border);
+    color: var(--adm-text-sec);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+    flex-shrink: 0;
+}
+
+.status-item .btn-remove-status:hover {
+    border-color: var(--adm-danger);
+    background: var(--adm-danger-bg);
+    color: var(--adm-danger);
+    transform: scale(1.05);
+}
+
+/* === ФОРМА ДОБАВЛЕНИЯ НОВОГО СТАТУСА === */
+.add-status-section {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.05) 0%, rgba(99, 102, 241, 0.02) 100%);
+    border: 2px dashed var(--adm-border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 24px;
+    transition: all 0.2s;
+}
+
+.add-status-section:hover {
+    border-color: var(--adm-primary);
+}
+
+.add-status-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--adm-text);
+}
+
+.add-status-header i {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--adm-primary);
+    color: white;
+    border-radius: 8px;
+    font-size: 0.8rem;
+}
+
+.add-status-row {
+    display: grid;
+    grid-template-columns: 1fr 1.5fr 50px 44px;
+    gap: 12px;
+    align-items: center;
+}
+
+.add-status-row input[type="text"] {
+    padding: 12px 14px;
+    border: 2px solid var(--adm-border);
+    border-radius: 10px;
+    background: var(--adm-surface);
+    color: var(--adm-text);
+    font-size: 0.9rem;
+    transition: all 0.2s;
+}
+
+.add-status-row input[type="text"]:focus {
+    border-color: var(--adm-primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+    outline: none;
+}
+
+.add-status-row input[type="text"]::placeholder {
+    color: var(--adm-text-sec);
+}
+
+/* Picker цвета для нового статуса */
+.new-status-color-wrapper {
+    position: relative;
+    width: 50px;
+    height: 44px;
+}
+
+.new-status-color-preview {
+    width: 100%;
+    height: 100%;
+    border-radius: 10px;
+    cursor: pointer;
+    border: 2px solid var(--adm-border);
+    transition: all 0.2s;
+}
+
+.new-status-color-preview:hover {
+    border-color: var(--adm-primary);
+    transform: scale(1.05);
+}
+
+.new-status-color-wrapper input[type="color"] {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+}
+
+/* Кнопка добавления */
+#addStatusBtn {
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    font-size: 1.1rem;
+}
+
+/* === СЕКЦИЯ СТАТУСА ПО УМОЛЧАНИЮ === */
+.default-status-section {
+    background: var(--adm-bg);
+    border: 1px solid var(--adm-border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 24px;
+}
+
+.default-status-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+    font-weight: 600;
+    color: var(--adm-text);
+}
+
+.default-status-header i {
+    color: var(--adm-primary);
+}
+
+.default-status-description {
+    font-size: 0.85rem;
+    color: var(--adm-text-sec);
+    margin-bottom: 16px;
+    line-height: 1.5;
+}
+
+/* Улучшенный select для статуса по умолчанию */
+#defaultStatusSelect {
+    padding: 12px 16px;
+    border: 2px solid var(--adm-border);
+    border-radius: 10px;
+    font-size: 0.95rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+#defaultStatusSelect:hover {
+    border-color: var(--adm-primary);
+}
+
+#defaultStatusSelect:focus {
+    border-color: var(--adm-primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+    outline: none;
+}
+
+/* === КНОПКА СОХРАНЕНИЯ СТАТУСОВ === */
+.save-statuses-section {
+    display: flex;
+    justify-content: flex-end;
+    padding-top: 8px;
+    border-top: 1px solid var(--adm-border);
+    margin-top: 8px;
+}
+
+#saveStatusesBtn {
+    padding: 12px 24px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    border-radius: 10px;
+    transition: all 0.2s;
+}
+
+#saveStatusesBtn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+}
+
+/* === SETTINGS PAGE (Страница настроек) === */
+.settings-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+    gap: 25px;
+}
+
+.settings-card {
+    background: var(--adm-surface);
+    border: 1px solid var(--adm-border);
+    border-radius: var(--radius-lg);
+    padding: 25px;
+    box-shadow: var(--shadow-sm);
+}
+
+.settings-card-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 15px;
+}
+
+.settings-card-header i {
+    font-size: 1.3rem;
+    color: var(--adm-primary);
+}
+
+.settings-card-header h3 {
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin: 0;
+}
+
+.settings-card-desc {
+    color: var(--adm-text-sec);
+    font-size: 0.9rem;
+    margin-bottom: 20px;
+    line-height: 1.5;
+}
+
+/* === OPENROUTER SETTINGS (Настройки API эмбеддингов) === */
+
+/* Секция toggle переключателя */
+.openrouter-toggle-section {
+    background: var(--adm-bg);
+    border: 1px solid var(--adm-border);
+    border-radius: 12px;
+    padding: 16px 20px;
+    margin-bottom: 20px;
+}
+
+.toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.toggle-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.toggle-label {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: var(--adm-text);
+}
+
+.toggle-hint {
+    font-size: 0.8rem;
+    color: var(--adm-text-sec);
+}
+
+/* Toggle Switch - iOS стиль */
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 52px;
+    height: 28px;
+    flex-shrink: 0;
+}
+
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: var(--adm-border);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border-radius: 28px;
+}
+
+.toggle-slider::before {
+    position: absolute;
+    content: "";
+    height: 22px;
+    width: 22px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border-radius: 50%;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.toggle-switch input:checked + .toggle-slider {
+    background-color: var(--adm-primary);
+}
+
+.toggle-switch input:checked + .toggle-slider::before {
+    transform: translateX(24px);
+}
+
+.toggle-switch input:focus + .toggle-slider {
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+}
+
+/* Секции полей формы OpenRouter */
+.openrouter-field-section {
+    margin-bottom: 20px;
+}
+
+.field-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--adm-text);
+    margin-bottom: 10px;
+}
+
+.field-label i {
+    color: var(--adm-primary);
+    font-size: 0.85rem;
+}
+
+.field-hint {
+    margin-top: 8px;
+    font-size: 0.8rem;
+    color: var(--adm-text-sec);
+}
+
+.field-hint a {
+    color: var(--adm-primary);
+    text-decoration: none;
+}
+
+.field-hint a:hover {
+    text-decoration: underline;
+}
+
+/* API Key Input с кнопкой видимости */
+.api-key-input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.api-key-input-wrapper input {
+    width: 100%;
+    padding: 12px 48px 12px 14px;
+    border: 2px solid var(--adm-border);
+    border-radius: 10px;
+    background: var(--adm-surface);
+    color: var(--adm-text);
+    font-size: 0.95rem;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    transition: all 0.2s;
+}
+
+.api-key-input-wrapper input:focus {
+    border-color: var(--adm-primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+    outline: none;
+}
+
+.api-key-input-wrapper input::placeholder {
+    color: var(--adm-text-sec);
+    font-family: inherit;
+}
+
+.toggle-visibility-btn {
+    position: absolute;
+    right: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    color: var(--adm-text-sec);
+    cursor: pointer;
+    border-radius: 8px;
+    transition: all 0.2s;
+}
+
+.toggle-visibility-btn:hover {
+    background: var(--adm-bg);
+    color: var(--adm-primary);
+}
+
+/* Секция статуса подключения */
+.openrouter-status-section {
+    margin-bottom: 20px;
+    padding: 12px 16px;
+    background: var(--adm-bg);
+    border-radius: 10px;
+    border: 1px solid var(--adm-border);
+}
+
+.status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    /* Ограничиваем в одну строку */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.status-indicator i {
+    font-size: 0.6rem;
+    flex-shrink: 0;
+}
+
+.status-indicator span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Статусы подключения OpenRouter */
+.status-indicator.status-inactive i {
+    color: var(--adm-text-sec);
+}
+
+.status-indicator.status-inactive span {
+    color: var(--adm-text-sec);
+}
+
+.status-indicator.status-configured i {
+    color: #f59e0b;
+}
+
+.status-indicator.status-configured span {
+    color: #f59e0b;
+}
+
+.status-indicator.status-active i {
+    color: var(--adm-success);
+}
+
+.status-indicator.status-active span {
+    color: var(--adm-success);
+}
+
+.status-indicator.status-testing i {
+    color: var(--adm-primary);
+    animation: pulse 1s infinite;
+}
+
+.status-indicator.status-testing span {
+    color: var(--adm-primary);
+}
+
+.status-indicator.status-success i {
+    color: var(--adm-success);
+}
+
+.status-indicator.status-success span {
+    color: var(--adm-success);
+}
+
+.status-indicator.status-error i {
+    color: var(--adm-danger);
+}
+
+.status-indicator.status-error span {
+    color: var(--adm-danger);
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.4;
+    }
+}
+
+/* Кнопки действий OpenRouter */
+.openrouter-actions {
+    display: flex;
+    gap: 12px;
+    padding-top: 8px;
+    border-top: 1px solid var(--adm-border);
+    margin-top: 8px;
+}
+
+.openrouter-actions .btn {
+    flex: 1;
+    justify-content: center;
+    padding: 12px 16px;
+    font-weight: 600;
+    border-radius: 10px;
+    transition: all 0.2s;
+}
+
+.openrouter-actions .btn:hover {
+    transform: translateY(-1px);
+}
+
+.openrouter-actions .btn-outline {
+    background: transparent;
+    border: 2px solid var(--adm-border);
+    color: var(--adm-text);
+}
+
+.openrouter-actions .btn-outline:hover {
+    border-color: var(--adm-primary);
+    color: var(--adm-primary);
+}
+
+/* === IMPORT SOURCE TABS === */
+.import-source-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    border-bottom: 2px solid var(--adm-border);
+    padding-bottom: 12px;
+}
+
+.source-tab {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 18px;
+    border: 2px solid var(--adm-border);
+    border-radius: 10px;
+    background: var(--adm-surface);
+    color: var(--adm-text-sec);
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.source-tab:hover {
+    border-color: var(--adm-primary);
+    color: var(--adm-text);
+}
+
+.source-tab.active {
+    border-color: var(--adm-primary);
+    background: rgba(99, 102, 241, 0.08);
+    color: var(--adm-primary);
+    font-weight: 600;
+}
+
+.source-tab i {
+    font-size: 1rem;
+}
+
+.import-source-content {
+    display: none;
+}
+
+.import-source-content.active {
+    display: block;
+}
+
+/* === EXCEL DROP ZONE === */
+.excel-drop-zone {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+    border: 3px dashed var(--adm-border);
+    border-radius: 16px;
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.03) 0%, rgba(99, 102, 241, 0.01) 100%);
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s;
+    min-height: 200px;
+}
+
+.excel-drop-zone:hover,
+.excel-drop-zone.drag-over {
+    border-color: var(--adm-primary);
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.08) 0%, rgba(99, 102, 241, 0.04) 100%);
+}
+
+.excel-drop-zone.drag-over {
+    transform: scale(1.02);
+    box-shadow: 0 8px 24px rgba(99, 102, 241, 0.15);
+}
+
+.excel-drop-zone i {
+    font-size: 4rem;
+    color: #22c55e;
+    margin-bottom: 16px;
+    opacity: 0.8;
+}
+
+.excel-drop-zone p {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--adm-text);
+    margin: 0 0 8px 0;
+}
+
+.excel-drop-zone span {
+    font-size: 0.85rem;
+    color: var(--adm-text-sec);
+    margin-bottom: 12px;
+}
+
+.excel-drop-zone .btn {
+    margin-top: 8px;
+}
+
+/* Excel file info card */
+.excel-file-info {
+    margin-top: 16px;
+}
+
+.file-info-card {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px 20px;
+    background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+    border-radius: 12px;
+    color: white;
+}
+
+.file-info-card i {
+    font-size: 2.5rem;
+    opacity: 0.9;
+}
+
+.file-details {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.file-name {
+    font-weight: 700;
+    font-size: 1rem;
+}
+
+.file-stats {
+    font-size: 0.85rem;
+    opacity: 0.9;
+}
+
+.file-info-card .btn {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: transparent;
+    color: white;
+}
+
+.file-info-card .btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+/* Excel sheet selector */
+.excel-sheet-selector {
+    margin-top: 16px;
+    padding: 16px;
+    background: var(--adm-bg);
+    border: 1px solid var(--adm-border);
+    border-radius: 12px;
+}
+
+/* === CLEANING RULES SECTION === */
+.cleaning-rules-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 24px;
+}
+
+.cleaning-rule-item {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 16px;
+    background: var(--adm-bg);
+    border: 1px solid var(--adm-border);
+    border-radius: 12px;
+    transition: all 0.2s;
+}
+
+@media (max-width: 560px) {
+    .cleaning-rule-item {
+        grid-template-columns: auto 1fr;
+        grid-template-areas:
+            "toggle body"
+            "actions actions";
+    }
+    .cleaning-rule-item .rule-toggle { grid-area: toggle; }
+    .cleaning-rule-item .rule-body { grid-area: body; }
+    .cleaning-rule-item .rule-actions {
+        grid-area: actions;
+        justify-content: flex-end;
+        border-top: 1px solid var(--adm-border);
+        padding-top: 10px;
+        margin-top: 4px;
+    }
+}
+
+.cleaning-rule-item:hover {
+    border-color: var(--adm-primary);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.1);
+}
+
+.cleaning-rule-item.disabled {
+    opacity: 0.5;
+}
+
+.rule-toggle {
+    flex-shrink: 0;
+}
+
+.rule-body {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.rule-line-1 {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.rule-name {
+    font-weight: 600;
+    font-size: 0.92rem;
+    color: var(--adm-text);
+    margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+
+.rule-pattern {
+    display: inline-block;
+    padding: 3px 8px;
+    background: var(--adm-surface);
+    border: 1px solid var(--adm-border);
+    border-radius: 6px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 0.76rem;
+    color: var(--adm-primary);
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.rule-line-2 {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+.rule-actions {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.rule-actions .btn-icon {
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid var(--adm-border);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--adm-text-sec);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.rule-actions .btn-icon:hover {
+    border-color: var(--adm-primary);
+    color: var(--adm-primary);
+}
+
+.rule-actions .btn-icon.danger:hover {
+    border-color: var(--adm-danger);
+    background: var(--adm-danger-bg);
+    color: var(--adm-danger);
+}
+
+/* Add rule form */
+.add-rule-section {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.05) 0%, rgba(99, 102, 241, 0.02) 100%);
+    border: 2px dashed var(--adm-border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 24px;
+}
+
+.add-rule-section:hover {
+    border-color: var(--adm-primary);
+}
+
+.add-rule-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--adm-text);
+}
+
+.add-rule-header i {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--adm-primary);
+    color: white;
+    border-radius: 8px;
+    font-size: 0.8rem;
+}
+
+.add-rule-form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.add-rule-form .form-row {
+    display: flex;
+    gap: 12px;
+}
+
+.add-rule-form input {
+    flex: 1;
+    padding: 12px 14px;
+    border: 2px solid var(--adm-border);
+    border-radius: 10px;
+    background: var(--adm-surface);
+    color: var(--adm-text);
+    font-size: 0.9rem;
+    transition: all 0.2s;
+}
+
+.add-rule-form input:focus {
+    border-color: var(--adm-primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+    outline: none;
+}
+
+.save-rules-section {
+    display: flex;
+    justify-content: flex-end;
+    padding-top: 8px;
+    border-top: 1px solid var(--adm-border);
+    margin-top: 8px;
+}
+/* New status row layout (embed + rerank) */
+.openrouter-status-section .status-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--adm-border, #e2e8f0);
+}
+.openrouter-status-section .status-row:last-child {
+    border-bottom: none;
+}
+.openrouter-status-section .status-text-block {
+    flex: 1;
+    min-width: 0;
+}
+.openrouter-status-section .status-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--adm-text-sec, #64748b);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.openrouter-status-section .status-model {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--adm-text, #1e293b);
+    margin: 2px 0;
+    word-break: break-all;
+}
+.openrouter-status-section .status-message {
+    font-size: 0.85rem;
+    color: var(--adm-text-sec, #64748b);
+    word-break: break-word;
+}
+.openrouter-status-section .status-message.is-error {
+    color: #ef4444;
+}
+.openrouter-status-section .status-message.is-success {
+    color: #10b981;
+}
+
+/* === JOBS TABLE === */
+#jobsTable {
+    width: 100%;
+    border-collapse: collapse;
+}
+#jobsTable thead th {
+    text-align: left;
+    padding: 10px 12px;
+    font-weight: 600;
+    color: var(--adm-text-secondary, #94a3b8);
+    border-bottom: 1px solid var(--adm-border, #2a3548);
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+#jobsTable tbody td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--adm-border, #2a3548);
+    vertical-align: middle;
+}
+#jobsTable tbody td:last-child {
+    text-align: center;
+    width: 80px;
+}
+#jobsTable tbody tr:hover {
+    background: var(--adm-bg-hover, rgba(255, 255, 255, 0.03));
+}
+#jobsTable .btn-danger {
+    background: #dc2626;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+#jobsTable .btn-danger:hover {
+    background: #b91c1c;
+}
+
+/* === CLEANING RULES v3: TEMPLATES, TARGETS, PREVIEW === */
+
+/* Готовые шаблоны */
+.templates-section {
+    background: var(--adm-bg);
+    border: 1px solid var(--adm-border);
+    border-radius: 10px;
+    margin-bottom: 16px;
+    overflow: hidden;
+}
+.templates-toggle {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    background: transparent;
+    border: none;
+    color: var(--adm-text);
+    font-weight: 500;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: background 0.15s;
+    font-family: inherit;
+    text-align: left;
+}
+.templates-toggle:hover {
+    background: var(--adm-surface);
+}
+.templates-toggle .toggle-icon {
+    margin-left: auto;
+    transition: transform 0.2s;
+    font-size: 0.8rem;
+    color: var(--adm-text-sec);
+}
+.templates-section.open .templates-toggle .toggle-icon {
+    transform: rotate(180deg);
+}
+.templates-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 12px 16px;
+    border-top: 1px solid var(--adm-border);
+    background: var(--adm-surface);
+}
+.template-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: var(--adm-bg);
+    border: 1px solid var(--adm-border);
+    border-radius: 20px;
+    color: var(--adm-text);
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: inherit;
+}
+.template-chip:hover {
+    border-color: var(--adm-primary);
+    color: var(--adm-primary);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(99, 102, 241, 0.1);
+}
+.template-chip i {
+    color: var(--adm-primary);
+    font-size: 0.7rem;
+}
+
+/* Бэйджи target-полей в карточке правила (компактнее v2) */
+.rule-targets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 6px;
+}
+.rule-target-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 7px;
+    font-size: 0.65rem;
+    font-weight: 600;
+    border-radius: 5px;
+    background: rgba(99, 102, 241, 0.1);
+    color: var(--adm-primary);
+    border: 1px solid rgba(99, 102, 241, 0.2);
+    text-transform: uppercase;
+    letter-spacing: 0.2px;
+    line-height: 1.3;
+}
+.rule-target-badge i {
+    font-size: 0.6rem;
+}
+
+/* === ФОРМА ДОБАВЛЕНИЯ ПРАВИЛ v4 === */
+
+/* Кнопка-раскрывалка формы */
+.add-rule-toggle {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    background: var(--adm-bg);
+    border: 1.5px dashed var(--adm-border);
+    border-radius: 10px;
+    color: var(--adm-text);
+    font-weight: 500;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: inherit;
+    text-align: left;
+}
+.add-rule-toggle:hover {
+    border-color: var(--adm-primary);
+    background: rgba(99, 102, 241, 0.04);
+    color: var(--adm-primary);
+}
+.add-rule-toggle .toggle-icon {
+    margin-left: auto;
+    transition: transform 0.2s;
+    font-size: 0.8rem;
+    color: var(--adm-text-sec);
+}
+.add-rule-section.open .add-rule-toggle .toggle-icon {
+    transform: rotate(180deg);
+}
+.add-rule-section.open .add-rule-toggle {
+    border-style: solid;
+    border-color: var(--adm-primary);
+}
+
+/* Контейнер формы (внутри раскрытой панели) */
+.add-rule-form {
+    margin-top: 12px;
+    padding: 16px;
+    background: var(--adm-bg);
+    border: 1px solid var(--adm-border);
+    border-radius: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+/* Пары полей (Название + Замена) */
+.form-row-pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+@media (max-width: 600px) {
+    .form-row-pair { grid-template-columns: 1fr; }
+}
+
+/* Одно поле в форме */
+.form-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0; /* чтобы input не вылезал */
+}
+.form-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--adm-text-sec);
+}
+.form-field input[type="text"] {
+    width: 100%;
+    padding: 10px 12px;
+    border: 2px solid var(--adm-border);
+    border-radius: 8px;
+    background: var(--adm-surface);
+    color: var(--adm-text);
+    font-size: 0.9rem;
+    font-family: inherit;
+    transition: all 0.15s;
+}
+.form-field input[type="text"]:focus {
+    border-color: var(--adm-primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+    outline: none;
+}
+.form-field input.input-mono {
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 0.85rem;
+}
+
+/* Pill-чекбоксы для таргетов */
+.target-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+.target-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 12px;
+    border: 1.5px solid var(--adm-border);
+    border-radius: 20px;
+    background: var(--adm-surface);
+    color: var(--adm-text);
+    font-size: 0.82rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+    user-select: none;
+    white-space: nowrap;
+}
+.target-pill:hover {
+    border-color: var(--adm-primary);
+    color: var(--adm-primary);
+}
+.target-pill input[type="checkbox"] {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+    width: 0;
+    height: 0;
+}
+.target-pill i {
+    font-size: 0.75rem;
+    opacity: 0.7;
+}
+.target-pill.checked {
+    background: rgba(99, 102, 241, 0.12);
+    border-color: var(--adm-primary);
+    color: var(--adm-primary);
+}
+.target-pill.checked i {
+    opacity: 1;
+}
+
+/* Кнопки в форме добавления */
+.form-row-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+}
+.form-row-actions .btn {
+    min-width: 120px;
+    justify-content: center;
+}
+@media (max-width: 480px) {
+    .form-row-actions .btn { min-width: 0; flex: 1 1 auto; }
+}
+
+/* === КНОПКА GHOST (Отмена) === */
+.btn-ghost {
+    background: transparent;
+    color: var(--adm-text-sec);
+    border: 1px solid var(--adm-border);
+}
+.btn-ghost:hover {
+    background: var(--adm-bg);
+    color: var(--adm-text);
+    border-color: var(--adm-text-sec);
+}
+
+/* === Модалка preview правила === */
+.preview-modal .modal-window {
+    max-width: 720px;
+}
+.preview-meta {
+    padding: 12px 14px;
+    background: var(--adm-bg);
+    border: 1px solid var(--adm-border);
+    border-radius: 8px;
+    margin-bottom: 16px;
+}
+.preview-rule-name {
+    font-weight: 600;
+    color: var(--adm-text);
+    margin-bottom: 6px;
+    font-size: 0.95rem;
+}
+.preview-rule-pattern {
+    display: inline-block;
+    padding: 4px 10px;
+    background: var(--adm-surface);
+    border: 1px solid var(--adm-border);
+    border-radius: 6px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 0.8rem;
+    color: var(--adm-primary);
+    word-break: break-all;
+}
+.preview-rule-targets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+.preview-label {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--adm-text-sec);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 14px 0 6px;
+}
+.preview-input,
+.preview-output {
+    width: 100%;
+    min-height: 70px;
+    padding: 10px 12px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 0.85rem;
+    border: 2px solid var(--adm-border);
+    border-radius: 8px;
+    background: var(--adm-bg);
+    color: var(--adm-text);
+    resize: vertical;
+    line-height: 1.4;
+}
+.preview-input:focus {
+    border-color: var(--adm-primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+    outline: none;
+}
+.preview-output {
+    background: rgba(16, 185, 129, 0.04);
+    border-color: rgba(16, 185, 129, 0.3);
+    min-height: 50px;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.preview-run {
+    margin: 10px 0 4px;
+}
+.preview-steps {
+    margin-top: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.preview-step {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 8px 12px;
+    background: var(--adm-bg);
+    border-left: 3px solid var(--adm-primary);
+    border-radius: 0 6px 6px 0;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 0.78rem;
+}
+.preview-step code {
+    padding: 2px 6px;
+    background: var(--adm-surface);
+    border: 1px solid var(--adm-border);
+    border-radius: 4px;
+    max-width: 240px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.preview-step .arrow {
+    color: var(--adm-primary);
+    font-weight: bold;
+    font-family: inherit;
+}
+.preview-step .step-label {
+    color: var(--adm-text-sec);
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-family: inherit;
+    margin-right: 4px;
+}
+.preview-step .step-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.7rem;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-family: inherit;
+    margin-left: auto;
+}
+.preview-step .step-status.matched {
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--adm-success);
+}
+.preview-step .step-status.no-match {
+    background: rgba(100, 116, 139, 0.1);
+    color: var(--adm-text-sec);
+}
+
+/* === Phase 4: collection config modal sections === */
+.config-section {
+    padding: 16px;
+    background: var(--adm-bg);
+    border: 1px solid var(--adm-border);
+    border-radius: 10px;
+    margin-bottom: 14px;
+}
+.config-section-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--adm-text);
+    margin-bottom: 12px;
+}
+.config-section-title i {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(99, 102, 241, 0.12);
+    color: var(--adm-primary);
+    border-radius: 6px;
+    font-size: 0.75rem;
+}
+.config-section-title small {
+    margin-left: auto;
+    font-weight: 400;
+    font-size: 0.72rem;
+    color: var(--adm-text-sec);
+    text-align: right;
+}
+.config-section-deprecated {
+    background: var(--adm-surface);
+    border-style: dashed;
+}
+.config-section-deprecated summary {
+    cursor: pointer;
+    list-style: none;
+    margin-bottom: 0;
+}
+.config-section-deprecated summary::-webkit-details-marker {
+    display: none;
+}
+.config-section-deprecated[open] summary {
+    margin-bottom: 12px;
+}
+.config-checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    user-select: none;
+    font-size: 0.9rem;
+}
+.config-checkbox-row input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--adm-primary);
+    cursor: pointer;
+}

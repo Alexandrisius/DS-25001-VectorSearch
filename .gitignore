@@ -1,40 +1,69 @@
-# Python
+# ===== Python =====
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
-.env
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+.coverage.*
+.tox/
+
+# ===== Virtual environments =====
 .venv/
 venv/
 env/
+.ENV/
 
-# Данные (эти файлы НЕ нужно хранить в Git)
-data/01_raw/
-data/02_interim/
-data/03_processed/
-data/04_feedback/
-!data/02_interim/KSR_clean.csv  # ← но этот оставим — он маленький и важный
-!data/03_processed/metadata.parquet  # ← метаданные — тоже оставим (лёгкие и нужные)
-# embeddings.npy НЕ коммитим — 2+ ГБ
+# ===== IDE =====
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
 
-# Модели (НЕ коммитим!)
-D:/hf_cache/
-/hf_cache/
+# ===== Secrets / Local config =====
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+secrets/
+
+# ===== Build / Distribution =====
+dist/
+build/
+*.whl
+
+# ===== Application data (Docker volumes in production) =====
+data/
+storage/
+qdrant_storage/
+postgres_data/
+redis_data/
+backups/
+*.log
+logs/
+
+# ===== Celery =====
+celerybeat-schedule
+celerybeat-schedule.db
+
+# ===== OS =====
+.DS_Store
+desktop.ini
+
+# ===== Models (NOT in repo, download on demand) =====
+hf_cache/
 *.bin
 *.safetensors
 *.pt
 *.pth
-
-# IDE
-.vscode/
-!.vscode/settings.json
-!.vscode/launch.json
-
-# Логи и временные файлы
-*.log
-*.tmp
-*.temp
-Thumbs.db
-
-# VS Code
-.history/
+*.gguf

@@ -1,0 +1,432 @@
+"""Settings API — /admin/statuses, /admin/cleaning_rules, /admin/openrouter-settings."""
+from __future__ import annotations
+
+import re
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from loguru import logger
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.exceptions import NotFoundError
+from app.deps import DBSession, get_current_admin
+from app.schemas.settings import (
+    ApiProviderOut,
+    ApiProviderUpdate,
+    CleaningRuleOut,
+    CleaningRuleUpdate,
+    StatusConfigOut,
+    StatusesUpdateRequest,
+)
+from app.services.cleaning_runner import CleaningRunner
+from app.services.settings_service import SettingsService
+
+router = APIRouter(prefix="/admin", tags=["admin-settings"])
+
+
+# ---------------------------------------------------------------- statuses
+@router.get("/statuses")
+async def get_statuses(session: DBSession) -> dict:
+    """Публичный endpoint (без auth) — для загрузки в UI."""
+    svc = SettingsService(session)
+    statuses = await svc.list_statuses()
+    default = await svc.get_default_status()
+    return {
+        "statuses": [
+            {
+                "id": s.id,
+                "label": s.label,
+                "color": s.color,
+            }
+            for s in statuses
+        ],
+        "default_status": default.id if default else "active",
+    }
+
+
+@router.put("/statuses", dependencies=[Depends(get_current_admin)])
+async def update_statuses(
+    req: StatusesUpdateRequest, session: DBSession
+) -> dict:
+    svc = SettingsService(session)
+    updated = await svc.update_statuses(
+        [s.model_dump() for s in req.statuses], default_id=req.default_status
+    )
+    return {
+        "status": "success",
+        "statuses": [
+            StatusConfigOut(
+                id=s.id,
+                label=s.label,
+                color=s.color,
+                is_default=s.is_default,
+                sort_order=s.sort_order,
+            ).model_dump()
+            for s in updated
+        ],
+        "default_status": req.default_status,
+    }
+
+
+# -------------------------------------------------------- cleaning_rules
+@router.get("/cleaning_rules")
+async def get_cleaning_rules(session: DBSession) -> dict:
+    """Публичный."""
+    svc = SettingsService(session)
+    rules = await svc.list_cleaning_rules()
+    return {
+        "rules": [
+            CleaningRuleOut(
+                id=r.id,
+                name=r.name,
+                pattern=r.pattern,
+                replacement=r.replacement,
+                enabled=r.enabled,
+                apply_to_columns=r.apply_to_columns,
+                sort_order=r.sort_order,
+            ).model_dump()
+            for r in rules
+        ]
+    }
+
+
+@router.put("/cleaning_rules", dependencies=[Depends(get_current_admin)])
+async def update_cleaning_rules(
+    rules: list[CleaningRuleUpdate], session: DBSession
+) -> dict:
+    # Валидация regex
+    for r in rules:
+        try:
+            re.compile(r.pattern)
+        except re.error as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Невалидный regex в '{r.name}': {e}",
+            )
+    svc = SettingsService(session)
+    updated = await svc.update_cleaning_rules([r.model_dump() for r in rules])
+    # Сбросить кэш CleaningRunner, чтобы следующий импорт подхватил
+    # новые правила сразу, а не через TTL (60 сек).
+    CleaningRunner.clear_cache()
+    return {
+        "status": "success",
+        "rules": [
+            CleaningRuleOut(
+                id=r.id,
+                name=r.name,
+                pattern=r.pattern,
+                replacement=r.replacement,
+                enabled=r.enabled,
+                apply_to_columns=r.apply_to_columns,
+                sort_order=r.sort_order,
+            ).model_dump()
+            for r in updated
+        ],
+    }
+
+
+# --------------------------------------------------------- openrouter
+@router.get("/openrouter-settings")
+async def get_openrouter_settings(session: DBSession) -> dict:
+    """Публичный (маскированный ключ)."""
+    svc = SettingsService(session)
+    prov = await svc.get_provider("openrouter")
+    if not prov:
+        return {
+            "enabled": False,
+            "api_key": "",
+            "api_key_set": False,
+            "base_url": "",
+            "model_embed": "qwen/qwen3-embedding-4b",
+            "model_rerank": "cohere/rerank-4-pro",
+            "batch_size": 10,
+            "max_workers": 3,
+        }
+    from app.core.security import decrypt_secret
+    plain = decrypt_secret(prov.api_key_encrypted) if prov.api_key_encrypted else ""
+    return {
+        "enabled": prov.enabled,
+        "api_key": svc.mask_api_key(plain),
+        "api_key_set": bool(prov.api_key_encrypted),
+        "base_url": prov.base_url or "",
+        "model_embed": prov.model_embed,
+        "model_rerank": prov.model_rerank,
+        "batch_size": prov.batch_size,
+        "max_workers": prov.max_workers,
+    }
+
+
+@router.put("/openrouter-settings", dependencies=[Depends(get_current_admin)])
+async def update_openrouter_settings(
+    req: ApiProviderUpdate, request: Request, session: DBSession
+) -> dict:
+    svc = SettingsService(session)
+    prov = await svc.update_provider(
+        "openrouter",
+        enabled=req.enabled,
+        api_key=req.api_key or None,
+        base_url=req.base_url,
+        model_embed=req.model_embed,
+        model_rerank=req.model_rerank,
+        batch_size=req.batch_size,
+        max_workers=req.max_workers,
+    )
+    # Сбросить singleton EmbeddingService в app.state, чтобы при следующем
+    # /match lazy fallback пересоздал его с актуальным ключом из БД.
+    # Иначе embedding_service живёт до рестарта API со старым api_key.
+    if hasattr(request.app.state, "embedding_service"):
+        request.app.state.embedding_service = None
+        logger.info("🔄 EmbeddingService singleton reset (api_key changed in DB)")
+    return {
+        "status": "success",
+        "enabled": prov.enabled,
+        "base_url": prov.base_url or "",
+        "model_embed": prov.model_embed,
+        "model_rerank": prov.model_rerank,
+        "batch_size": prov.batch_size,
+        "max_workers": prov.max_workers,
+        "api_key_set": bool(prov.api_key_encrypted),
+    }
+
+
+@router.post("/openrouter-test", dependencies=[Depends(get_current_admin)])
+async def test_openrouter(session: DBSession) -> dict:
+    """Тест подключения к эмбеддинг И реранк endpoint.
+
+    Возвращает структурированный результат для каждой модели отдельно:
+    {
+        "embed": {"status": "success|error", "model": "...", "message": "..."},
+        "rerank": {"status": "success|error|skipped", "model": "...", "message": "..."},
+    }
+    """
+    import httpx
+    from app.core.security import decrypt_secret
+    from app.services.embedding_service import _resolve_embed_url
+    from app.services.rerank_service import _resolve_rerank_url
+
+    svc = SettingsService(session)
+    prov = await svc.get_provider("openrouter")
+    if not prov or not prov.api_key_encrypted:
+        return {
+            "embed": {"status": "error", "model": "", "message": "API ключ не настроен"},
+            "rerank": {"status": "error", "model": "", "message": "API ключ не настроен"},
+        }
+
+    api_key = decrypt_secret(prov.api_key_encrypted)
+    common_headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    if not prov.base_url:
+        # OpenRouter требует эти headers (иначе 403)
+        # Используем X-Title (старое имя) — X-OpenRouter-Title ломает
+        common_headers["HTTP-Referer"] = "https://ksr-matcher.local"
+        common_headers["X-Title"] = "KSR Matcher"
+
+    async def test_embed() -> dict:
+        endpoint = _resolve_embed_url(prov.base_url)
+        payload: dict = {"model": prov.model_embed, "input": "test connection"}
+        if not prov.base_url or "openrouter.ai" in prov.base_url:
+            payload["encoding_format"] = "float"
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                resp = await client.post(endpoint, headers=common_headers, json=payload)
+            if resp.status_code == 200:
+                data = resp.json()
+                if "error" in data:
+                    return {
+                        "status": "error",
+                        "model": prov.model_embed,
+                        "message": data["error"].get("message", "Error"),
+                    }
+                if "data" in data and data["data"]:
+                    dim = len(data["data"][0].get("embedding", []))
+                    return {
+                        "status": "success",
+                        "model": prov.model_embed,
+                        "message": f"OK! Размерность: {dim}",
+                    }
+                return {
+                    "status": "error",
+                    "model": prov.model_embed,
+                    "message": "Неожиданный формат ответа",
+                }
+            if resp.status_code == 401:
+                return {
+                    "status": "error",
+                    "model": prov.model_embed,
+                    "message": "Неверный API ключ",
+                }
+            if resp.status_code == 403:
+                is_html = "<!doctype" in resp.text.lower() or "<html" in resp.text.lower()
+                if is_html:
+                    return {
+                        "status": "error",
+                        "model": prov.model_embed,
+                        "message": (
+                            "403 Forbidden (Cloudflare). "
+                            "Проверь ключ на openrouter.ai/keys"
+                        ),
+                    }
+                return {
+                    "status": "error",
+                    "model": prov.model_embed,
+                    "message": "Forbidden",
+                }
+            if resp.status_code == 404:
+                return {
+                    "status": "error",
+                    "model": prov.model_embed,
+                    "message": f"Endpoint не найден: {endpoint}",
+                }
+            return {
+                "status": "error",
+                "model": prov.model_embed,
+                "message": f"Ошибка API ({resp.status_code}): {resp.text[:200]}",
+            }
+        except httpx.TimeoutException:
+            return {
+                "status": "error",
+                "model": prov.model_embed,
+                "message": "Таймаут подключения",
+            }
+        except httpx.ConnectError as e:
+            return {
+                "status": "error",
+                "model": prov.model_embed,
+                "message": f"Не удалось подключиться: {e}",
+            }
+        except Exception as e:
+            return {
+                "status": "error",
+                "model": prov.model_embed,
+                "message": f"Ошибка: {e}",
+            }
+
+    async def test_rerank() -> dict:
+        endpoint = _resolve_rerank_url(prov.base_url)
+        payload: dict = {
+            "model": prov.model_rerank,
+            "query": "test",
+            "documents": ["document 1", "document 2"],
+        }
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                resp = await client.post(endpoint, headers=common_headers, json=payload)
+            if resp.status_code == 200:
+                data = resp.json()
+                if "error" in data:
+                    return {
+                        "status": "error",
+                        "model": prov.model_rerank,
+                        "message": data["error"].get("message", "Error"),
+                    }
+                if "results" in data and isinstance(data["results"], list):
+                    return {
+                        "status": "success",
+                        "model": prov.model_rerank,
+                        "message": f"OK! Получено {len(data['results'])} оценок",
+                    }
+                if "scores" in data and isinstance(data["scores"], list):
+                    return {
+                        "status": "success",
+                        "model": prov.model_rerank,
+                        "message": f"OK! Получено {len(data['scores'])} оценок",
+                    }
+                return {
+                    "status": "error",
+                    "model": prov.model_rerank,
+                    "message": "Неожиданный формат ответа",
+                }
+            if resp.status_code == 401:
+                return {
+                    "status": "error",
+                    "model": prov.model_rerank,
+                    "message": "Неверный API ключ",
+                }
+            if resp.status_code == 403:
+                # OpenRouter /rerank может отдавать HTML 403 через Cloudflare guardrail
+                # Типичные причины: скомпрометированный ключ, недостаточно прав,
+                # или модель недоступна через /rerank endpoint
+                is_html = "<!doctype" in resp.text.lower() or "<html" in resp.text.lower()
+                if is_html:
+                    return {
+                        "status": "error",
+                        "model": prov.model_rerank,
+                        "message": (
+                            "403 Forbidden (Cloudflare guardrail). "
+                            "Попробуй: 1) проверить ключ на openrouter.ai/keys, "
+                            "2) проверить баланс, "
+                            "3) попробовать другую модель rerank"
+                        ),
+                    }
+                try:
+                    err_data = resp.json()
+                    return {
+                        "status": "error",
+                        "model": prov.model_rerank,
+                        "message": err_data.get("error", {}).get("message", "Forbidden"),
+                    }
+                except Exception:
+                    return {
+                        "status": "error",
+                        "model": prov.model_rerank,
+                        "message": "Forbidden",
+                    }
+            if resp.status_code == 404:
+                return {
+                    "status": "error",
+                    "model": prov.model_rerank,
+                    "message": f"Модель не поддерживает /rerank или endpoint не найден",
+                }
+            return {
+                "status": "error",
+                "model": prov.model_rerank,
+                "message": f"Ошибка API ({resp.status_code}): {resp.text[:200]}",
+            }
+        except httpx.TimeoutException:
+            return {
+                "status": "error",
+                "model": prov.model_rerank,
+                "message": "Таймаут подключения",
+            }
+        except httpx.ConnectError as e:
+            return {
+                "status": "error",
+                "model": prov.model_rerank,
+                "message": f"Не удалось подключиться: {e}",
+            }
+        except Exception as e:
+            return {
+                "status": "error",
+                "model": prov.model_rerank,
+                "message": f"Ошибка: {e}",
+            }
+
+    embed_result = await test_embed()
+    rerank_result = await test_rerank()
+
+    # Общий статус
+    overall = "success"
+    if embed_result["status"] != "success" or rerank_result["status"] != "success":
+        overall = "error"
+
+    return {
+        "status": overall,
+        "embed": embed_result,
+        "rerank": rerank_result,
+    }
+
+
+@router.get("/embedding_dimension", dependencies=[Depends(get_current_admin)])
+async def get_embedding_dimension(session: DBSession) -> dict:
+    from app.services.embedding_service import EmbeddingService
+    svc = SettingsService(session)
+    prov = await svc.get_active_provider() or await svc.get_provider("openrouter")
+    if not prov:
+        return {"dimension": 2560, "provider": "unknown", "model": "default"}
+    dim = EmbeddingService.known_dimension(prov.model_embed) or 2560
+    return {
+        "dimension": dim,
+        "provider": "openrouter" if prov.enabled else "local",
+        "model": prov.model_embed,
+    }

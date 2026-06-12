@@ -1,0 +1,1028 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>Админ-панель | KSR Matcher</title>
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg?v=3">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/font-awesome.min.css?v=3">
+    <link rel="stylesheet" href="/static/css/admin.css?v=4">
+</head>
+
+<body>
+
+    <!-- === ПРЕДУПРЕЖДЕНИЕ ДЛЯ МОБИЛЬНЫХ УСТРОЙСТВ === -->
+    <div id="mobileWarning" class="mobile-warning-overlay hidden">
+        <div class="mobile-warning-card">
+            <i class="fas fa-desktop"></i>
+            <h2>Админ-панель оптимизирована для ПК</h2>
+            <p>Для полноценной работы с админ-панелью рекомендуется использовать компьютер с большим экраном.</p>
+            <p style="font-size: 0.85rem; opacity: 0.8;">На мобильных устройствах некоторые функции могут работать
+                некорректно.</p>
+            <button id="mobileWarningClose" class="btn btn-primary">Понятно, продолжить</button>
+        </div>
+    </div>
+
+    <!-- === ЭКРАН ВХОДА === -->
+    <div id="loginScreen" class="login-container hidden">
+        <div class="login-card">
+            <h2>Вход в админку</h2>
+            <input type="password" id="authPassword" placeholder="Введите пароль..." autofocus>
+            <button id="authBtn" class="btn btn-primary">Войти</button>
+            <div id="authError" class="hidden" style="color: #f87171; margin-top: 15px;">Неверный пароль</div>
+        </div>
+    </div>
+
+    <!-- === ПАНЕЛЬ УПРАВЛЕНИЯ === -->
+    <div id="adminApp" class="dashboard-layout hidden">
+
+        <!-- Боковая панель -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <i class="fas fa-bolt" style="color: var(--adm-primary);"></i> Админ-панель
+            </div>
+
+            <nav class="nav-links">
+                <a href="#" class="nav-item active" data-view="collections">
+                    <i class="fas fa-database"></i> Коллекции
+                </a>
+                <a href="#" class="nav-item" data-view="jobs">
+                    <i class="fas fa-tasks"></i> Фоновые задачи
+                </a>
+                <a href="#" class="nav-item" data-view="settings">
+                    <i class="fas fa-cog"></i> Настройки
+                </a>
+            </nav>
+
+            <div class="sidebar-footer">
+                <a href="/" class="nav-item">
+                    <i class="fas fa-external-link-alt"></i> К поиску
+                </a>
+                <button id="logoutBtn" class="nav-item"
+                    style="width: 100%; border: none; background: none; text-align: left;">
+                    <i class="fas fa-sign-out-alt"></i> Выйти
+                </button>
+            </div>
+        </aside>
+
+        <!-- Основной контент -->
+        <main class="main-content">
+            <header class="top-bar">
+                <h1 id="pageTitle" class="page-title">Коллекции</h1>
+                <div id="headerActions">
+                    <!-- Динамические кнопки -->
+                </div>
+            </header>
+
+            <div id="contentBody" class="content-body">
+
+                <!-- ВИД: СЕТКА КОЛЛЕКЦИЙ -->
+                <div id="viewCollections" class="view-section">
+                    <div id="collectionsGrid" class="collections-grid">
+                        <!-- Карточки через JS -->
+                    </div>
+                </div>
+
+                <!-- ВИД: ТАБЛИЦА ДАННЫХ -->
+                <div id="viewData" class="view-section hidden">
+                    <div class="table-container data-table-container">
+                        <div class="table-scroll data-table-scroll">
+                            <table id="dataTable" class="data-table-full">
+                                <thead id="dataTableHead">
+                                    <!-- Заголовок генерируется динамически через JS -->
+                                    <tr>
+                                        <th class="sortable" data-sort="code"
+                                            style="min-width: 150px; text-align: center;">
+                                            Код <i class="fas fa-sort sort-icon"></i>
+                                        </th>
+                                        <th class="sortable" data-sort="description" style="min-width: 300px;">
+                                            Описание <i class="fas fa-sort sort-icon"></i>
+                                        </th>
+                                        <th style="width: 80px; text-align: center;">Действия</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="dataTableBody"></tbody>
+                            </table>
+                            <!-- Sentinel для IntersectionObserver (infinite scroll) -->
+                            <div id="scrollSentinel" class="scroll-sentinel"></div>
+                        </div>
+                        <!-- Индикатор загрузки для infinite scroll -->
+                        <div id="infiniteScrollLoader" class="infinite-scroll-loader hidden">
+                            <i class="fas fa-spinner"></i>
+                            <span>Загрузка данных...</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ВИД: ЗАДАЧИ -->
+                <div id="viewJobs" class="view-section hidden">
+                    <div class="table-container">
+                        <table id="jobsTable">
+                            <thead>
+                                <tr>
+                                    <th>ID задачи</th>
+                                    <th>Тип</th>
+                                    <th>Статус</th>
+                                    <th>Прогресс</th>
+                                    <th>Детали</th>
+                                    <th>Создано</th>
+                                    <th>Действия</th>
+                                </tr>
+                            </thead>
+                            <tbody id="jobsTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- ВИД: НАСТРОЙКИ -->
+                <div id="viewSettings" class="view-section hidden">
+                    <div class="settings-grid">
+                        <!-- Карточка: Управление статусами -->
+                        <div class="settings-card">
+                            <div class="settings-card-header">
+                                <i class="fas fa-palette"></i>
+                                <h3>Статусы записей</h3>
+                            </div>
+                            <p class="settings-card-desc">
+                                Настройте статусы для управления жизненным циклом записей в коллекциях.
+                                Каждый статус имеет уникальный идентификатор, название и цвет для визуального различия.
+                            </p>
+
+                            <!-- Список существующих статусов -->
+                            <div id="statusesList" class="status-list">
+                                <!-- Заполняется через JS -->
+                            </div>
+
+                            <!-- Форма добавления нового статуса -->
+                            <div class="add-status-section">
+                                <div class="add-status-header">
+                                    <i class="fas fa-plus"></i>
+                                    <span>Добавить новый статус</span>
+                                </div>
+                                <div class="add-status-row">
+                                    <input type="text" id="newStatusId" placeholder="ID (review, pending...)">
+                                    <input type="text" id="newStatusLabel" placeholder="Название статуса">
+                                    <div class="new-status-color-wrapper">
+                                        <div class="new-status-color-preview" id="newStatusColorPreview"
+                                            style="background: #6366f1;"></div>
+                                        <input type="color" id="newStatusColor" value="#6366f1">
+                                    </div>
+                                    <button id="addStatusBtn" class="btn btn-primary" title="Добавить статус">
+                                        <i class="fas fa-plus"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Статус по умолчанию -->
+                            <div class="default-status-section">
+                                <div class="default-status-header">
+                                    <i class="fas fa-star"></i>
+                                    <span>Статус по умолчанию</span>
+                                </div>
+                                <p class="default-status-description">
+                                    Этот статус будет автоматически присваиваться новым записям при импорте и создании.
+                                </p>
+                                <select id="defaultStatusSelect" class="form-select-modern">
+                                    <!-- Заполняется через JS -->
+                                </select>
+                            </div>
+
+                            <!-- Кнопка сохранения -->
+                            <div class="save-statuses-section">
+                                <button id="saveStatusesBtn" class="btn btn-primary">
+                                    <i class="fas fa-save"></i> Сохранить изменения
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Карточка: Настройки LLM API (OpenRouter / LM Studio) -->
+                        <div class="settings-card">
+                            <div class="settings-card-header">
+                                <i class="fas fa-cloud"></i>
+                                <h3>LLM API (эмбеддинги + реранкер)</h3>
+                            </div>
+                            <p class="settings-card-desc">
+                                Подключите OpenRouter или собственный OpenAI-совместимый сервер
+                                (LM Studio, Ollama, vLLM) для генерации эмбеддингов и кросс-энкодер реранкинга.
+                            </p>
+
+                            <!-- Toggle включения провайдера -->
+                            <div class="openrouter-toggle-section">
+                                <div class="toggle-row">
+                                    <div class="toggle-info">
+                                        <span class="toggle-label">Использовать LLM API</span>
+                                        <span class="toggle-hint">Все эмбеддинги и реранкинг через внешний сервис</span>
+                                    </div>
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" id="openrouterEnabled">
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- API Key -->
+                            <div class="openrouter-field-section">
+                                <label class="field-label">
+                                    <i class="fas fa-key"></i>
+                                    API Key
+                                </label>
+                                <div class="api-key-input-wrapper">
+                                    <input type="password" id="openrouterApiKey" placeholder="sk-or-v1-..."
+                                        autocomplete="off">
+                                    <button type="button" class="toggle-visibility-btn" id="toggleApiKeyVisibility"
+                                        title="Показать/скрыть">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                </div>
+                                <p class="field-hint">
+                                    OpenRouter: получите ключ на
+                                    <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">openrouter.ai/keys</a>.
+                                    Для LM Studio можно ввести любое значение (например <code>lm-studio</code>) — оно
+                                    игнорируется.
+                                </p>
+                            </div>
+
+                            <!-- Base URL (опционально) -->
+                            <div class="openrouter-field-section">
+                                <label class="field-label">
+                                    <i class="fas fa-link"></i>
+                                    Base URL
+                                    <span style="font-weight: normal; color: var(--adm-text-sec); font-size: 0.85rem;">
+                                        (опционально, для OpenAI-совместимых серверов)
+                                    </span>
+                                </label>
+                                <input type="text" id="openrouterBaseUrl"
+                                    placeholder="http://host.docker.internal:1234/v1"
+                                    class="form-input" autocomplete="off">
+                                <p class="field-hint">
+                                    <i class="fas fa-info-circle"></i>
+                                    Оставьте пустым для OpenRouter.
+                                    Для <b>LM Studio</b> внутри Docker на этом же ПК используйте
+                                    <code>http://host.docker.internal:1234/v1</code>.
+                                </p>
+                            </div>
+
+                            <!-- Модель эмбеддингов -->
+                            <div class="openrouter-field-section">
+                                <label class="field-label">
+                                    <i class="fas fa-brain"></i>
+                                    Модель эмбеддингов
+                                </label>
+                                <input type="text" id="openrouterModel" class="form-input"
+                                    placeholder="qwen/qwen3-embedding-4b"
+                                    list="embedModelsList" autocomplete="off">
+                                <datalist id="embedModelsList">
+                                    <option value="qwen/qwen3-embedding-8b">
+                                    <option value="qwen/qwen3-embedding-4b">
+                                    <option value="openai/text-embedding-3-small">
+                                    <option value="openai/text-embedding-3-large">
+                                    <option value="baai/bge-m3">
+                                    <option value="google/gemini-embedding-001">
+                                    <option value="text-embedding-nomic-embed-text-v1.5">
+                                    <option value="nomic-embed-text-v1.5">
+                                </datalist>
+                                <p class="field-hint">
+                                    Имя модели из OpenRouter <i>или</i> имя модели, загруженной в LM Studio.
+                                </p>
+                            </div>
+
+                            <!-- Модель реранкера (cross-encoder) -->
+                            <div class="openrouter-field-section">
+                                <label class="field-label">
+                                    <i class="fas fa-sort-amount-down"></i>
+                                    Модель реранкера (cross-encoder)
+                                </label>
+                                <input type="text" id="openrouterRerankModel" class="form-input"
+                                    placeholder="cohere/rerank-4-pro"
+                                    list="rerankModelsList" autocomplete="off">
+                                <datalist id="rerankModelsList">
+                                    <option value="cohere/rerank-4-pro">
+                                    <option value="cohere/rerank-4-fast">
+                                </datalist>
+                                <p class="field-hint">
+                                    На OpenRouter доступны только <b>cohere/rerank-4-pro</b>
+                                    и <b>cohere/rerank-4-fast</b>.
+                                </p>
+                            </div>
+
+                            <!-- Настройки батчинга -->
+                            <div class="openrouter-field-section">
+                                <label class="field-label">
+                                    <i class="fas fa-layer-group"></i>
+                                    Параметры батчинга
+                                </label>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                                    <div>
+                                        <label style="display: block; margin-bottom: 5px; font-size: 0.85rem; color: var(--adm-text-sec);">Размер батча</label>
+                                        <input type="number" id="openrouterBatchSize" min="1" max="100" value="10" class="form-input">
+                                        <p class="field-hint">Текстов за один API запрос</p>
+                                    </div>
+                                    <div>
+                                        <label style="display: block; margin-bottom: 5px; font-size: 0.85rem; color: var(--adm-text-sec);">Параллельные потоки</label>
+                                        <input type="number" id="openrouterMaxWorkers" min="1" max="20" value="3" class="form-input">
+                                        <p class="field-hint">Кол-во одновременных запросов</p>
+                                    </div>
+                                </div>
+                                <p class="field-hint" style="margin-top: 8px;">
+                                    <i class="fas fa-info-circle"></i>
+                                    Уменьшите значения при ошибках "No successful provider responses"
+                                </p>
+                            </div>
+
+                            <!-- Статус подключения: Embed + Rerank -->
+                            <div class="openrouter-status-section" id="openrouterStatus">
+                                <div class="status-row" id="openrouterEmbedStatus">
+                                    <div class="status-indicator" id="openrouterEmbedIndicator">
+                                        <i class="fas fa-circle"></i>
+                                    </div>
+                                    <div class="status-text-block">
+                                        <div class="status-label">Эмбеддинги:</div>
+                                        <div class="status-model" id="openrouterEmbedModel">—</div>
+                                        <div class="status-message" id="openrouterEmbedMessage">Нажмите «Проверить подключение»</div>
+                                    </div>
+                                </div>
+                                <div class="status-row" id="openrouterRerankStatus">
+                                    <div class="status-indicator" id="openrouterRerankIndicator">
+                                        <i class="fas fa-circle"></i>
+                                    </div>
+                                    <div class="status-text-block">
+                                        <div class="status-label">Реранкер:</div>
+                                        <div class="status-model" id="openrouterRerankModelText">—</div>
+                                        <div class="status-message" id="openrouterRerankMessage">Нажмите «Проверить подключение»</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Кнопки действий -->
+                            <div class="openrouter-actions">
+                                <button id="testOpenrouterBtn" class="btn btn-outline">
+                                    <i class="fas fa-plug"></i> Проверить подключение
+                                </button>
+                                <button id="saveOpenrouterBtn" class="btn btn-primary">
+                                    <i class="fas fa-save"></i> Сохранить
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Карточка: Правила очистки данных -->
+                        <div class="settings-card">
+                            <div class="settings-card-header">
+                                <i class="fas fa-broom"></i>
+                                <h3>Правила очистки данных</h3>
+                            </div>
+                            <p class="settings-card-desc">
+                                Regex-правила для предобработки текстов при импорте.
+                                Применяются к описанию материалов, иерархии и её уровням.
+                            </p>
+
+                            <!-- Готовые шаблоны (раскрывающийся список) -->
+                            <div class="templates-section" id="templatesSection">
+                                <button id="templatesToggle" class="templates-toggle" type="button">
+                                    <i class="fas fa-lightbulb"></i>
+                                    <span>Готовые шаблоны</span>
+                                    <i class="fas fa-chevron-down toggle-icon"></i>
+                                </button>
+                                <div id="templatesList" class="templates-list" hidden>
+                                    <!-- Заполняется JS -->
+                                </div>
+                            </div>
+
+                            <!-- Список текущих правил -->
+                            <div id="cleaningRulesList" class="cleaning-rules-list">
+                                <!-- Заполняется JS -->
+                            </div>
+
+                            <!-- Форма добавления нового правила (свёрнута по умолчанию) -->
+                            <div class="add-rule-section" id="addRuleSection">
+                                <button id="addRuleToggle" class="add-rule-toggle" type="button">
+                                    <i class="fas fa-plus"></i>
+                                    <span>Новое правило</span>
+                                    <i class="fas fa-chevron-down toggle-icon"></i>
+                                </button>
+                                <div id="addRuleForm" class="add-rule-form" hidden>
+                                    <div class="form-row form-row-pair">
+                                        <div class="form-field">
+                                            <label class="form-label" for="newRuleName">Название</label>
+                                            <input type="text" id="newRuleName"
+                                                placeholder="Кратко о чём правило">
+                                        </div>
+                                        <div class="form-field">
+                                            <label class="form-label" for="newRuleReplacement">Замена</label>
+                                            <input type="text" id="newRuleReplacement"
+                                                placeholder="Пусто = удалить">
+                                        </div>
+                                    </div>
+                                    <div class="form-field">
+                                        <label class="form-label" for="newRulePattern">Regex-паттерн</label>
+                                        <input type="text" id="newRulePattern" class="input-mono"
+                                            placeholder="\\s+">
+                                    </div>
+                                    <div class="form-field">
+                                        <label class="form-label">Применить к</label>
+                                        <div class="target-pills" id="newRuleTargets">
+                                            <label class="target-pill" data-target="description">
+                                                <input type="checkbox" name="newRuleTarget" value="description">
+                                                <i class="fas fa-align-left"></i>
+                                                <span>Описание</span>
+                                            </label>
+                                            <label class="target-pill" data-target="hierarchy">
+                                                <input type="checkbox" name="newRuleTarget" value="hierarchy">
+                                                <i class="fas fa-sitemap"></i>
+                                                <span>Иерархия</span>
+                                            </label>
+                                            <label class="target-pill" data-target="hierarchy_level">
+                                                <input type="checkbox" name="newRuleTarget" value="hierarchy_level" checked>
+                                                <i class="fas fa-layer-group"></i>
+                                                <span>Уровни иерархии</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="form-row form-row-actions">
+                                        <button id="cancelAddRuleBtn" class="btn btn-ghost" type="button">
+                                            Отмена
+                                        </button>
+                                        <button id="previewCleaningRuleBtn" class="btn btn-outline" type="button">
+                                            <i class="fas fa-vial"></i> Тест
+                                        </button>
+                                        <button id="addCleaningRuleBtn" class="btn btn-primary" type="button">
+                                            <i class="fas fa-plus"></i> Добавить
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Кнопка сохранения -->
+                            <div class="save-rules-section">
+                                <button id="saveCleaningRulesBtn" class="btn btn-primary">
+                                    <i class="fas fa-save"></i> Сохранить правила
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </main>
+    </div>
+
+    <!-- Превью правила очистки -->
+    <div id="cleaningRulePreviewModal" class="modal-overlay">
+        <div class="modal-window preview-modal">
+            <div class="modal-header">
+                <h3>Проверка правила очистки</h3>
+                <button class="modal-close" data-close="preview">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="preview-meta" id="previewMeta">
+                    <!-- Имя, паттерн, таргеты -->
+                </div>
+                <label class="preview-label">Исходный текст</label>
+                <textarea id="previewTestInput" class="preview-input" rows="3"
+                    placeholder="Введите тестовую строку, например: «Раздел  1.2.3  Трубы»"></textarea>
+                <button id="runPreviewBtn" class="btn btn-primary preview-run" type="button">
+                    <i class="fas fa-play"></i> Запустить
+                </button>
+                <label class="preview-label">Результат</label>
+                <div id="previewOutput" class="preview-output">
+                    <em style="color: var(--adm-text-sec);">Нажмите «Запустить»...</em>
+                </div>
+                <div id="previewSteps" class="preview-steps">
+                    <!-- Пошаговая трассировка -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" data-close="preview">Закрыть</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- === МОДАЛЬНЫЕ ОКНА === -->
+
+    <!-- Настройки коллекции (Phase 4: RRF + MMR + adaptive) -->
+    <div id="configModal" class="modal-overlay">
+        <div class="modal-window">
+            <div class="modal-header">
+                <h3>Настройки коллекции</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="cfgName">
+
+                <!-- Видимость -->
+                <div class="config-section">
+                    <label class="config-checkbox-row">
+                        <input type="checkbox" id="cfgVisible" style="width: auto;">
+                        <span>Показывать в интерфейсе поиска</span>
+                    </label>
+                </div>
+
+                <!-- Phase 4: RRF fusion -->
+                <div class="config-section">
+                    <div class="config-section-title">
+                        <i class="fas fa-layer-group"></i>
+                        <span>RRF fusion</span>
+                        <small>Reciprocal Rank Fusion — слияние dense (vector) + BM25 (sparse) результатов</small>
+                    </div>
+                    <div class="form-row form-row-pair">
+                        <div class="form-field">
+                            <label class="form-label" for="cfgRrfK">k (smoothing)</label>
+                            <input type="number" id="cfgRrfK" min="1" max="200" step="1" value="60">
+                        </div>
+                        <div class="form-field">
+                            <label class="form-label" for="cfgMmrPool">MMR pool size</label>
+                            <input type="number" id="cfgMmrPool" min="10" max="500" step="10" value="100">
+                        </div>
+                    </div>
+                    <div class="form-row form-row-pair">
+                        <div class="form-field">
+                            <label class="form-label" for="cfgRrfDense">Dense weight</label>
+                            <input type="number" id="cfgRrfDense" min="0" max="5" step="0.1" value="1.0">
+                        </div>
+                        <div class="form-field">
+                            <label class="form-label" for="cfgRrfBm25">BM25 weight</label>
+                            <input type="number" id="cfgRrfBm25" min="0" max="5" step="0.1" value="0.7">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Phase 4: MMR + adaptive threshold -->
+                <div class="config-section">
+                    <div class="config-section-title">
+                        <i class="fas fa-filter"></i>
+                        <span>Адаптивный threshold</span>
+                        <small>Ручные пороги не нужны — система сама выбирает ветку по max(rerank_score)</small>
+                    </div>
+                    <div class="form-row form-row-pair">
+                        <div class="form-field">
+                            <label class="form-label" for="cfgMmrLambda">MMR λ (0..1)</label>
+                            <input type="number" id="cfgMmrLambda" min="0" max="1" step="0.05" value="0.7">
+                        </div>
+                        <div class="form-field">
+                            <label class="form-label" for="cfgConfidentMin">Confident ≥</label>
+                            <input type="number" id="cfgConfidentMin" min="0" max="1" step="0.05" value="0.5">
+                        </div>
+                    </div>
+                    <div class="form-row form-row-pair">
+                        <div class="form-field">
+                            <label class="form-label" for="cfgUncertainMin">Uncertain ≥</label>
+                            <input type="number" id="cfgUncertainMin" min="0" max="1" step="0.05" value="0.15">
+                        </div>
+                        <div class="form-field">
+                            <label class="form-label" for="cfgFallbackCosine">Fallback Cosine ≥</label>
+                            <input type="number" id="cfgFallbackCosine" min="0" max="1" step="0.05" value="0.30">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Legacy поля (deprecated, но оставлены для обратной совместимости) -->
+                <details class="config-section config-section-deprecated">
+                    <summary class="config-section-title">
+                        <i class="fas fa-clock-rotate-left"></i>
+                        <span>Устаревшие пороги (не используются)</span>
+                    </summary>
+                    <div class="form-row form-row-pair" style="margin-top: 12px;">
+                        <div class="form-field">
+                            <label class="form-label" for="cfgCosine">Cosine (legacy)</label>
+                            <input type="number" step="0.05" id="cfgCosine" disabled>
+                        </div>
+                        <div class="form-field">
+                            <label class="form-label" for="cfgRerank">Rerank (legacy)</label>
+                            <input type="number" step="0.05" id="cfgRerank" disabled>
+                        </div>
+                    </div>
+                </details>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline modal-close-btn">Отмена</button>
+                <button id="saveConfigBtn" class="btn btn-primary">Сохранить</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Создание коллекции -->
+    <div id="createModal" class="modal-overlay">
+        <div class="modal-window">
+            <div class="modal-header">
+                <h3>Создать коллекцию</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px;">ID коллекции (системное имя)</label>
+                    <input type="text" id="newCollId" placeholder="например: ksr_v2" pattern="[a-zA-Z0-9_]+">
+                    <small style="color: var(--adm-text-sec);">Только буквы, цифры и подчёркивания.</small>
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px;">Название (для отображения)</label>
+                    <input type="text" id="newCollName" placeholder="например: Основная база КСР">
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                    <div>
+                        <label style="display: block; margin-bottom: 5px;">Порог Cosine</label>
+                        <input type="number" id="newCollCosine" value="0.45" step="0.05">
+                    </div>
+                    <div>
+                        <label style="display: block; margin-bottom: 5px;">Порог Rerank</label>
+                        <input type="number" id="newCollRerank" value="0.60" step="0.05">
+                    </div>
+                </div>
+                <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 15px;">
+                    <input type="checkbox" id="newCollVisible" checked style="width: auto;">
+                    <label for="newCollVisible">Видимая по умолчанию</label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline modal-close-btn">Отмена</button>
+                <button id="createCollBtn" class="btn btn-primary">Создать</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Добавление записи -->
+    <div id="addRecordModal" class="modal-overlay">
+        <div class="modal-window">
+            <div class="modal-header">
+                <h3>Добавить запись</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px;">Код (шифр)</label>
+                    <input type="text" id="newRecCode" placeholder="Код материала">
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px;">Описание</label>
+                    <textarea id="newRecDesc" rows="4" placeholder="Описание материала"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline modal-close-btn">Отмена</button>
+                <button id="saveRecBtn" class="btn btn-primary">Сохранить</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно подтверждения удаления коллекции -->
+    <div id="deleteConfirmModal" class="modal-overlay">
+        <div class="modal-window" style="max-width: 500px;">
+            <div class="modal-header" style="background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);">
+                <h3><i class="fas fa-exclamation-triangle"></i> Удаление коллекции</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="delete-warning">
+                    <i class="fas fa-skull-crossbones"
+                        style="font-size: 3rem; color: #dc3545; margin-bottom: 15px;"></i>
+                    <h4 style="color: #dc3545; margin-bottom: 10px;">Это действие необратимо!</h4>
+                    <p style="color: var(--adm-text-sec); margin-bottom: 20px;">
+                        Коллекция <strong id="deleteCollectionName" style="color: var(--adm-text);">—</strong>
+                        и все её данные будут <strong>безвозвратно удалены</strong>.
+                    </p>
+                </div>
+
+                <div class="confirm-input-section">
+                    <label style="display: block; margin-bottom: 10px; font-weight: 600;">
+                        Для подтверждения введите название коллекции:
+                    </label>
+                    <input type="text" id="deleteConfirmInput" placeholder="Введите название коллекции"
+                        autocomplete="off"
+                        style="width: 100%; padding: 12px; font-size: 1rem; border: 2px solid var(--adm-border); border-radius: var(--radius-md);">
+                    <p id="deleteConfirmHint" class="confirm-hint"
+                        style="margin-top: 8px; font-size: 0.85rem; color: var(--adm-text-sec);">
+                        Введите: <code id="deleteCollectionNameHint">—</code>
+                    </p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline modal-close-btn">Отмена</button>
+                <button id="confirmDeleteBtn" class="btn btn-danger" disabled>
+                    <i class="fas fa-trash"></i> Удалить навсегда
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Мастер импорта (расширенный, ресайзабельный) -->
+    <div id="importModal" class="modal-overlay">
+        <div class="modal-window modal-resizable" id="importModalWindow">
+            <!-- Resizer для изменения ширины -->
+            <div class="modal-resizer modal-resizer-left" data-direction="left"></div>
+            <div class="modal-resizer modal-resizer-right" data-direction="right"></div>
+            <div class="modal-header">
+                <h3><i class="fas fa-file-import"></i> Импорт данных</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="importTargetCollection">
+
+                <!-- Шаг 1: Вставка данных -->
+                <div id="importStep1" class="step-content active">
+
+                    <!-- Вкладки: CSV / Excel -->
+                    <div class="import-source-tabs">
+                        <button class="source-tab active" data-source="paste">
+                            <i class="fas fa-paste"></i> Вставить CSV/TSV
+                        </button>
+                        <button class="source-tab" data-source="excel">
+                            <i class="fas fa-file-excel"></i> Загрузить Excel
+                        </button>
+                    </div>
+
+                    <!-- === ВКЛАДКА: Вставка CSV/TSV === -->
+                    <div id="importSourcePaste" class="import-source-content active">
+                        <p style="margin-bottom: 15px; color: var(--adm-text-sec);">
+                            Скопируйте данные из Excel или CSV (включая заголовки) и вставьте ниже.
+                        </p>
+
+                        <!-- Выбор разделителя -->
+                        <div class="delimiter-selector" style="margin-bottom: 15px;">
+                            <label style="font-weight: 600; margin-bottom: 8px; display: block;">
+                                <i class="fas fa-columns"></i> Разделитель колонок:
+                            </label>
+                            <div class="delimiter-options">
+                                <label class="delimiter-option">
+                                    <input type="radio" name="delimiter" value="tab" checked>
+                                    <span class="delimiter-btn">Tab (Excel)</span>
+                                </label>
+                                <label class="delimiter-option">
+                                    <input type="radio" name="delimiter" value=";">
+                                    <span class="delimiter-btn">; (CSV RU)</span>
+                                </label>
+                                <label class="delimiter-option">
+                                    <input type="radio" name="delimiter" value=",">
+                                    <span class="delimiter-btn">, (CSV EN)</span>
+                                </label>
+                                <label class="delimiter-option">
+                                    <input type="radio" name="delimiter" value="auto">
+                                    <span class="delimiter-btn">Авто</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <textarea id="pasteArea" style="height: 180px; font-family: monospace;"
+                            placeholder="Вставьте данные TSV/CSV сюда..."></textarea>
+                    </div>
+
+                    <!-- === ВКЛАДКА: Загрузка Excel === -->
+                    <div id="importSourceExcel" class="import-source-content">
+                        <p style="margin-bottom: 15px; color: var(--adm-text-sec);">
+                            Загрузите Excel файл (.xlsx) напрямую — данные будут обработаны автоматически.
+                        </p>
+
+                        <!-- Зона drag-and-drop для Excel -->
+                        <div class="excel-drop-zone" id="excelDropZone">
+                            <i class="fas fa-file-excel"></i>
+                            <p>Перетащите Excel файл сюда</p>
+                            <span>или</span>
+                            <label for="excelFileInput" class="btn btn-outline" style="cursor: pointer;">
+                                <i class="fas fa-folder-open"></i> Выбрать файл
+                            </label>
+                            <input type="file" id="excelFileInput" accept=".xlsx,.xls" hidden>
+                        </div>
+
+                        <!-- Информация о загруженном файле -->
+                        <div id="excelFileInfo" class="excel-file-info hidden">
+                            <div class="file-info-card">
+                                <i class="fas fa-file-excel"></i>
+                                <div class="file-details">
+                                    <span id="excelFileName" class="file-name">—</span>
+                                    <span id="excelFileStats" class="file-stats">—</span>
+                                </div>
+                                <button id="excelFileClear" class="btn btn-sm btn-outline" title="Очистить">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Выбор листа (если несколько) -->
+                        <div id="excelSheetSelector" class="excel-sheet-selector hidden">
+                            <label style="font-weight: 600; margin-bottom: 8px; display: block;">
+                                <i class="fas fa-layer-group"></i> Выберите лист:
+                            </label>
+                            <select id="excelSheetSelect" class="form-select-modern">
+                                <!-- Заполняется через JS -->
+                            </select>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- Шаг 2: Маппинг колонок (3 панели) -->
+                <div id="importStep2" class="step-content">
+                    <div class="import-mapper-grid">
+
+                        <!-- Панель 1: Колонки Кода (ID) -->
+                        <div class="mapper-card">
+                            <div class="mapper-card-header">
+                                <i class="fas fa-hashtag"></i>
+                                <span>Колонки Кода (ID)</span>
+                                <!-- Разделитель перемещён сюда -->
+                                <div class="header-separator">
+                                    <label>Разд:</label>
+                                    <input type="text" id="codeSeparator" value="." maxlength="3" placeholder=".">
+                                </div>
+                            </div>
+                            <!-- Цифровые чек-боксы для выбора колонок кода -->
+                            <div class="numbered-select-list" id="mapCodeCols">
+                                <!-- Заполняется через JS -->
+                            </div>
+                            <p class="mapper-hint">
+                                <i class="fas fa-lightbulb"></i>
+                                Уникальный шифр записи
+                            </p>
+                        </div>
+
+                        <!-- Панель 2: Колонки Описания (название материала) -->
+                        <div class="mapper-card">
+                            <div class="mapper-card-header">
+                                <i class="fas fa-align-left"></i>
+                                <span>Колонки Описания</span>
+                                <!-- Кастомный разделитель для склейки описания -->
+                                <div class="header-separator">
+                                    <label>Разд:</label>
+                                    <input type="text" id="descSeparator" value=" " maxlength="5" placeholder=" "
+                                        title="Разделитель для склейки колонок описания">
+                                </div>
+                            </div>
+                            <!-- Цифровые чек-боксы для описания -->
+                            <div class="numbered-select-list" id="mapDescCols">
+                                <!-- Заполняется через JS -->
+                            </div>
+                            <p class="mapper-hint">
+                                <i class="fas fa-lightbulb"></i>
+                                Полное наименование материала
+                            </p>
+                        </div>
+
+                        <!-- Панель 3: Колонки Иерархии (каталог) -->
+                        <div class="mapper-card">
+                            <div class="mapper-card-header">
+                                <i class="fas fa-folder-tree"></i>
+                                <span>Колонки Иерархии</span>
+                            </div>
+                            <!-- Цифровые чек-боксы для иерархии -->
+                            <div class="numbered-select-list" id="mapHierarchyCols">
+                                <!-- Заполняется через JS -->
+                            </div>
+                            <p class="mapper-hint">
+                                <i class="fas fa-lightbulb"></i>
+                                Структура каталога (или как описание)
+                            </p>
+                        </div>
+
+                    </div>
+
+                    <!-- Общая строка с preview элементами -->
+                    <div class="preview-row">
+                        <div class="concat-preview" id="codePreview">
+                            <span>Код:</span>
+                            <code>—</code>
+                        </div>
+                        <div class="concat-preview" id="descPreview">
+                            <span>Описание:</span>
+                            <code>—</code>
+                        </div>
+                        <div class="concat-preview" id="hierarchyPreview">
+                            <span>Иерархия:</span>
+                            <code>—</code>
+                        </div>
+
+                    </div>
+
+                    <!-- Предпросмотр данных -->
+                    <div class="import-preview">
+                        <div class="preview-header">
+                            <i class="fas fa-table"></i> Предпросмотр данных
+                            <span id="previewCount" class="preview-count">0 строк</span>
+                        </div>
+                        <div class="preview-table-wrap">
+                            <table id="previewTable" class="preview-table">
+                                <thead id="previewHead"></thead>
+                                <tbody id="previewBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Шаг 3: Diff (сравнение с базой) -->
+                <div id="importStepDiff" class="step-content">
+                    <!-- Статистика изменений -->
+                    <div class="diff-summary" id="diffSummary">
+                        <div class="diff-stat added">
+                            <i class="fas fa-plus-circle"></i>
+                            <span class="count" id="diffAddedCount">0</span>
+                            <span>добавлено</span>
+                        </div>
+                        <div class="diff-stat modified">
+                            <i class="fas fa-edit"></i>
+                            <span class="count" id="diffModifiedCount">0</span>
+                            <span>изменено</span>
+                        </div>
+                        <div class="diff-stat deleted">
+                            <i class="fas fa-minus-circle"></i>
+                            <span class="count" id="diffDeletedCount">0</span>
+                            <span>удалено</span>
+                        </div>
+                        <div class="diff-stat folders">
+                            <i class="fas fa-folder"></i>
+                            <span class="count" id="diffFoldersCount">0</span>
+                            <span>папок</span>
+                        </div>
+                    </div>
+
+                    <!-- Предупреждение об удалениях -->
+                    <div class="diff-delete-warning hidden" id="diffDeleteWarning">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <span>Записи будут удалены из базы! Проверьте список ниже.</span>
+                    </div>
+
+                    <!-- Табы для категорий -->
+                    <div class="diff-tabs">
+                        <button class="diff-tab-btn active" data-tab="added">
+                            <i class="fas fa-plus"></i> Добавленные
+                            <span class="badge" id="diffAddedBadge">0</span>
+                        </button>
+                        <button class="diff-tab-btn" data-tab="modified">
+                            <i class="fas fa-edit"></i> Изменённые
+                            <span class="badge" id="diffModifiedBadge">0</span>
+                        </button>
+                        <button class="diff-tab-btn" data-tab="deleted">
+                            <i class="fas fa-trash"></i> Удалённые
+                            <span class="badge" id="diffDeletedBadge">0</span>
+                        </button>
+                        <button class="diff-tab-btn" data-tab="folders">
+                            <i class="fas fa-folder"></i> Папки
+                            <span class="badge" id="diffFoldersBadge">0</span>
+                        </button>
+                    </div>
+
+                    <!-- Таблица изменений -->
+                    <div class="diff-table-wrap">
+                        <table class="diff-table" id="diffTable">
+                            <thead>
+                                <tr>
+                                    <th style="width: 180px;">Код</th>
+                                    <th>Описание</th>
+                                </tr>
+                            </thead>
+                            <tbody id="diffTableBody">
+                                <!-- Заполняется через JS -->
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Empty state -->
+                    <div class="diff-empty hidden" id="diffEmpty">
+                        <i class="fas fa-check-circle"></i>
+                        <p>Нет записей в этой категории</p>
+                    </div>
+
+                    <!-- Loading state -->
+                    <div class="diff-loading hidden" id="diffLoading">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        <p style="margin-top: 10px;">Сравнение с базой...</p>
+                    </div>
+                </div>
+
+                <!-- Шаг 4: Прогресс -->
+                <div id="importStep3" class="step-content">
+                    <div style="text-align: center; padding: 20px;">
+                        <h4 style="margin-bottom: 10px;">Обработка...</h4>
+                        <div class="progress-bar-container">
+                            <div id="importProgress" class="progress-bar-fill"></div>
+                        </div>
+                        <p id="importStatusText" style="margin-top: 10px; font-size: 0.9rem;">В очереди</p>
+                    </div>
+                </div>
+
+            </div>
+            <div class="modal-footer">
+                <!-- Кнопки меняются в зависимости от шага -->
+                <button id="importBackBtn" class="btn btn-outline hidden">
+                    <i class="fas fa-arrow-left"></i> Назад
+                </button>
+                <button id="importNextBtn" class="btn btn-primary">
+                    Далее <i class="fas fa-arrow-right"></i>
+                </button>
+                <button id="importCompareBtn" class="btn btn-warning hidden">
+                    <i class="fas fa-code-compare"></i> Сравнить с базой
+                </button>
+                <button id="importUploadBtn" class="btn btn-primary hidden">
+                    <i class="fas fa-upload"></i> Загрузить всё
+                </button>
+                <button id="importApplyBtn" class="btn btn-success hidden">
+                    <i class="fas fa-check"></i> Применить изменения
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/admin.js?v=3.0.1"></script>
+</body>
+
+</html>

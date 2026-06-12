@@ -1,0 +1,143 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ksr_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ksr_net
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: ksr_qdrant
+    restart: unless-stopped
+    volumes:
+      - qdrant_data:/qdrant/storage
+    environment:
+      QDRANT__SERVICE__GRPC_PORT: 6334
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    # Qdrant 1.18+ alpine image: нет wget/curl, поэтому без healthcheck.
+    # depends_on использует просто старт контейнера (без condition).
+    networks:
+      - ksr_net
+
+  redis:
+    image: redis:7-alpine
+    container_name: ksr_redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - ksr_net
+
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: ksr_api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      SYNC_DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      QDRANT_URL: http://qdrant:6333
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+    ports:
+      - "${SERVER_PORT:-8000}:8000"
+    volumes:
+      - ./web:/app/web:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - ksr_net
+
+  celery_worker:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: ksr_celery_worker
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      SYNC_DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      QDRANT_URL: http://qdrant:6333
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+    command: celery -A app.workers.celery_app worker --loglevel=INFO --concurrency=2 -Q ksr_default
+    volumes:
+      - ./web:/app/web:ro
+    networks:
+      - ksr_net
+
+  flower:
+    image: mher/flower:2.0
+    container_name: ksr_flower
+    restart: unless-stopped
+    depends_on:
+      - redis
+      - celery_worker
+    environment:
+      CELERY_BROKER_URL: redis://redis:6379/0
+      FLOWER_PORT: 5555
+      FLOWER_BASIC_AUTH: ${FLOWER_USER:-admin}:${FLOWER_PASSWORD:-admin}
+    ports:
+      - "5555:5555"
+    networks:
+      - ksr_net
+
+  # === Cloudflare Tunnel ===
+  # Поднимается через `make tunnel-up` (использует docker-compose.cloudflared.yml)
+  # Документация: docs/06-tunnel.md
+  # Удалено из основного compose, чтобы избежать Docker Compose v1 incompatibility
+  # (--profile не поддерживается в v1). Используйте override-файл.
+
+volumes:
+  pgdata:
+    driver: local
+  qdrant_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  ksr_net:
+    driver: bridge

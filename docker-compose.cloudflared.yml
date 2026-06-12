@@ -1,0 +1,27 @@
+# Cloudflare Tunnel — опциональный стек-оверрайд.
+#
+# Использование (после того как получили TUNNEL_TOKEN в Cloudflare Dashboard):
+#   echo "TUNNEL_TOKEN=eyJhIjoixxxxxx..." >> .env
+#   docker compose -f docker-compose.yml -f docker-compose.cloudflared.yml up -d
+#
+# Или одной командой — переменная TUNNEL_TOKEN обязательна:
+#   TUNNEL_TOKEN=eyJhIjoixxxxxx... docker compose -f docker-compose.yml -f docker-compose.cloudflared.yml up -d
+#
+# В Cloudflare Dashboard настройте Public Hostname:
+#   - Subdomain: (пусто) или @ → ksrmatch.online
+#   - Service: http://api:8000
+#
+# Затем ваш домен https://ksrmatch.online будет указывать на локально запущенный стек.
+
+services:
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: ksr_cloudflared
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:?TUNNEL_TOKEN обязателен для запуска cloudflared}
+    depends_on:
+      - api
+    networks:
+      - ksr_net

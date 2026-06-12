@@ -1,0 +1,223 @@
+"""CollectionService — управление коллекциями (Qdrant + Postgres)."""
+from __future__ import annotations
+
+from typing import Any
+
+from loguru import logger
+from qdrant_client.http import models as qm
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.exceptions import ConflictError, NotFoundError
+from app.db.qdrant import get_qdrant_client
+from app.models.collection import Collection
+from app.services.embedding_service import EmbeddingService
+
+
+class CollectionService:
+    """CRUD коллекций + двусторонняя синхронизация Postgres ↔ Qdrant."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    @property
+    def qdrant(self):
+        return get_qdrant_client()
+
+    async def list_all(self) -> list[Collection]:
+        result = await self.session.execute(select(Collection).order_by(Collection.name))
+        return list(result.scalars().all())
+
+    async def get_by_name(self, name: str) -> Collection | None:
+        from sqlalchemy import select
+        result = await self.session.execute(
+            select(Collection).where(Collection.name == name)
+        )
+        return result.scalars().first()
+
+    async def get_or_404(self, name: str) -> Collection:
+        coll = await self.get_by_name(name)
+        if not coll:
+            raise NotFoundError(f"Коллекция '{name}' не найдена")
+        return coll
+
+    async def list_visible(self) -> list[Collection]:
+        # selectinload materials чтобы избежать MissingGreenlet (lazy load в async)
+        from sqlalchemy.orm import selectinload
+        result = await self.session.execute(
+            select(Collection)
+            .where(Collection.visible == True)  # noqa: E712
+            .options(selectinload(Collection.materials))
+            .order_by(Collection.name)
+        )
+        return list(result.scalars().all())
+
+    async def get_current_active(self, requested_name: str | None) -> Collection | None:
+        """Получить активную (или запрошенную) коллекцию.
+
+        ВАЖНО: НЕ использовать list_visible() здесь — он selectinload'ит
+        ВСЕ материалы каждой коллекции (142k+ записей) только чтобы
+        взять первый. Это вызывает 6+ сек лаг на /admin/collections.
+        Берём первую visible коллекцию БЕЗ selectinload.
+        """
+        if requested_name:
+            return await self.get_by_name(requested_name)
+        result = await self.session.execute(
+            select(Collection)
+            .where(Collection.visible == True)  # noqa: E712
+            .order_by(Collection.name)
+            .limit(1)
+        )
+        return result.scalars().first()
+
+    async def list_visible_fast(self) -> list[Collection]:
+        """Быстрый список visible коллекций БЕЗ selectinload materials.
+
+        Использовать в endpoints где нужен только список (не нужен
+        list of materials). record_count берётся из stored counter
+        Collection.materials_count (см. Alembic 0003).
+        """
+        result = await self.session.execute(
+            select(Collection)
+            .where(Collection.visible == True)  # noqa: E712
+            .order_by(Collection.name)
+        )
+        return list(result.scalars().all())
+
+    async def create(
+        self,
+        name: str,
+        description: str,
+        dimension: int,
+        recreate: bool = False,
+    ) -> Collection:
+        """Создать новую коллекцию (Qdrant + Postgres)."""
+        existing = await self.get_by_name(name)
+        if existing and not recreate:
+            raise ConflictError(f"Коллекция '{name}' уже существует. Используйте recreate=true.")
+
+        # Удалить из Qdrant если нужно
+        try:
+            self.qdrant.delete_collection(name)
+            logger.info(f"Удалена существующая коллекция Qdrant: {name}")
+        except Exception:
+            pass
+
+        # Создать в Qdrant
+        self.qdrant.create_collection(
+            collection_name=name,
+            vectors_config=qm.VectorParams(size=dimension, distance=qm.Distance.COSINE),
+        )
+        logger.info(f"✅ Коллекция Qdrant '{name}' создана (dim={dimension})")
+
+        # Создать/обновить в Postgres
+        if existing and recreate:
+            existing.dimension = dimension
+            existing.description = description
+            await self.session.flush()
+            coll = existing
+        else:
+            coll = Collection(
+                name=name,
+                description=description,
+                dimension=dimension,
+                visible=True,
+                locked=False,
+            )
+            self.session.add(coll)
+            await self.session.flush()
+
+        return coll
+
+    async def delete(self, name: str) -> None:
+        coll = await self.get_or_404(name)
+        if coll.locked:
+            from app.core.exceptions import ForbiddenError
+            raise ForbiddenError(
+                f"Коллекция '{name}' защищена от удаления. Снимите флаг locked в БД."
+            )
+        try:
+            self.qdrant.delete_collection(name)
+        except Exception as e:
+            logger.warning(f"Не удалось удалить Qdrant коллекцию '{name}': {e}")
+        await self.session.delete(coll)
+        await self.session.flush()
+        logger.info(f"🗑️ Коллекция '{name}' удалена")
+
+    async def update_config(
+        self,
+        name: str,
+        visible: bool | None = None,
+        cosine_threshold: float | None = None,
+        rerank_threshold: float | None = None,
+        # Phase 4: RRF + MMR + adaptive threshold
+        rrf_k: int | None = None,
+        rrf_dense_weight: float | None = None,
+        rrf_bm25_weight: float | None = None,
+        mmr_lambda: float | None = None,
+        mmr_pool_size: int | None = None,
+        adaptive_confident_min: float | None = None,
+        adaptive_uncertain_min: float | None = None,
+        fallback_cosine_min: float | None = None,
+    ) -> Collection:
+        coll = await self.get_or_404(name)
+        if visible is not None:
+            coll.visible = visible
+        if cosine_threshold is not None:
+            coll.cosine_threshold = cosine_threshold
+        if rerank_threshold is not None:
+            coll.rerank_threshold = rerank_threshold
+        # Phase 4
+        if rrf_k is not None:
+            coll.rrf_k = rrf_k
+        if rrf_dense_weight is not None:
+            coll.rrf_dense_weight = rrf_dense_weight
+        if rrf_bm25_weight is not None:
+            coll.rrf_bm25_weight = rrf_bm25_weight
+        if mmr_lambda is not None:
+            coll.mmr_lambda = mmr_lambda
+        if mmr_pool_size is not None:
+            coll.mmr_pool_size = mmr_pool_size
+        if adaptive_confident_min is not None:
+            coll.adaptive_confident_min = adaptive_confident_min
+        if adaptive_uncertain_min is not None:
+            coll.adaptive_uncertain_min = adaptive_uncertain_min
+        if fallback_cosine_min is not None:
+            coll.fallback_cosine_min = fallback_cosine_min
+        await self.session.flush()
+        return coll
+
+    async def sync_dimension_from_qdrant(self, name: str) -> int:
+        """Подтянуть размерность из Qdrant (если нужно)."""
+        info = self.qdrant.get_collection(name)
+        dim = info.config.params.vectors.size
+        coll = await self.get_by_name(name)
+        if coll and coll.dimension != dim:
+            coll.dimension = dim
+            await self.session.flush()
+        return dim
+
+    async def determine_dimension(self, provider: str | None = None) -> int:
+        """Определить размерность по активному провайдеру."""
+        from app.services.settings_service import SettingsService
+
+        settings_svc = SettingsService(self.session)
+        prov = await settings_svc.get_active_provider()
+        model = prov.model_embed if prov else "qwen/qwen3-embedding-4b"
+        dim = EmbeddingService.known_dimension(model)
+        if dim is not None:
+            return dim
+        # Иначе — попробовать через тестовый эмбеддинг
+        if prov and prov.enabled and prov.get_api_key():
+            svc = EmbeddingService(
+                api_key=prov.get_api_key(),
+                model=model,
+                batch_size=1,
+                base_url=prov.base_url,
+            )
+            vec = await svc.embed_one("тест", use_cache=False)
+            return len(vec)
+        return 2560  # безопасный fallback для qwen3-4b
+
+
+__all__ = ["CollectionService"]
