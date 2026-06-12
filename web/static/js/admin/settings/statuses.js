@@ -145,20 +145,20 @@ export function initSettingsPage() {
             const label = labelInput.value.trim();
 
             if (!id || !label) {
-                if (!id) idInput.style.borderColor = 'var(--adm-danger)';
-                if (!label) labelInput.style.borderColor = 'var(--adm-danger)';
+                if (!id) idInput.classList.add('is-invalid');
+                if (!label) labelInput.classList.add('is-invalid');
                 setTimeout(() => {
-                    idInput.style.borderColor = '';
-                    labelInput.style.borderColor = '';
+                    idInput.classList.remove('is-invalid');
+                    labelInput.classList.remove('is-invalid');
                 }, 2000);
                 return;
             }
 
             if (state.statuses.some((s) => s.id === id)) {
-                idInput.style.borderColor = 'var(--adm-danger)';
+                idInput.classList.add('is-invalid');
                 idInput.placeholder = 'ID уже существует!';
                 setTimeout(() => {
-                    idInput.style.borderColor = '';
+                    idInput.classList.remove('is-invalid');
                     idInput.placeholder = 'ID (review, pending...)';
                 }, 2000);
                 return;
@@ -169,7 +169,7 @@ export function initSettingsPage() {
             idInput.value = '';
             labelInput.value = '';
             colorInput.value = '#6366f1';
-            if (colorPreview) colorPreview.style.background = '#6366f1';
+            if (colorPreview) colorPreview.style.background = '';  /* CSS default */
 
             renderStatusesSettings();
             idInput.focus();
@@ -216,10 +216,10 @@ async function saveStatusSettings() {
             state.statuses = data.statuses;
             state.defaultStatus = data.default_status;
             saveBtn.innerHTML = '<i class="fas fa-check"></i> Сохранено!';
-            saveBtn.style.background = 'var(--adm-success)';
+            saveBtn.classList.add('is-success');
             setTimeout(() => {
                 saveBtn.innerHTML = originalText;
-                saveBtn.style.background = '';
+                saveBtn.classList.remove('is-success');
                 saveBtn.disabled = false;
             }, 2000);
         } else {
@@ -229,10 +229,10 @@ async function saveStatusSettings() {
     } catch (e) {
         console.error('Ошибка сохранения статусов:', e);
         saveBtn.innerHTML = '<i class="fas fa-times"></i> Ошибка';
-        saveBtn.style.background = 'var(--adm-danger)';
+        saveBtn.classList.add('is-error');
         setTimeout(() => {
             saveBtn.innerHTML = originalText;
-            saveBtn.style.background = '';
+            saveBtn.classList.remove('is-error');
             saveBtn.disabled = false;
         }, 2000);
     }

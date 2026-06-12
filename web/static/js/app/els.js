@@ -64,3 +64,20 @@ export const els = {
     collapseAllBtn: $id('collapseAllBtn'),
     refreshCatalogBtn: $id('refreshCatalogBtn'),
 };
+
+/**
+ * Map a status-keyword to the matching `.status-info--*` class on the
+ * status info element. Replaces the previous `style.color` assignments
+ * scattered through search.js and results.js. Also clears any other
+ * state class so the element only ever has one color modifier.
+ */
+export function setStatusInfoColor(kind) {
+    if (!els.statusInfo) return;
+    const variants = ['primary', 'danger', 'warning', 'success'];
+    for (const v of variants) {
+        els.statusInfo.classList.remove(`status-info--${v}`);
+    }
+    if (kind && variants.includes(kind)) {
+        els.statusInfo.classList.add(`status-info--${kind}`);
+    }
+}

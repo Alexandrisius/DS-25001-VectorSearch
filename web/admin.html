@@ -26,6 +26,7 @@
     <link rel="stylesheet" href="/static/css/admin/85-settings-layout.css?v=5">
     <link rel="stylesheet" href="/static/css/admin/90-cleaning-rules.css?v=5">
     <link rel="stylesheet" href="/static/css/admin/95-jobs-and-config.css?v=5">
+    <link rel="stylesheet" href="/static/css/admin/99-utilities.css?v=5">
 </head>
 
 <body>
@@ -36,7 +37,7 @@
             <i class="fas fa-desktop"></i>
             <h2>Админ-панель оптимизирована для ПК</h2>
             <p>Для полноценной работы с админ-панелью рекомендуется использовать компьютер с большим экраном.</p>
-            <p style="font-size: 0.85rem; opacity: 0.8;">На мобильных устройствах некоторые функции могут работать
+            <p class="mobile-warning-card__hint">На мобильных устройствах некоторые функции могут работать
                 некорректно.</p>
             <button id="mobileWarningClose" class="btn btn-primary">Понятно, продолжить</button>
         </div>
@@ -48,7 +49,7 @@
             <h2>Вход в админку</h2>
             <input type="password" id="authPassword" placeholder="Введите пароль..." autofocus>
             <button id="authBtn" class="btn btn-primary">Войти</button>
-            <div id="authError" class="hidden" style="color: #f87171; margin-top: 15px;">Неверный пароль</div>
+            <div id="authError" class="hidden auth-error">Неверный пароль</div>
         </div>
     </div>
 
@@ -58,7 +59,7 @@
         <!-- Боковая панель -->
         <aside class="sidebar">
             <div class="sidebar-header">
-                <i class="fas fa-bolt" style="color: var(--adm-primary);"></i> Админ-панель
+                <i class="fas fa-bolt sidebar-header__icon"></i> Админ-панель
             </div>
 
             <nav class="nav-links">
@@ -77,8 +78,7 @@
                 <a href="/" class="nav-item">
                     <i class="fas fa-external-link-alt"></i> К поиску
                 </a>
-                <button id="logoutBtn" class="nav-item"
-                    style="width: 100%; border: none; background: none; text-align: left;">
+                <button id="logoutBtn" class="nav-item nav-item--logout">
                     <i class="fas fa-sign-out-alt"></i> Выйти
                 </button>
             </div>
@@ -110,14 +110,13 @@
                                 <thead id="dataTableHead">
                                     <!-- Заголовок генерируется динамически через JS -->
                                     <tr>
-                                        <th class="sortable" data-sort="code"
-                                            style="min-width: 150px; text-align: center;">
+                                        <th class="sortable col-code-th" data-sort="code">
                                             Код <i class="fas fa-sort sort-icon"></i>
                                         </th>
-                                        <th class="sortable" data-sort="description" style="min-width: 300px;">
+                                        <th class="sortable col-description-th" data-sort="description">
                                             Описание <i class="fas fa-sort sort-icon"></i>
                                         </th>
-                                        <th style="width: 80px; text-align: center;">Действия</th>
+                                        <th class="col-actions-th">Действия</th>
                                     </tr>
                                 </thead>
                                 <tbody id="dataTableBody"></tbody>
@@ -182,8 +181,7 @@
                                     <input type="text" id="newStatusId" placeholder="ID (review, pending...)">
                                     <input type="text" id="newStatusLabel" placeholder="Название статуса">
                                     <div class="new-status-color-wrapper">
-                                        <div class="new-status-color-preview" id="newStatusColorPreview"
-                                            style="background: #6366f1;"></div>
+                                <div class="new-status-color-preview" id="newStatusColorPreview"></div>
                                         <input type="color" id="newStatusColor" value="#6366f1">
                                     </div>
                                     <button id="addStatusBtn" class="btn btn-primary" title="Добавить статус">
@@ -266,7 +264,7 @@
                                 <label class="field-label">
                                     <i class="fas fa-link"></i>
                                     Base URL
-                                    <span style="font-weight: normal; color: var(--adm-text-sec); font-size: 0.85rem;">
+                                    <span class="field-label__inline-hint">
                                         (опционально, для OpenAI-совместимых серверов)
                                     </span>
                                 </label>
@@ -330,19 +328,19 @@
                                     <i class="fas fa-layer-group"></i>
                                     Параметры батчинга
                                 </label>
-                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                                <div class="openrouter-batch-grid">
                                     <div>
-                                        <label style="display: block; margin-bottom: 5px; font-size: 0.85rem; color: var(--adm-text-sec);">Размер батча</label>
+                                        <label class="form-sublabel">Размер батча</label>
                                         <input type="number" id="openrouterBatchSize" min="1" max="100" value="10" class="form-input">
                                         <p class="field-hint">Текстов за один API запрос</p>
                                     </div>
                                     <div>
-                                        <label style="display: block; margin-bottom: 5px; font-size: 0.85rem; color: var(--adm-text-sec);">Параллельные потоки</label>
+                                        <label class="form-sublabel">Параллельные потоки</label>
                                         <input type="number" id="openrouterMaxWorkers" min="1" max="20" value="3" class="form-input">
                                         <p class="field-hint">Кол-во одновременных запросов</p>
                                     </div>
                                 </div>
-                                <p class="field-hint" style="margin-top: 8px;">
+                                <p class="field-hint form-hint-spaced">
                                     <i class="fas fa-info-circle"></i>
                                     Уменьшите значения при ошибках "No successful provider responses"
                                 </p>
@@ -503,7 +501,7 @@
                 </button>
                 <label class="preview-label">Результат</label>
                 <div id="previewOutput" class="preview-output">
-                    <em style="color: var(--adm-text-sec);">Нажмите «Запустить»...</em>
+                    <em class="preview-output__placeholder">Нажмите «Запустить»...</em>
                 </div>
                 <div id="previewSteps" class="preview-steps">
                     <!-- Пошаговая трассировка -->
@@ -530,7 +528,7 @@
                 <!-- Видимость -->
                 <div class="config-section">
                     <label class="config-checkbox-row">
-                        <input type="checkbox" id="cfgVisible" style="width: auto;">
+                        <input type="checkbox" id="cfgVisible" class="checkbox-auto-width">
                         <span>Показывать в интерфейсе поиска</span>
                     </label>
                 </div>
@@ -599,7 +597,7 @@
                         <i class="fas fa-clock-rotate-left"></i>
                         <span>Устаревшие пороги (не используются)</span>
                     </summary>
-                    <div class="form-row form-row-pair" style="margin-top: 12px;">
+                    <div class="form-row form-row-pair form-row-pair--spaced">
                         <div class="form-field">
                             <label class="form-label" for="cfgCosine">Cosine (legacy)</label>
                             <input type="number" step="0.05" id="cfgCosine" disabled>
@@ -626,27 +624,27 @@
                 <button class="modal-close">&times;</button>
             </div>
             <div class="modal-body">
-                <div style="margin-bottom: 15px;">
-                    <label style="display: block; margin-bottom: 5px;">ID коллекции (системное имя)</label>
+                <div class="form-section-spaced">
+                    <label class="form-row-label">ID коллекции (системное имя)</label>
                     <input type="text" id="newCollId" placeholder="например: ksr_v2" pattern="[a-zA-Z0-9_]+">
-                    <small style="color: var(--adm-text-sec);">Только буквы, цифры и подчёркивания.</small>
+                    <small class="form-sublabel">Только буквы, цифры и подчёркивания.</small>
                 </div>
-                <div style="margin-bottom: 15px;">
-                    <label style="display: block; margin-bottom: 5px;">Название (для отображения)</label>
+                <div class="form-section-spaced">
+                    <label class="form-row-label">Название (для отображения)</label>
                     <input type="text" id="newCollName" placeholder="например: Основная база КСР">
                 </div>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                <div class="create-thresholds-grid form-section-spaced">
                     <div>
-                        <label style="display: block; margin-bottom: 5px;">Порог Cosine</label>
+                        <label class="form-row-label">Порог Cosine</label>
                         <input type="number" id="newCollCosine" value="0.45" step="0.05">
                     </div>
                     <div>
-                        <label style="display: block; margin-bottom: 5px;">Порог Rerank</label>
+                        <label class="form-row-label">Порог Rerank</label>
                         <input type="number" id="newCollRerank" value="0.60" step="0.05">
                     </div>
                 </div>
-                <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 15px;">
-                    <input type="checkbox" id="newCollVisible" checked style="width: auto;">
+                <div class="form-checkbox-row">
+                    <input type="checkbox" id="newCollVisible" checked class="checkbox-auto-width">
                     <label for="newCollVisible">Видимая по умолчанию</label>
                 </div>
             </div>
@@ -665,12 +663,12 @@
                 <button class="modal-close">&times;</button>
             </div>
             <div class="modal-body">
-                <div style="margin-bottom: 15px;">
-                    <label style="display: block; margin-bottom: 5px;">Код (шифр)</label>
+                <div class="form-section-spaced">
+                    <label class="form-row-label">Код (шифр)</label>
                     <input type="text" id="newRecCode" placeholder="Код материала">
                 </div>
-                <div style="margin-bottom: 15px;">
-                    <label style="display: block; margin-bottom: 5px;">Описание</label>
+                <div class="form-section-spaced">
+                    <label class="form-row-label">Описание</label>
                     <textarea id="newRecDesc" rows="4" placeholder="Описание материала"></textarea>
                 </div>
             </div>
@@ -683,31 +681,28 @@
 
     <!-- Модальное окно подтверждения удаления коллекции -->
     <div id="deleteConfirmModal" class="modal-overlay">
-        <div class="modal-window" style="max-width: 500px;">
-            <div class="modal-header" style="background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);">
+        <div class="modal-window modal-window--narrow">
+            <div class="modal-header modal-header--danger">
                 <h3><i class="fas fa-exclamation-triangle"></i> Удаление коллекции</h3>
                 <button class="modal-close">&times;</button>
             </div>
             <div class="modal-body">
                 <div class="delete-warning">
-                    <i class="fas fa-skull-crossbones"
-                        style="font-size: 3rem; color: #dc3545; margin-bottom: 15px;"></i>
-                    <h4 style="color: #dc3545; margin-bottom: 10px;">Это действие необратимо!</h4>
-                    <p style="color: var(--adm-text-sec); margin-bottom: 20px;">
-                        Коллекция <strong id="deleteCollectionName" style="color: var(--adm-text);">—</strong>
+                    <i class="fas fa-skull-crossbones delete-warning__icon"></i>
+                    <h4 class="delete-warning__heading">Это действие необратимо!</h4>
+                    <p class="delete-warning__hint">
+                        Коллекция <strong id="deleteCollectionName" class="delete-warning__collection-name">—</strong>
                         и все её данные будут <strong>безвозвратно удалены</strong>.
                     </p>
                 </div>
 
                 <div class="confirm-input-section">
-                    <label style="display: block; margin-bottom: 10px; font-weight: 600;">
+                    <label class="form-row-label--bold">
                         Для подтверждения введите название коллекции:
                     </label>
                     <input type="text" id="deleteConfirmInput" placeholder="Введите название коллекции"
-                        autocomplete="off"
-                        style="width: 100%; padding: 12px; font-size: 1rem; border: 2px solid var(--adm-border); border-radius: var(--radius-md);">
-                    <p id="deleteConfirmHint" class="confirm-hint"
-                        style="margin-top: 8px; font-size: 0.85rem; color: var(--adm-text-sec);">
+                        autocomplete="off" class="confirm-input">
+                    <p id="deleteConfirmHint" class="confirm-hint confirm-input-hint">
                         Введите: <code id="deleteCollectionNameHint">—</code>
                     </p>
                 </div>
@@ -749,13 +744,13 @@
 
                     <!-- === ВКЛАДКА: Вставка CSV/TSV === -->
                     <div id="importSourcePaste" class="import-source-content active">
-                        <p style="margin-bottom: 15px; color: var(--adm-text-sec);">
+                        <p class="step-desc">
                             Скопируйте данные из Excel или CSV (включая заголовки) и вставьте ниже.
                         </p>
 
                         <!-- Выбор разделителя -->
-                        <div class="delimiter-selector" style="margin-bottom: 15px;">
-                            <label style="font-weight: 600; margin-bottom: 8px; display: block;">
+                        <div class="delimiter-selector delimiter-selector--spaced">
+                            <label class="delimiter-label">
                                 <i class="fas fa-columns"></i> Разделитель колонок:
                             </label>
                             <div class="delimiter-options">
@@ -778,13 +773,13 @@
                             </div>
                         </div>
 
-                        <textarea id="pasteArea" style="height: 180px; font-family: monospace;"
+                        <textarea id="pasteArea" class="paste-area"
                             placeholder="Вставьте данные TSV/CSV сюда..."></textarea>
                     </div>
 
                     <!-- === ВКЛАДКА: Загрузка Excel === -->
                     <div id="importSourceExcel" class="import-source-content">
-                        <p style="margin-bottom: 15px; color: var(--adm-text-sec);">
+                        <p class="step-desc">
                             Загрузите Excel файл (.xlsx) напрямую — данные будут обработаны автоматически.
                         </p>
 
@@ -793,7 +788,7 @@
                             <i class="fas fa-file-excel"></i>
                             <p>Перетащите Excel файл сюда</p>
                             <span>или</span>
-                            <label for="excelFileInput" class="btn btn-outline" style="cursor: pointer;">
+                            <label for="excelFileInput" class="btn btn-outline excel-cursor-pointer">
                                 <i class="fas fa-folder-open"></i> Выбрать файл
                             </label>
                             <input type="file" id="excelFileInput" accept=".xlsx,.xls" hidden>
@@ -815,7 +810,7 @@
 
                         <!-- Выбор листа (если несколько) -->
                         <div id="excelSheetSelector" class="excel-sheet-selector hidden">
-                            <label style="font-weight: 600; margin-bottom: 8px; display: block;">
+                            <label class="excel-label">
                                 <i class="fas fa-layer-group"></i> Выберите лист:
                             </label>
                             <select id="excelSheetSelect" class="form-select-modern">
@@ -980,7 +975,7 @@
                         <table class="diff-table" id="diffTable">
                             <thead>
                                 <tr>
-                                    <th style="width: 180px;">Код</th>
+                                    <th class="diff-col-code">Код</th>
                                     <th>Описание</th>
                                 </tr>
                             </thead>
@@ -999,18 +994,18 @@
                     <!-- Loading state -->
                     <div class="diff-loading hidden" id="diffLoading">
                         <i class="fas fa-spinner fa-spin"></i>
-                        <p style="margin-top: 10px;">Сравнение с базой...</p>
+                        <p class="diff-loading__text">Сравнение с базой...</p>
                     </div>
                 </div>
 
                 <!-- Шаг 4: Прогресс -->
                 <div id="importStep3" class="step-content">
-                    <div style="text-align: center; padding: 20px;">
-                        <h4 style="margin-bottom: 10px;">Обработка...</h4>
+                    <div class="import-progress">
+                        <h4 class="import-progress__title">Обработка...</h4>
                         <div class="progress-bar-container">
                             <div id="importProgress" class="progress-bar-fill"></div>
                         </div>
-                        <p id="importStatusText" style="margin-top: 10px; font-size: 0.9rem;">В очереди</p>
+                        <p id="importStatusText" class="import-progress__status">В очереди</p>
                     </div>
                 </div>
 

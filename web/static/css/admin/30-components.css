@@ -129,6 +129,24 @@
     box-shadow: none !important;
 }
 
+/* === BUTTON STATE (used by JS to flash success/error feedback) === */
+.btn.is-success {
+    background-color: var(--color-success) !important;
+    border-color: var(--color-success) !important;
+    color: white !important;
+}
+
+.btn.is-error {
+    background-color: var(--color-danger) !important;
+    border-color: var(--color-danger) !important;
+    color: white !important;
+}
+
+/* === INPUT VALIDATION (transient red border on bad input) === */
+.is-invalid {
+    border-color: var(--adm-danger) !important;
+}
+
 /* === INPUTS / TEXTAREA / SELECT === */
 input,
 select,

@@ -40,7 +40,7 @@
                 </div>
             </div>
 
-            <h1><i class="fas fa-bolt" style="color: #f59e0b;"></i> KSR Matcher</h1>
+            <h1 class="app-title"><i class="fas fa-bolt app-title__icon"></i> KSR Matcher</h1>
             <p class="subtitle">Векторный поиск строительных ресурсов</p>
         </header>
 
@@ -145,24 +145,24 @@
             <div class="card-header">
                 <div class="header-top-row">
                     <div class="header-title">
-                        <i class="fas fa-search" style="color: var(--primary);"></i> Поиск материалов
+                        <i class="fas fa-search header-title__icon"></i> Поиск материалов
                     </div>
 
                     <div class="metrics-panel">
                         <div class="metric-item">
-                            <i class="fas fa-wave-square" style="color: var(--success);"></i>
+                            <i class="fas fa-wave-square metric-item__icon metric-item__icon--success"></i>
                             Cosine: <strong id="cosineThreshold">0.30</strong>
                         </div>
                         <div class="metric-item">
-                            <i class="fas fa-bullseye" style="color: var(--primary);"></i>
+                            <i class="fas fa-bullseye metric-item__icon metric-item__icon--primary"></i>
                             Confident ≥: <strong id="confidentMin">0.50</strong>
                         </div>
                         <div class="metric-item">
-                            <i class="fas fa-question-circle" style="color: var(--text-secondary);"></i>
+                            <i class="fas fa-question-circle metric-item__icon metric-item__icon--muted"></i>
                             Uncertain ≥: <strong id="uncertainMin">0.15</strong>
                         </div>
                         <div class="metric-item">
-                            <i class="fas fa-clock" style="color: var(--text-secondary);"></i>
+                            <i class="fas fa-clock metric-item__icon metric-item__icon--muted"></i>
                             Time: <strong id="processingTime">0.00s</strong>
                         </div>
                     </div>
@@ -200,8 +200,7 @@
         <div class="main-card">
             <div class="results-header">
                 <div class="header-title">Результаты</div>
-                <div id="statusInfo" style="font-size: 0.9rem; color: var(--success); font-weight: 600;">Готов к работе
-                </div>
+                <div id="statusInfo" class="status-info">Готов к работе</div>
             </div>
 
             <div id="errorContainer" class="error-message hidden"></div>
@@ -210,20 +209,18 @@
                 <table class="ksr-table">
                     <thead>
                         <tr>
-                            <th style="width: 50px;">#</th>
-                            <th style="width: 200px;">Код</th>
-                            <th style="width: 50px;"></th>
+                            <th class="ksr-th-rank">#</th>
+                            <th class="ksr-th-code">Код</th>
+                            <th class="ksr-th-icon"></th>
                             <th>Описание</th>
-                            <th style="width: 50px;"></th>
-                            <th style="width: 150px;">Точность</th>
+                            <th class="ksr-th-icon"></th>
+                            <th class="ksr-th-score">Точность</th>
                         </tr>
                     </thead>
                     <tbody id="resultsBody">
                         <tr>
-                            <td colspan="6"
-                                style="text-align: center; padding: 60px 20px; color: var(--text-secondary);">
-                                <i class="fas fa-search"
-                                    style="font-size: 32px; opacity: 0.3; margin-bottom: 10px;"></i>
+                            <td colspan="6" class="results-empty">
+                                <i class="fas fa-search results-empty__icon"></i>
                                 <div>Здесь появятся результаты поиска</div>
                             </td>
                         </tr>
@@ -239,7 +236,7 @@
             </div><!-- /app-main -->
         </div><!-- /app-layout -->
 
-        <footer style="text-align: center; margin-top: 30px; color: var(--text-secondary); font-size: 0.8rem;">
+        <footer class="app-footer">
             © 2025 KSR Matcher
         </footer>
     </div>

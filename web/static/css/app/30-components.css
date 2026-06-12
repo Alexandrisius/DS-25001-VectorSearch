@@ -503,6 +503,92 @@ textarea::placeholder {
     border-top: 1px solid var(--border);
 }
 
+.app-footer {
+    text-align: center;
+    margin-top: 30px;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+}
+
+.app-title {
+    /* inherits h1 styles */
+}
+
+.app-title__icon {
+    color: #f59e0b;  /* matches original hardcoded amber */
+}
+
+.header-title__icon {
+    color: var(--primary);
+}
+
+.metric-item__icon {
+    /* base — color set by modifier */
+}
+
+.metric-item__icon--success {
+    color: var(--success);
+}
+
+.metric-item__icon--primary {
+    color: var(--primary);
+}
+
+.metric-item__icon--muted {
+    color: var(--text-secondary);
+}
+
+.status-info {
+    font-size: 0.9rem;
+    color: var(--success);
+    font-weight: 600;
+}
+
+.status-info--primary {
+    color: var(--primary);
+}
+
+.status-info--danger {
+    color: var(--danger);
+}
+
+.status-info--warning {
+    color: var(--color-warning);
+}
+
+.status-info--success {
+    color: var(--success);
+}
+
+.ksr-th-rank {
+    width: 50px;
+}
+
+.ksr-th-code {
+    width: 200px;
+}
+
+.ksr-th-icon {
+    width: 50px;
+}
+
+.ksr-th-score {
+    width: 150px;
+}
+
+.results-empty {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-secondary);
+}
+
+.results-empty__icon {
+    font-size: 32px;
+    opacity: 0.3;
+    margin-bottom: 10px;
+    display: block;
+}
+
 .error-message {
     background: var(--danger-bg);
     color: var(--danger);

@@ -2,7 +2,7 @@
  * Result table rendering and the "clear results" helper.
  */
 
-import { els } from './els.js';
+import { els, setStatusInfoColor } from './els.js';
 import { appState } from './state.js';
 import { escapeHtml } from '../shared/dom.js';
 import { createScoreBar } from './search.js';
@@ -23,7 +23,7 @@ export function displayResults(data) {
     }
     if (els.statusInfo) {
         els.statusInfo.textContent = `Найдено: ${data.candidates.length}`;
-        els.statusInfo.style.color = 'var(--success)';
+        setStatusInfoColor('success');
     }
 
     const db = appState.databases.find((d) => d.name === appState.currentDatabase);
@@ -47,7 +47,7 @@ export function displayResults(data) {
             </td></tr>`;
         if (els.statusInfo) {
             els.statusInfo.textContent = 'Ничего не найдено';
-            els.statusInfo.style.color = 'var(--warning)';
+            setStatusInfoColor('warning');
         }
         return;
     }
@@ -113,6 +113,6 @@ export function clearResults() {
     els.errorContainer?.classList.add('hidden');
     if (els.statusInfo) {
         els.statusInfo.textContent = 'Готов к работе';
-        els.statusInfo.style.color = 'var(--success)';
+        setStatusInfoColor('success');
     }
 }

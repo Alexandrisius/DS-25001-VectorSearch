@@ -1,0 +1,204 @@
+/* ==========================================================================
+   Admin page-specific utilities — classes used to replace inline `style=""`
+   attributes scattered through admin.html. Each rule has a semantic name
+   that describes what it styles, not what it looks like.
+
+   Once the HTML is fully migrated, this file may be merged into
+   admin/30-components.css or admin/20-layout.css. For now it's a
+   parking lot so the diff stays reviewable.
+   ========================================================================== */
+
+/* --- Mobile warning card ---------------------------------------------- */
+.mobile-warning-card__hint {
+    font-size: 0.85rem;
+    opacity: 0.8;
+}
+
+/* --- Misc 2-column grid for create-collection thresholds ------------- */
+.create-thresholds-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+}
+
+/* --- Login / auth ----------------------------------------------------- */
+.auth-error {
+    color: #f87171;
+    margin-top: 15px;
+    font-size: 0.9rem;
+}
+
+/* --- Sidebar header icon ---------------------------------------------- */
+.sidebar-header__icon {
+    color: var(--adm-primary);
+}
+
+/* --- Logout nav item (button) ---------------------------------------- */
+.nav-item--logout {
+    width: 100%;
+    border: none;
+    background: none;
+    text-align: left;
+    color: var(--color-text-on-primary);
+    cursor: pointer;
+    font-size: 1rem;
+    font-family: inherit;
+    background-color: transparent;
+}
+
+/* --- Data table column headers (specific widths) --------------------- */
+.col-code-th {
+    min-width: 150px;
+    text-align: center;
+}
+
+.col-description-th {
+    min-width: 300px;
+}
+
+.col-actions-th {
+    width: 80px;
+    text-align: center;
+}
+
+/* --- Form labels / hints ---------------------------------------------- */
+.field-label__inline-hint {
+    font-weight: normal;
+    color: var(--adm-text-sec);
+    font-size: 0.85rem;
+}
+
+.form-row-label {
+    display: block;
+    margin-bottom: 5px;
+}
+
+.form-row-label--bold {
+    display: block;
+    margin-bottom: 10px;
+    font-weight: 600;
+}
+
+.form-sublabel {
+    display: block;
+    margin-bottom: 5px;
+    font-size: 0.85rem;
+    color: var(--adm-text-sec);
+}
+
+.form-hint-spaced {
+    margin-top: 8px;
+}
+
+.form-checkbox-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.checkbox-auto-width {
+    width: auto;
+}
+
+.form-row-pair--spaced {
+    margin-top: 12px;
+}
+
+.form-section-spaced {
+    margin-bottom: 15px;
+}
+
+/* --- Delete confirmation modal ---------------------------------------- */
+.modal-window--narrow {
+    max-width: 500px;
+}
+
+.delete-warning__icon {
+    font-size: 3rem;
+    color: #dc3545;
+    margin-bottom: 15px;
+}
+
+.delete-warning__heading {
+    color: #dc3545;
+    margin-bottom: 10px;
+}
+
+.delete-warning__hint {
+    color: var(--adm-text-sec);
+    margin-bottom: 20px;
+}
+
+.delete-warning__collection-name {
+    color: var(--adm-text);
+}
+
+.confirm-input {
+    width: 100%;
+    padding: 12px;
+    font-size: 1rem;
+    border: 2px solid var(--adm-border);
+    border-radius: var(--radius-md);
+}
+
+.confirm-input-hint {
+    margin-top: 8px;
+    font-size: 0.85rem;
+    color: var(--adm-text-sec);
+}
+
+/* --- Wizard step descriptions ----------------------------------------- */
+.step-desc {
+    margin-bottom: 15px;
+    color: var(--adm-text-sec);
+}
+
+.delimiter-selector--spaced {
+    margin-bottom: 15px;
+}
+
+.delimiter-label {
+    font-weight: 600;
+    margin-bottom: 8px;
+    display: block;
+}
+
+.excel-label {
+    font-weight: 600;
+    margin-bottom: 8px;
+    display: block;
+}
+
+.excel-cursor-pointer {
+    cursor: pointer;
+}
+
+.paste-area {
+    height: 180px;
+    font-family: monospace;
+}
+
+/* --- Diff column widths ----------------------------------------------- */
+.diff-col-code {
+    width: 180px;
+}
+
+/* --- Import progress (step 4) ---------------------------------------- */
+.import-progress {
+    text-align: center;
+    padding: 20px;
+}
+
+.import-progress__title {
+    margin-bottom: 10px;
+}
+
+.import-progress__status {
+    margin-top: 10px;
+    font-size: 0.9rem;
+}
+
+.diff-loading__text {
+    margin-top: 10px;
+}

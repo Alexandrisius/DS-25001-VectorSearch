@@ -198,10 +198,10 @@ async function saveOpenRouterSettings() {
             updateOpenRouterUI();
 
             saveBtn.innerHTML = '<i class="fas fa-check"></i> Сохранено!';
-            saveBtn.style.background = 'var(--adm-success)';
+            saveBtn.classList.add('is-success');
             setTimeout(() => {
                 saveBtn.innerHTML = originalText;
-                saveBtn.style.background = '';
+                saveBtn.classList.remove('is-success');
                 saveBtn.disabled = false;
             }, 2000);
         } else {
@@ -211,10 +211,10 @@ async function saveOpenRouterSettings() {
     } catch (e) {
         console.error('Ошибка сохранения настроек LLM API:', e);
         saveBtn.innerHTML = '<i class="fas fa-times"></i> Ошибка';
-        saveBtn.style.background = 'var(--adm-danger)';
+        saveBtn.classList.add('is-error');
         setTimeout(() => {
             saveBtn.innerHTML = originalText;
-            saveBtn.style.background = '';
+            saveBtn.classList.remove('is-error');
             saveBtn.disabled = false;
         }, 2000);
     }
@@ -246,20 +246,15 @@ async function testOpenRouterConnection() {
 
         if (data.status === 'success') {
             testBtn.innerHTML = '<i class="fas fa-check"></i> Оба OK';
-            testBtn.style.background = 'var(--adm-success)';
-            testBtn.style.borderColor = 'var(--adm-success)';
-            testBtn.style.color = 'white';
+            testBtn.classList.add('is-success');
         } else {
             testBtn.innerHTML = '<i class="fas fa-times"></i> Есть ошибки';
-            testBtn.style.background = 'var(--adm-danger)';
-            testBtn.style.borderColor = 'var(--adm-danger)';
-            testBtn.style.color = 'white';
+            testBtn.classList.add('is-error');
         }
         setTimeout(() => {
             testBtn.innerHTML = originalText;
-            testBtn.style.background = '';
-            testBtn.style.borderColor = '';
-            testBtn.style.color = '';
+            testBtn.classList.remove('is-success');
+            testBtn.classList.remove('is-error');
             testBtn.disabled = false;
         }, 3000);
     } catch (e) {
@@ -269,14 +264,10 @@ async function testOpenRouterConnection() {
         updateOpenRouterUI();
 
         testBtn.innerHTML = '<i class="fas fa-times"></i> Ошибка';
-        testBtn.style.background = 'var(--adm-danger)';
-        testBtn.style.borderColor = 'var(--adm-danger)';
-        testBtn.style.color = 'white';
+        testBtn.classList.add('is-error');
         setTimeout(() => {
             testBtn.innerHTML = originalText;
-            testBtn.style.background = '';
-            testBtn.style.borderColor = '';
-            testBtn.style.color = '';
+            testBtn.classList.remove('is-error');
             testBtn.disabled = false;
         }, 3000);
     }

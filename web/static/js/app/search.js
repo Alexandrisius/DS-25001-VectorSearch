@@ -3,7 +3,7 @@
  * loading state and inline error.
  */
 
-import { els } from './els.js';
+import { els, setStatusInfoColor } from './els.js';
 import { appState, filterState } from './state.js';
 import { displayResults } from './results.js';
 
@@ -19,7 +19,7 @@ export function setLoading(loading) {
         els.searchBtn.innerHTML = '<div class="loading-spinner"></div> Ищем...';
         if (els.statusInfo) {
             els.statusInfo.textContent = 'Поиск...';
-            els.statusInfo.style.color = 'var(--primary)';
+            setStatusInfoColor('primary');
         }
         if (els.processingInfo) {
             els.processingInfo.textContent = 'Нейросеть обрабатывает запрос...';
@@ -77,7 +77,7 @@ export async function performSearch() {
         }
         if (els.statusInfo) {
             els.statusInfo.textContent = 'Ошибка';
-            els.statusInfo.style.color = 'var(--danger)';
+            setStatusInfoColor('danger');
         }
         if (els.processingInfo) {
             els.processingInfo.textContent = 'Произошла ошибка при поиске';
