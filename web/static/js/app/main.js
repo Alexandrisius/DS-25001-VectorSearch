@@ -12,6 +12,7 @@ import { appState } from './state.js';
 import { initTheme } from './theme.js';
 import { loadAvailableDatabases } from './database.js';
 import { initCatalogSidebar } from './catalog/sidebar.js';
+import { initCatalogControls } from './catalog/sidebar-controls.js';
 import { initCatalogSearch } from './catalog/search.js';
 
 import { performSearch } from './search.js';
@@ -22,13 +23,15 @@ import { initResultsHandlers } from './results-handlers.js';
 import { initCatalogHandlers } from './catalog-handlers.js';
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Focus the search input on load.
-    els.queryInput?.focus();
+    // Don't autofocus the search input — that would steal the first Tab
+    // from the skip-link, breaking keyboard a11y (WCAG 2.4.1).
+    // The search input still receives focus on click and on Enter.
 
     // Bootstrap data.
     loadAvailableDatabases();
     initTheme();
     initCatalogSidebar();
+    initCatalogControls();
     initCatalogSearch();
     initResultsHandlers();
     initCatalogHandlers();
