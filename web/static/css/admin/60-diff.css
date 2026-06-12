@@ -132,6 +132,33 @@
     word-break: break-word;
 }
 
+.diff-table__overflow {
+    text-align: center;
+    color: var(--adm-text-sec);
+    padding: 15px;
+}
+
+.diff-col-folder-name {
+    width: 40%;
+}
+
+.diff-col-folder-status {
+    width: 40%;
+}
+
+.diff-col-folder-count {
+    width: 20%;
+}
+
+.folder-leaf-name--old {
+    text-decoration: line-through;
+    opacity: 0.7;
+}
+
+.folder-full-path--old {
+    opacity: 0.5;
+}
+
 /* Modified records: old → new layout */
 .diff-old {
     background: var(--adm-danger-bg);

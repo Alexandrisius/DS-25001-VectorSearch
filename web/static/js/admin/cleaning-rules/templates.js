@@ -3,7 +3,13 @@
  *
  * Clicking a chip in the UI inserts these values into the add-rule form.
  * Order matters — the first match in the list is rendered first.
+ *
+ * Also owns `renderTemplates()` which paints the chip list into the
+ * `templatesList` container (originally on CleaningRulesModule; moved
+ * here during the K2 module split).
  */
+import { escapeHtml } from '../../shared/dom.js';
+
 export const BUILTIN_TEMPLATES = Object.freeze([
     {
         id: 'remove-section-prefix',
@@ -62,3 +68,22 @@ export const BUILTIN_TEMPLATES = Object.freeze([
         apply_to_columns: ['description', 'hierarchy', 'hierarchy_level'],
     },
 ]);
+
+/**
+ * Render the template chips into the `templatesList` container. Each
+ * chip gets a `data-template-id` so the events module can wire it
+ * to `applyTemplate()`.
+ */
+export function renderTemplates() {
+    const list = document.getElementById('templatesList');
+    if (!list) return;
+    list.innerHTML = BUILTIN_TEMPLATES.map((t) => `
+        <button class="template-chip" type="button"
+                data-template-id="${escapeHtml(t.id)}"
+                title="${escapeHtml(t.description)}">
+            <i class="fas fa-magic"></i>
+            ${escapeHtml(t.name)}
+        </button>
+    `).join('');
+    /* Click handlers are bound in events.js via delegation. */
+}

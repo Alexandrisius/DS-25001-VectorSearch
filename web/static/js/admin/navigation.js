@@ -10,8 +10,8 @@ import { state } from './state.js';
 import { els } from './els.js';
 import { openModal } from './modals.js';
 import { loadCollections, openDataView } from './collections/list.js';
-import { loadJobs } from './import/jobs.js';
-import { renderStatusesSettings } from './settings/statuses.js';
+import { loadJobs } from './import/jobs-list.js';
+import { renderStatusesSettings } from './settings/statuses-list.js';
 
 /**
  * Wire up click handlers on `.nav-item[data-view]` links.

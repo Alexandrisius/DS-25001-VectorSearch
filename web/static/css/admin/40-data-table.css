@@ -293,8 +293,35 @@ tr:hover td {
     text-align: center;
 }
 
-.data-table-full th.col-actions-header {
+.data-table-full th.col-actions-header,
+.data-table-full .col-actions-header {
     text-align: center;
+    width: 80px;
+}
+
+/* Specific read-only column header widths */
+.data-table-full th.col-version-th {
+    min-width: 70px;
+    text-align: center;
+}
+
+.data-table-full th.col-status-th {
+    min-width: 130px;
+    text-align: center;
+}
+
+.th-icon-faded {
+    opacity: 0.6;
+    margin-right: 5px;
+}
+
+.folder-icon-inline {
+    color: var(--color-folder);
+    margin-right: 5px;
+}
+
+.btn-action-sm {
+    padding: 6px;
 }
 
 /* === SORTING === */

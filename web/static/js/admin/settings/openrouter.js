@@ -1,31 +1,24 @@
 /**
- * LLM API (OpenRouter) settings.
+ * LLM API (OpenRouter) settings form — load from server, save back,
+ * wire the show/hide password eye-toggle and the save button.
  *
- * The previous implementation exposed `openrouterState` as a global
- * const. We keep that pattern (renamed to `state` and scoped to this
- * module) to minimise the diff and avoid breaking call sites.
+ *   - loadOpenRouterSettings:    GET on bootstrap.
+ *   - initOpenRouterSettings:     one-time click wiring (save / eye).
+ *   - saveOpenRouterSettings:    save button handler.
  *
- * This module never depends on the global admin `state` object; the
- * only cross-cutting concern is the authFetch helper.
+ * The test button handler is in openrouter-test.js. State lives
+ * in openrouter-state.js. Display in openrouter-display.js.
+ *
+ * Split out of the original openrouter.js (184 LoC) for module
+ * size management.
  */
 
 import { authFetch } from '../../shared/api.js';
-
-const openrouterState = {
-    enabled: false,
-    apiKey: '',
-    apiKeySet: false,
-    baseUrl: '',
-    modelEmbed: 'qwen/qwen3-embedding-4b',
-    modelRerank: 'cohere/rerank-4-pro',
-    batch_size: 10,
-    max_workers: 3,
-    embedTest: { status: 'idle', message: '' },
-    rerankTest: { status: 'idle', message: '' },
-};
+import { openrouterState } from './openrouter-state.js';
+import { updateOpenRouterUI } from './openrouter-display.js';
 
 /**
- * Load LLM-API settings from the server.
+ * Load LLM-API settings from the server. Called on bootstrap.
  */
 export async function loadOpenRouterSettings() {
     try {
@@ -54,73 +47,9 @@ export async function loadOpenRouterSettings() {
     }
 }
 
-function updateOpenRouterUI() {
-    const enabledCheckbox = document.getElementById('openrouterEnabled');
-    const apiKeyInput = document.getElementById('openrouterApiKey');
-    const baseUrlInput = document.getElementById('openrouterBaseUrl');
-    const modelEmbedInput = document.getElementById('openrouterModel');
-    const modelRerankInput = document.getElementById('openrouterRerankModel');
-
-    if (enabledCheckbox) enabledCheckbox.checked = openrouterState.enabled;
-    if (apiKeyInput && openrouterState.apiKeySet) {
-        apiKeyInput.placeholder = '••••••••••••••••';
-    }
-    if (baseUrlInput) baseUrlInput.value = openrouterState.baseUrl || '';
-    if (modelEmbedInput) modelEmbedInput.value = openrouterState.modelEmbed || '';
-    if (modelRerankInput) modelRerankInput.value = openrouterState.modelRerank || '';
-
-    const batchSizeInput = document.getElementById('openrouterBatchSize');
-    const maxWorkersInput = document.getElementById('openrouterMaxWorkers');
-    if (batchSizeInput) batchSizeInput.value = openrouterState.batch_size || 10;
-    if (maxWorkersInput) maxWorkersInput.value = openrouterState.max_workers || 3;
-
-    updateModelDisplay('Embed', openrouterState.modelEmbed, openrouterState.embedTest);
-    updateModelDisplay('Rerank', openrouterState.modelRerank, openrouterState.rerankTest);
-}
-
-function updateModelDisplay(kind, model, testResult) {
-    const isEmbed = kind === 'Embed';
-    const modelEl = document.getElementById(isEmbed ? 'openrouterEmbedModel' : 'openrouterRerankModelText');
-    const msgEl = document.getElementById(isEmbed ? 'openrouterEmbedMessage' : 'openrouterRerankMessage');
-    const indEl = document.getElementById(isEmbed ? 'openrouterEmbedIndicator' : 'openrouterRerankIndicator');
-
-    if (modelEl) modelEl.textContent = model || '—';
-    if (msgEl) {
-        if (!openrouterState.enabled) {
-            msgEl.textContent = 'Провайдер выключен';
-            msgEl.className = 'status-message';
-        } else if (!openrouterState.apiKeySet) {
-            msgEl.textContent = 'API ключ не задан';
-            msgEl.className = 'status-message';
-        } else if (testResult && testResult.status && testResult.status !== 'idle') {
-            msgEl.textContent = testResult.message || '';
-            msgEl.className = 'status-message ' + (testResult.status === 'success' ? 'is-success' : 'is-error');
-        } else {
-            msgEl.textContent = 'Готов к проверке';
-            msgEl.className = 'status-message';
-        }
-    }
-    if (indEl) {
-        const i = indEl.querySelector('i');
-        if (!i) return;
-        if (!openrouterState.enabled || !openrouterState.apiKeySet) {
-            indEl.className = 'status-indicator status-inactive';
-            i.className = 'fas fa-circle';
-        } else if (testResult && testResult.status === 'success') {
-            indEl.className = 'status-indicator status-success';
-            i.className = 'fas fa-check-circle';
-        } else if (testResult && testResult.status === 'error') {
-            indEl.className = 'status-indicator status-error';
-            i.className = 'fas fa-times-circle';
-        } else {
-            indEl.className = 'status-indicator status-configured';
-            i.className = 'fas fa-circle';
-        }
-    }
-}
-
 /**
- * Wire up the save / test / eye-toggle buttons on the LLM-API section.
+ * Wire up the save / eye-toggle buttons on the LLM-API section.
+ * Called once at bootstrap.
  */
 export function initOpenRouterSettings() {
     const saveBtn = document.getElementById('saveOpenrouterBtn');
@@ -139,7 +68,13 @@ export function initOpenRouterSettings() {
         });
     }
     saveBtn?.addEventListener('click', saveOpenRouterSettings);
-    testBtn?.addEventListener('click', testOpenRouterConnection);
+    // Test button is wired by openrouter-test.js to keep save/test
+    // concerns in separate files.
+    if (testBtn) {
+        import('./openrouter-test.js').then((m) => {
+            testBtn.addEventListener('click', m.testOpenRouterConnection);
+        });
+    }
 }
 
 async function saveOpenRouterSettings() {
@@ -217,58 +152,5 @@ async function saveOpenRouterSettings() {
             saveBtn.classList.remove('is-error');
             saveBtn.disabled = false;
         }, 2000);
-    }
-}
-
-async function testOpenRouterConnection() {
-    const testBtn = document.getElementById('testOpenrouterBtn');
-    if (!testBtn) return;
-
-    const originalText = testBtn.innerHTML;
-    testBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Проверка...';
-    testBtn.disabled = true;
-
-    openrouterState.embedTest = { status: 'testing', message: 'Проверка...' };
-    openrouterState.rerankTest = { status: 'testing', message: 'Проверка...' };
-    updateOpenRouterUI();
-
-    try {
-        const res = await authFetch('/admin/openrouter-test', { method: 'POST' });
-        const data = await res.json();
-
-        if (data.embed) {
-            openrouterState.embedTest = { status: data.embed.status, message: data.embed.message || '' };
-        }
-        if (data.rerank) {
-            openrouterState.rerankTest = { status: data.rerank.status, message: data.rerank.message || '' };
-        }
-        updateOpenRouterUI();
-
-        if (data.status === 'success') {
-            testBtn.innerHTML = '<i class="fas fa-check"></i> Оба OK';
-            testBtn.classList.add('is-success');
-        } else {
-            testBtn.innerHTML = '<i class="fas fa-times"></i> Есть ошибки';
-            testBtn.classList.add('is-error');
-        }
-        setTimeout(() => {
-            testBtn.innerHTML = originalText;
-            testBtn.classList.remove('is-success');
-            testBtn.classList.remove('is-error');
-            testBtn.disabled = false;
-        }, 3000);
-    } catch (e) {
-        console.error('Ошибка тестирования OpenRouter:', e);
-        openrouterState.embedTest = { status: 'error', message: 'Ошибка сети: ' + e.message };
-        openrouterState.rerankTest = { status: 'error', message: 'Ошибка сети: ' + e.message };
-        updateOpenRouterUI();
-
-        testBtn.innerHTML = '<i class="fas fa-times"></i> Ошибка';
-        testBtn.classList.add('is-error');
-        setTimeout(() => {
-            testBtn.innerHTML = originalText;
-            testBtn.classList.remove('is-error');
-            testBtn.disabled = false;
-        }, 3000);
     }
 }

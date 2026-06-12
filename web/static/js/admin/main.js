@@ -32,14 +32,15 @@ import { initSorting } from './data-table/sort.js';
 
 // --- import wizard ---
 import { initImportWizard } from './import/wizard.js';
-import { initJobStopHandler } from './import/jobs.js';
+import { initJobStopHandler } from './import/jobs-list.js';
 
 // --- cleaning rules ---
 import { initCleaningRulesEvents } from './cleaning-rules/events.js';
-import { CleaningRulesModule } from './cleaning-rules/module.js';
+import { CleaningRulesModule } from './cleaning-rules/list.js';
 
 // --- settings ---
-import { initSettingsPage, loadStatuses } from './settings/statuses.js';
+import { initSettingsPage } from './settings/statuses-form.js';
+import { loadStatuses } from './settings/statuses-list.js';
 import {
     initOpenRouterSettings,
     loadOpenRouterSettings,

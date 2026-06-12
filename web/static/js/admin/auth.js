@@ -9,7 +9,7 @@
 import { state } from './state.js';
 import { els } from './els.js';
 import { switchView } from './navigation.js';
-import { startJobPoller } from './import/jobs.js';
+import { startJobPoller } from './import/jobs-list.js';
 
 /**
  * Wire up the login screen, password field and logout button.

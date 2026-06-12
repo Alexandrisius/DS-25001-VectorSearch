@@ -1,8 +1,9 @@
 /**
  * App entry point.
  *
- * Wires every module together. Import order matters — modules with
- * no internal dependencies come first.
+ * Pure bootstrap: each `init*` function installs its own listeners.
+ * Import order matters — modules with no internal dependencies are
+ * imported first, then modules that depend on them. No cycles.
  */
 
 import { els } from './els.js';
@@ -17,7 +18,8 @@ import { performSearch } from './search.js';
 import { clearResults } from './results.js';
 import { sendAnalytics } from './analytics.js';
 import { clearFilter } from './filter.js';
-import { navigateToCategoryInCatalog } from './catalog/navigation.js';
+import { initResultsHandlers } from './results-handlers.js';
+import { initCatalogHandlers } from './catalog-handlers.js';
 
 document.addEventListener('DOMContentLoaded', () => {
     // Focus the search input on load.
@@ -28,6 +30,8 @@ document.addEventListener('DOMContentLoaded', () => {
     initTheme();
     initCatalogSidebar();
     initCatalogSearch();
+    initResultsHandlers();
+    initCatalogHandlers();
 
     // Search wiring.
     els.clearBtn?.addEventListener('click', () => {
@@ -48,78 +52,7 @@ document.addEventListener('DOMContentLoaded', () => {
             performSearch();
         }
     });
-
-    // Delegated handlers for the results table.
-    document.addEventListener('click', (e) => {
-        // Copy code
-        const copyBtn = e.target.closest('.copy-btn');
-        if (copyBtn) {
-            const btn = copyBtn;
-            const row = btn.closest('tr');
-            if (!row) return;
-            const code = row.querySelector('.code-text')?.textContent || '';
-            const rank = parseInt(row.dataset.rank, 10);
-            navigator.clipboard.writeText(code).then(() => {
-                const originalHtml = btn.innerHTML;
-                btn.innerHTML = '<i class="fas fa-check" style="color:var(--success)"></i>';
-                setTimeout(() => { btn.innerHTML = originalHtml; }, 1500);
-                if (appState.currentQuery && appState.currentResults.length > 0) {
-                    const result = appState.currentResults.find((r) => r.rank === rank);
-                    if (result) {
-                        sendAnalytics('copy', {
-                            code: result.code,
-                            rank: result.rank,
-                            description: result.description,
-                            reranker_score: result.reranker_score,
-                            cosine_similarity: result.cosine_similarity,
-                        });
-                    }
-                }
-            });
-            return;
-        }
-
-        // Dislike
-        const dislikeBtn = e.target.closest('.dislike-btn');
-        if (dislikeBtn) {
-            const btn = dislikeBtn;
-            const row = btn.closest('tr');
-            if (!row) return;
-            const rank = parseInt(row.dataset.rank, 10);
-            btn.innerHTML = '<i class="fas fa-thumbs-down" style="color:var(--danger)"></i>';
-            if (appState.currentQuery && appState.currentResults.length > 0) {
-                const result = appState.currentResults.find((r) => r.rank === rank);
-                if (result) {
-                    sendAnalytics('dislike', {
-                        code: result.code,
-                        rank: result.rank,
-                        description: result.description,
-                        reranker_score: result.reranker_score,
-                        cosine_similarity: result.cosine_similarity,
-                    });
-                }
-            }
-            return;
-        }
-
-        // Database card click → select database
-        const dbCard = e.target.closest('.db-card');
-        if (dbCard) {
-            const dbName = dbCard.dataset.name;
-            const option = els.customOptionsContainer
-                ? Array.from(els.customOptionsContainer.children).find((div) => div.dataset.value === dbName)
-                : null;
-            if (option) option.click();
-            return;
-        }
-
-        // Result category path → navigate in catalog
-        const catPath = e.target.closest('.result-category-path');
-        if (catPath) {
-            const categoryPath = catPath.dataset.categoryPath;
-            if (categoryPath) {
-                navigateToCategoryInCatalog(categoryPath);
-            }
-        }
-    });
 });
+
+// Re-export sendAnalytics so legacy callers (tests, dev tools) keep working.
+export { sendAnalytics };

@@ -18,7 +18,9 @@ import { initImportSourceTabs } from './source-tabs.js';
 import { initExcelUpload } from './excel.js';
 import { initDiffTabs } from './diff/tabs.js';
 import { validateMapping } from './mapping.js';
-import { performDiffAnalysis, performFullUpload, applyDiffChanges } from './diff/run.js';
+import { performDiffAnalysis } from './diff/run-analysis.js';
+import { performFullUpload } from './diff/run-upload.js';
+import { applyDiffChanges } from './diff/run-apply.js';
 import { updateAllPreviews } from './preview.js';
 
 /**

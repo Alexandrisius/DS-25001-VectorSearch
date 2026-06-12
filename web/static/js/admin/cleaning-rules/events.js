@@ -1,6 +1,12 @@
 /**
  * Wiring for the cleaning-rules UI on the settings page.
  *
+ * After the K2 split, the four concerns live in separate modules:
+ *   - list.js      → load/save/add/delete/toggle + render
+ *   - form.js      → collectDraft/clearForm/applyTemplate
+ *   - preview.js   → openPreviewModalById/ForDraft
+ *   - targets.js   → closeAddForm/syncPillChecked (DOM helpers)
+ *
  * - Toggle visibility of the add-form and the templates section
  * - Delegated click handler for rule actions (toggle, preview, delete)
  *   so we don't have inline `onclick="CleaningRulesModule.X(...)"` attributes
@@ -9,7 +15,10 @@
  *   checkboxes inside them).
  */
 
-import { CleaningRulesModule } from './module.js';
+import { CleaningRulesModule } from './list.js';
+import { CleaningRulesModule_form } from './form.js';
+import { CleaningRulesModule_preview } from './preview.js';
+import { closeAddForm, syncPillChecked } from './targets.js';
 
 export function initCleaningRulesEvents() {
     // --- Add-form toggle ---
@@ -28,18 +37,18 @@ export function initCleaningRulesEvents() {
 
     // --- Add-form buttons ---
     document.getElementById('cancelAddRuleBtn')?.addEventListener('click', () => {
-        CleaningRulesModule._closeAddForm();
-        CleaningRulesModule.clearForm();
+        closeAddForm();
+        CleaningRulesModule_form.clearForm();
     });
 
     document.getElementById('addCleaningRuleBtn')?.addEventListener('click', () => {
-        const result = CleaningRulesModule.collectDraft();
+        const result = CleaningRulesModule_form.collectDraft();
         if (!result.valid) {
             alert(result.errors.join('\n'));
             return;
         }
         CleaningRulesModule.add(result.draft);
-        CleaningRulesModule.clearForm();
+        CleaningRulesModule_form.clearForm();
     });
 
     document.getElementById('saveCleaningRulesBtn')?.addEventListener('click', () => {
@@ -47,12 +56,12 @@ export function initCleaningRulesEvents() {
     });
 
     document.getElementById('previewCleaningRuleBtn')?.addEventListener('click', () => {
-        const result = CleaningRulesModule.collectDraft();
+        const result = CleaningRulesModule_form.collectDraft();
         if (!result.valid) {
             alert(result.errors.join('\n'));
             return;
         }
-        CleaningRulesModule.openPreviewModalForDraft(result.draft);
+        CleaningRulesModule_preview.openPreviewModalForDraft(result.draft);
     });
 
     // --- Templates toggle ---
@@ -87,7 +96,7 @@ export function initCleaningRulesEvents() {
         if (action === 'toggle-rule') {
             CleaningRulesModule.toggle(ruleId);
         } else if (action === 'preview-rule') {
-            CleaningRulesModule.openPreviewModalById(ruleId);
+            CleaningRulesModule_preview.openPreviewModalById(ruleId);
         } else if (action === 'delete-rule') {
             CleaningRulesModule.delete(ruleId);
         }
@@ -100,3 +109,6 @@ export function initCleaningRulesEvents() {
         });
     });
 }
+
+// Keep `syncPillChecked` exported for code that imports it from here.
+export { syncPillChecked };
