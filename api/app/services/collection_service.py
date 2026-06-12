@@ -150,6 +150,15 @@ class CollectionService:
         visible: bool | None = None,
         cosine_threshold: float | None = None,
         rerank_threshold: float | None = None,
+        # Phase 4: RRF + MMR + adaptive threshold
+        rrf_k: int | None = None,
+        rrf_dense_weight: float | None = None,
+        rrf_bm25_weight: float | None = None,
+        mmr_lambda: float | None = None,
+        mmr_pool_size: int | None = None,
+        adaptive_confident_min: float | None = None,
+        adaptive_uncertain_min: float | None = None,
+        fallback_cosine_min: float | None = None,
     ) -> Collection:
         coll = await self.get_or_404(name)
         if visible is not None:
@@ -158,6 +167,23 @@ class CollectionService:
             coll.cosine_threshold = cosine_threshold
         if rerank_threshold is not None:
             coll.rerank_threshold = rerank_threshold
+        # Phase 4
+        if rrf_k is not None:
+            coll.rrf_k = rrf_k
+        if rrf_dense_weight is not None:
+            coll.rrf_dense_weight = rrf_dense_weight
+        if rrf_bm25_weight is not None:
+            coll.rrf_bm25_weight = rrf_bm25_weight
+        if mmr_lambda is not None:
+            coll.mmr_lambda = mmr_lambda
+        if mmr_pool_size is not None:
+            coll.mmr_pool_size = mmr_pool_size
+        if adaptive_confident_min is not None:
+            coll.adaptive_confident_min = adaptive_confident_min
+        if adaptive_uncertain_min is not None:
+            coll.adaptive_uncertain_min = adaptive_uncertain_min
+        if fallback_cosine_min is not None:
+            coll.fallback_cosine_min = fallback_cosine_min
         await self.session.flush()
         return coll
 

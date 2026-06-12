@@ -30,12 +30,28 @@ class CandidateResult(BaseModel):
     cosine_similarity: float
 
 
+class SearchTrace(BaseModel):
+    """Диагностика пайплайна поиска (Phase 4: RRF + MMR + adaptive)."""
+    stages: list[dict[str, Any]] = Field(default_factory=list)
+    rrf: dict[str, Any] = Field(default_factory=dict)
+    rrf_fused_top10: list[dict[str, Any]] = Field(default_factory=list)
+    mmr: dict[str, Any] = Field(default_factory=dict)
+    adaptive: dict[str, Any] = Field(default_factory=dict)
+    adaptive_branch: str | None = None
+    adaptive_limit: int | None = None
+    max_rerank_score: float | None = None
+    final_count: int | None = None
+
+
 class MatchResponse(BaseModel):
     query: str
     database: str
     candidates: list[CandidateResult]
     processing_time: float
     status: str
+    # Phase 4: дебаг-информация и UI-хинт
+    search_trace: SearchTrace | None = None
+    hint: str | None = None
 
 
 class MatchResponsePublic(MatchResponse):

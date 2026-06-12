@@ -83,6 +83,16 @@ async def list_databases(session: DBSession) -> dict:
                     "cosine": c.cosine_threshold,
                     "rerank": c.rerank_threshold,
                 },
+                "phase4": {
+                    "rrf_k": c.rrf_k,
+                    "rrf_dense_weight": c.rrf_dense_weight,
+                    "rrf_bm25_weight": c.rrf_bm25_weight,
+                    "mmr_lambda": c.mmr_lambda,
+                    "mmr_pool_size": c.mmr_pool_size,
+                    "adaptive_confident_min": c.adaptive_confident_min,
+                    "adaptive_uncertain_min": c.adaptive_uncertain_min,
+                    "fallback_cosine_min": c.fallback_cosine_min,
+                },
                 "last_updated": c.last_updated.isoformat() if c.last_updated else "",
             }
             for c in visible

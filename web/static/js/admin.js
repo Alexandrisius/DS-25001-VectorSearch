@@ -143,6 +143,15 @@ const els = {
     cfgCosine: document.getElementById('cfgCosine'),
     cfgRerank: document.getElementById('cfgRerank'),
     cfgVisible: document.getElementById('cfgVisible'),
+    // Phase 4
+    cfgRrfK: document.getElementById('cfgRrfK'),
+    cfgMmrPool: document.getElementById('cfgMmrPool'),
+    cfgRrfDense: document.getElementById('cfgRrfDense'),
+    cfgRrfBm25: document.getElementById('cfgRrfBm25'),
+    cfgMmrLambda: document.getElementById('cfgMmrLambda'),
+    cfgConfidentMin: document.getElementById('cfgConfidentMin'),
+    cfgUncertainMin: document.getElementById('cfgUncertainMin'),
+    cfgFallbackCosine: document.getElementById('cfgFallbackCosine'),
     saveConfigBtn: document.getElementById('saveConfigBtn'),
 
     // Create Collection Form
@@ -1340,6 +1349,17 @@ window.openConfig = (name) => {
     els.cfgRerank.value = c.thresholds?.rerank ?? 0.6;
     els.cfgVisible.checked = c.visible !== undefined ? c.visible : true;
 
+    // Phase 4: RRF + MMR + adaptive
+    const p4 = c.phase4 || {};
+    els.cfgRrfK.value = p4.rrf_k ?? 60;
+    els.cfgMmrPool.value = p4.mmr_pool_size ?? 100;
+    els.cfgRrfDense.value = p4.rrf_dense_weight ?? 1.0;
+    els.cfgRrfBm25.value = p4.rrf_bm25_weight ?? 0.7;
+    els.cfgMmrLambda.value = p4.mmr_lambda ?? 0.7;
+    els.cfgConfidentMin.value = p4.adaptive_confident_min ?? 0.5;
+    els.cfgUncertainMin.value = p4.adaptive_uncertain_min ?? 0.15;
+    els.cfgFallbackCosine.value = p4.fallback_cosine_min ?? 0.30;
+
     openModal('config');
 };
 
@@ -1350,8 +1370,18 @@ els.saveConfigBtn.addEventListener('click', async () => {
         locked: false,
         thresholds: {
             cosine: parseFloat(els.cfgCosine.value),
-            rerank: parseFloat(els.cfgRerank.value)
-        }
+            rerank: parseFloat(els.cfgRerank.value),
+        },
+        phase4: {
+            rrf_k: parseInt(els.cfgRrfK.value),
+            mmr_pool_size: parseInt(els.cfgMmrPool.value),
+            rrf_dense_weight: parseFloat(els.cfgRrfDense.value),
+            rrf_bm25_weight: parseFloat(els.cfgRrfBm25.value),
+            mmr_lambda: parseFloat(els.cfgMmrLambda.value),
+            adaptive_confident_min: parseFloat(els.cfgConfidentMin.value),
+            adaptive_uncertain_min: parseFloat(els.cfgUncertainMin.value),
+            fallback_cosine_min: parseFloat(els.cfgFallbackCosine.value),
+        },
     };
 
     try {

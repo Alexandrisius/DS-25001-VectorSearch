@@ -67,6 +67,16 @@ async def admin_list_collections(
                 visible=c.visible,
                 locked=c.locked,
                 is_active=(current.name == c.name if current else False),
+                phase4={
+                    "rrf_k": c.rrf_k,
+                    "rrf_dense_weight": c.rrf_dense_weight,
+                    "rrf_bm25_weight": c.rrf_bm25_weight,
+                    "mmr_lambda": c.mmr_lambda,
+                    "mmr_pool_size": c.mmr_pool_size,
+                    "adaptive_confident_min": c.adaptive_confident_min,
+                    "adaptive_uncertain_min": c.adaptive_uncertain_min,
+                    "fallback_cosine_min": c.fallback_cosine_min,
+                },
             )
             for c in all_coll
         ]
@@ -81,11 +91,20 @@ async def admin_update_config(
     _: dict = Depends(get_current_admin),
     svc: CollectionService = Depends(get_collection_service),
 ) -> dict:
+    phase4 = config.phase4 or {}
     coll = await svc.update_config(
         name,
         visible=config.visible,
         cosine_threshold=config.thresholds.get("cosine"),
         rerank_threshold=config.thresholds.get("rerank"),
+        rrf_k=phase4.get("rrf_k"),
+        rrf_dense_weight=phase4.get("rrf_dense_weight"),
+        rrf_bm25_weight=phase4.get("rrf_bm25_weight"),
+        mmr_lambda=phase4.get("mmr_lambda"),
+        mmr_pool_size=phase4.get("mmr_pool_size"),
+        adaptive_confident_min=phase4.get("adaptive_confident_min"),
+        adaptive_uncertain_min=phase4.get("adaptive_uncertain_min"),
+        fallback_cosine_min=phase4.get("fallback_cosine_min"),
     )
     # НЕ вызываем coll.to_dict() — это вызовет MissingGreenlet (lazy load).
     # Собираем dict вручную с eager-loaded count.

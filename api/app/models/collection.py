@@ -24,6 +24,23 @@ class Collection(Base):
     )
     cosine_threshold: Mapped[float] = mapped_column(Float, nullable=False, default=0.45)
     rerank_threshold: Mapped[float] = mapped_column(Float, nullable=False, default=0.6)
+    # ===== Phase 4: RRF + MMR + adaptive threshold =====
+    # Reciprocal Rank Fusion weights: relative contribution of dense vs sparse legs.
+    # Final fused score = w_dense / (k + rank_dense) + w_bm25 / (k + rank_bm25).
+    rrf_k: Mapped[int] = mapped_column(Integer, nullable=False, default=60, server_default="60")
+    rrf_dense_weight: Mapped[float] = mapped_column(Float, nullable=False, default=1.0, server_default="1.0")
+    rrf_bm25_weight: Mapped[float] = mapped_column(Float, nullable=False, default=0.7, server_default="0.7")
+    # Maximal Marginal Relevance: balance between query relevance and diversity.
+    # 1.0 = pure relevance, 0.0 = pure diversity. 0.7 is the sweet spot for KSR.
+    mmr_lambda: Mapped[float] = mapped_column(Float, nullable=False, default=0.7, server_default="0.7")
+    # How many candidates to keep after MMR dedup (cap for rerank).
+    mmr_pool_size: Mapped[int] = mapped_column(Integer, nullable=False, default=100, server_default="100")
+    # Adaptive threshold: if max rerank_score >= this, "confident" → top-10.
+    adaptive_confident_min: Mapped[float] = mapped_column(Float, nullable=False, default=0.5, server_default="0.5")
+    # If max rerank_score in [uncertain_min, confident_min) — "uncertain" → top-5 + UI hint.
+    adaptive_uncertain_min: Mapped[float] = mapped_column(Float, nullable=False, default=0.15, server_default="0.15")
+    # If max rerank_score < uncertain_min — fallback to top-N by cosine similarity.
+    fallback_cosine_min: Mapped[float] = mapped_column(Float, nullable=False, default=0.30, server_default="0.30")
     visible: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     locked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     dimension: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -61,6 +78,16 @@ class Collection(Base):
             "thresholds": {
                 "cosine": self.cosine_threshold,
                 "rerank": self.rerank_threshold,
+            },
+            "phase4": {
+                "rrf_k": self.rrf_k,
+                "rrf_dense_weight": self.rrf_dense_weight,
+                "rrf_bm25_weight": self.rrf_bm25_weight,
+                "mmr_lambda": self.mmr_lambda,
+                "mmr_pool_size": self.mmr_pool_size,
+                "adaptive_confident_min": self.adaptive_confident_min,
+                "adaptive_uncertain_min": self.adaptive_uncertain_min,
+                "fallback_cosine_min": self.fallback_cosine_min,
             },
             "last_updated": self.last_updated.isoformat() if self.last_updated else "",
             "visible": self.visible,

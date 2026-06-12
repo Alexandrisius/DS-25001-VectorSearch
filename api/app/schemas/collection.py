@@ -8,7 +8,22 @@ from pydantic import BaseModel, Field, field_validator
 
 class CollectionConfigUpdate(BaseModel):
     visible: bool = True
-    thresholds: dict[str, float] = Field(..., description="{'cosine': 0.45, 'rerank': 0.6}")
+    # Legacy thresholds (оставлены для обратной совместимости, но
+    # Phase 4 search их не использует — adaptive threshold решает).
+    thresholds: dict[str, float] = Field(
+        default_factory=lambda: {"cosine": 0.45, "rerank": 0.6},
+        description="Legacy {'cosine': 0.45, 'rerank': 0.6} — not used by Phase 4",
+    )
+    # Phase 4: RRF + MMR + adaptive threshold
+    phase4: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "{'rrf_k': 60, 'rrf_dense_weight': 1.0, 'rrf_bm25_weight': 0.7, "
+            "'mmr_lambda': 0.7, 'mmr_pool_size': 100, "
+            "'adaptive_confident_min': 0.5, 'adaptive_uncertain_min': 0.15, "
+            "'fallback_cosine_min': 0.30}"
+        ),
+    )
 
 
 class DatabaseInfo(BaseModel):
@@ -35,6 +50,9 @@ class CollectionInfo(BaseModel):
     visible: bool = True
     locked: bool = False
     is_active: bool = False
+    # Phase 4: RRF + MMR + adaptive threshold (опционально,
+    # появляется когда Collection имеет эти поля)
+    phase4: dict[str, Any] | None = None
 
 
 class CollectionListResponse(BaseModel):

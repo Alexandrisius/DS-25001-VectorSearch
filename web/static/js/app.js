@@ -397,8 +397,15 @@ document.addEventListener('DOMContentLoaded', function () {
 
         const db = databases.find(d => d.name === name);
         if (db) {
-            document.getElementById('rerankThreshold').textContent = (db.thresholds?.rerank || 0.6).toFixed(2);
-            document.getElementById('cosineThreshold').textContent = (db.thresholds?.cosine || 0.45).toFixed(2);
+            // Phase 4: в шапке показываем adaptive threshold (а не старый hard rerank).
+            // Cosine оставлен как fallback-cosine; rerank_threshold больше не используется.
+            const p4 = db.phase4 || {};
+            const confidentEl = document.getElementById('confidentMin');
+            const uncertainEl = document.getElementById('uncertainMin');
+            const cosineEl = document.getElementById('cosineThreshold');
+            if (confidentEl) confidentEl.textContent = (p4.adaptive_confident_min ?? 0.5).toFixed(2);
+            if (uncertainEl) uncertainEl.textContent = (p4.adaptive_uncertain_min ?? 0.15).toFixed(2);
+            if (cosineEl) cosineEl.textContent = (p4.fallback_cosine_min ?? 0.30).toFixed(2);
             processingInfo.textContent = `Выбрана база: ${db.description.split('(')[0]}`;
             
             // Обновляем количество записей в sidebar из данных базы

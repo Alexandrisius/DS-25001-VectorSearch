@@ -79,9 +79,8 @@ class Settings(BaseSettings):
 
     # ===== OpenRouter (defaults, can be overridden in DB) =====
     openrouter_api_key: str = ""
-    openrouter_base_url: str = ""  # Пусто = OpenRouter; иначе OpenAI-совместимый endpoint (LM Studio и др.)
     openrouter_model_embed: str = "qwen/qwen3-embedding-4b"
-    openrouter_model_rerank: str = "cohere/rerank-4-pro"
+    openrouter_model_rerank: str = "qwen/qwen3-rerank-8b"
     openrouter_batch_size: int = 10
     openrouter_max_workers: int = 3
     openrouter_request_timeout: int = 60
@@ -98,8 +97,29 @@ class Settings(BaseSettings):
     # ===== BM25 =====
     bm25_enabled: bool = True
     bm25_top_k: int = 200
-    bm25_max_retrieve: int = 100
-    hybrid_rerank_limit: int = 200
+    bm25_max_retrieve: int = 500
+    hybrid_rerank_limit: int = 500
+
+    # ===== Phase 4: RRF + MMR + adaptive threshold =====
+    # These are defaults; the actual values used at search time come from the
+    # Collection model so admins can tune per-collection via the admin UI.
+    # The per-collection values are written by SettingsService via PUT /config.
+    rrf_k: int = 60
+    rrf_dense_weight: float = 1.0
+    rrf_bm25_weight: float = 0.7
+    mmr_lambda: float = 0.7
+    mmr_pool_size: int = 100
+    # Adaptive threshold: if max rerank_score >= adaptive_confident_min,
+    # "confident" → top-10. If in [adaptive_uncertain_min, confident_min) —
+    # "uncertain" → top-5 + UI hint. If < adaptive_uncertain_min — fallback
+    # to top-N by cosine similarity (>= fallback_cosine_min).
+    adaptive_confident_min: float = 0.5
+    adaptive_uncertain_min: float = 0.15
+    fallback_cosine_min: float = 0.30
+    # How many candidates to keep in the uncertain/hint branch.
+    uncertain_top_n: int = 5
+    confident_top_n: int = 10
+    fallback_top_n: int = 10
 
     # ===== Import =====
     import_batch_size_api: int = 10

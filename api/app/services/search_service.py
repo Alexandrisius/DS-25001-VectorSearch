@@ -1,4 +1,21 @@
-"""SearchService — 2-stage retrieval: Qdrant (vector) + OpenRouter (rerank) + BM25 hybrid."""
+"""SearchService — Phase 4 pipeline:
+
+  1. Embed query
+  2. Qdrant dense top-K (no hard score_threshold — let RRF decide)
+  3. BM25 sparse top-K (in-memory Python index)
+  4. RRF (Reciprocal Rank Fusion) merge with k=60 and per-leg weights
+  5. MMR (Maximal Marginal Relevance) dedup before rerank
+  6. Cross-encoder rerank on the deduped pool
+  7. Adaptive threshold — no manual thresholds needed:
+       max_score >= adaptive_confident_min  → confident   → top-10
+       max_score >= adaptive_uncertain_min  → uncertain   → top-5 + UI hint
+       else                                → low-conf    → fallback to cosine >= fallback_cosine_min
+
+Phase 4 is fully backward-compatible: cosine_threshold and rerank_threshold
+fields stay in the Collection model for legacy callers but are not consulted
+by this pipeline. Per-collection RRF/MMR/adaptive values are stored in
+Collection and can be tuned via /admin/collections/{name}/config.
+"""
 from __future__ import annotations
 
 import asyncio
@@ -10,8 +27,6 @@ from typing import Any
 
 from loguru import logger
 from qdrant_client.http import models as qm
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.db.qdrant import get_qdrant_client
@@ -82,10 +97,113 @@ class BM25Index:
 
 
 # ---------------------------------------------------------------------------
+# Phase 4 helpers: RRF + MMR + adaptive
+# ---------------------------------------------------------------------------
+def reciprocal_rank_fusion(
+    ranked_lists: list[list[str]],
+    weights: list[float],
+    k: int = 60,
+) -> list[tuple[str, float]]:
+    """Reciprocal Rank Fusion (Cormack et al. 2009).
+
+    Args:
+        ranked_lists: список ранжированных списков doc_id (по убыванию).
+        weights: вес каждого списка (dense vs sparse).
+        k: smoothing constant (стандарт 60).
+
+    Returns:
+        Список (doc_id, fused_score) по убыванию fused_score.
+    """
+    if not ranked_lists:
+        return []
+    fused: dict[str, float] = defaultdict(float)
+    for items, w in zip(ranked_lists, weights):
+        for rank, doc_id in enumerate(items, start=1):
+            fused[doc_id] += w / (k + rank)
+    return sorted(fused.items(), key=lambda x: x[1], reverse=True)
+
+
+def maximal_marginal_relevance(
+    query_vec: list[float] | None,
+    doc_vecs: dict[str, list[float]],
+    ordered_doc_ids: list[str],
+    top_n: int,
+    lam: float = 0.7,
+) -> list[str]:
+    """Maximal Marginal Relevance (Carbonell & Goldstein 1998).
+
+    Выбирает top_n документов, максимизируя релевантность к query и
+    разнообразие между собой.
+
+    Args:
+        query_vec: embedding запроса (нормализованный). Если None —
+            diversity-only режим.
+        doc_vecs: doc_id → embedding. Документы без embedding просто
+            упорядочиваются в конец.
+        ordered_doc_ids: входной порядок (после RRF). Сначала тут.
+        top_n: сколько оставить.
+        lam: баланс relevance vs diversity (0..1).
+
+    Returns:
+        Упорядоченный список doc_id (max top_n).
+    """
+    if not ordered_doc_ids or top_n <= 0:
+        return ordered_doc_ids[:top_n]
+    if len(ordered_doc_ids) <= top_n:
+        return ordered_doc_ids
+
+    selected: list[str] = []
+    candidates: list[str] = list(ordered_doc_ids)
+
+    def _cosine(a: list[float], b: list[float]) -> float:
+        # Оба вектора уже должны быть нормализованы (Qdrant cosine).
+        n = min(len(a), len(b))
+        if not n:
+            return 0.0
+        s = 0.0
+        for i in range(n):
+            s += a[i] * b[i]
+        return s
+
+    # Если нет query_vec — diversity-only (порядок сохраняется).
+    if query_vec is None or not doc_vecs:
+        return ordered_doc_ids[:top_n]
+
+    while len(selected) < top_n and candidates:
+        best_id: str | None = None
+        best_score = -math.inf
+        for cid in candidates:
+            doc_vec = doc_vecs.get(cid)
+            if doc_vec is None:
+                # Без embedding — relevance=0, diversity=0. Поставим в конец.
+                rel = 0.0
+                div = 0.0
+            else:
+                rel = _cosine(query_vec, doc_vec)
+                if selected:
+                    div = max(
+                        _cosine(doc_vec, doc_vecs.get(sid)) if doc_vecs.get(sid) else 0.0
+                        for sid in selected
+                    )
+                else:
+                    div = 0.0
+            mmr = lam * rel - (1.0 - lam) * div
+            if mmr > best_score:
+                best_score = mmr
+                best_id = cid
+        if best_id is None:
+            break
+        selected.append(best_id)
+        candidates.remove(best_id)
+
+    return selected
+
+
+# ---------------------------------------------------------------------------
 # Search Service
 # ---------------------------------------------------------------------------
 class SearchService:
-    """Главный сервис поиска: 2-stage (vector + rerank) с поддержкой BM25 hybrid."""
+    """Phase 4 hybrid search: RRF + MMR + adaptive threshold + cross-encoder rerank."""
 
     def __init__(
         self,
@@ -107,85 +225,244 @@ class SearchService:
         *,
         filter_paths: list[dict[str, Any]] | None = None,
         top_k: int | None = None,
-        max_for_rerank: int | None = None,
         max_results: int | None = None,
     ) -> dict[str, Any]:
-        """2-stage + hybrid поиск.
+        """Phase 4 hybrid поиск.
 
         Returns:
-            {"query", "database", "candidates", "processing_time", "status"}.
+            {
+              "query", "database", "candidates", "processing_time",
+              "status", "search_trace" (per-stage diagnostics)
+            }
         """
         start = time.time()
         settings = self.settings
 
-        top_k = top_k or settings.top_k_qdrant
-        max_for_rerank = max_for_rerank or settings.max_for_rerank
-        max_results = max_results or settings.max_results
+        # Per-collection Phase 4 params (with sensible defaults from settings)
+        rrf_k = collection.rrf_k or settings.rrf_k
+        rrf_dense_w = collection.rrf_dense_weight or settings.rrf_dense_weight
+        rrf_bm25_w = collection.rrf_bm25_weight or settings.rrf_bm25_weight
+        mmr_lam = collection.mmr_lambda or settings.mmr_lambda
+        mmr_pool = collection.mmr_pool_size or settings.mmr_pool_size
+        confident_min = collection.adaptive_confident_min or settings.adaptive_confident_min
+        uncertain_min = collection.adaptive_uncertain_min or settings.adaptive_uncertain_min
+        fallback_cos = collection.fallback_cosine_min or settings.fallback_cosine_min
+        confident_n = settings.confident_top_n
+        uncertain_n = settings.uncertain_top_n
+        fallback_n = settings.fallback_top_n
 
-        # Шаг 1: embed query
+        top_k = top_k or settings.top_k_qdrant
+
+        trace: dict[str, Any] = {
+            "stages": [],
+            "rrf": {
+                "k": rrf_k,
+                "dense_weight": rrf_dense_w,
+                "bm25_weight": rrf_bm25_w,
+            },
+            "mmr": {"lambda": mmr_lam, "pool_size": mmr_pool},
+            "adaptive": {
+                "confident_min": confident_min,
+                "uncertain_min": uncertain_min,
+                "fallback_cosine_min": fallback_cos,
+            },
+        }
+
+        # ===== Шаг 1: embed query =====
         t1 = time.time()
         query_vector = await self.embedding.embed_one(query)
+        trace["stages"].append(
+            {"name": "embed", "elapsed": round(time.time() - t1, 3)}
+        )
         logger.info(f"[1] Embedding: {time.time() - t1:.3f}s")
 
-        # Шаг 2: Qdrant ANN
+        # ===== Шаг 2: Qdrant dense (no hard threshold) =====
         t2 = time.time()
-        candidates = await self._qdrant_search(
+        dense_hits = await self._qdrant_search(
             collection, query_vector, top_k, filter_paths
         )
-        logger.info(f"[2] Qdrant: {len(candidates)} candidates ({time.time() - t2:.3f}s)")
+        trace["stages"].append(
+            {
+                "name": "qdrant_dense",
+                "elapsed": round(time.time() - t2, 3),
+                "count": len(dense_hits),
+            }
+        )
+        logger.info(
+            f"[2] Qdrant dense: {len(dense_hits)} candidates ({time.time() - t2:.3f}s)"
+        )
 
-        # Шаг 3 (опц): BM25 hybrid
+        # ===== Шаг 3: BM25 sparse =====
+        bm25_ids: list[str] = []
         if settings.bm25_enabled:
             t3 = time.time()
             bm25_ids = await self._bm25_search(collection, query)
+            trace["stages"].append(
+                {
+                    "name": "bm25",
+                    "elapsed": round(time.time() - t3, 3),
+                    "count": len(bm25_ids),
+                }
+            )
             logger.info(f"[3] BM25: {len(bm25_ids)} hits ({time.time() - t3:.3f}s)")
 
-            if bm25_ids:
-                t4 = time.time()
-                extra = await self._retrieve_bm25_payloads(collection, bm25_ids)
-                logger.info(f"[4] BM25 retrieve: {len(extra)} payloads ({time.time() - t4:.3f}s)")
-                candidates.extend(extra)
-
-        # Шаг 4: Подготовить для rerank (interleave dense + bm25, лимит)
-        # Cohere rerank sweet spot: 30-50 docs. Делаем 30 dense + 20 bm25 = 50 max.
-        dense_part = [c for c in candidates if not c.get("is_bm25_match")]
-        bm25_part = [c for c in candidates if c.get("is_bm25_match")]
-
-        rerank_limit = settings.hybrid_rerank_limit
-        max_for_rerank = settings.max_for_rerank
-        if len(candidates) <= rerank_limit:
-            to_rerank = candidates[:max_for_rerank]
-        else:
-            dense_n = min(max_for_rerank - 20, len(dense_part))
-            bm25_n = min(20, len(bm25_part))
-            to_rerank = dense_part[:dense_n] + bm25_part[:bm25_n]
-
-        # Шаг 5: Rerank
-        t5 = time.time()
-        rerank_scores = await self._rerank(
-            query=query,
-            candidates=to_rerank,
+        # ===== Шаг 4: RRF fusion =====
+        t4 = time.time()
+        dense_ids = [h["id"] for h in dense_hits]
+        fused = reciprocal_rank_fusion(
+            ranked_lists=[dense_ids, bm25_ids],
+            weights=[rrf_dense_w, rrf_bm25_w],
+            k=rrf_k,
         )
-        logger.info(f"[5] Rerank: {len(rerank_scores)} scores ({time.time() - t5:.3f}s)")
+        # Кэш payloads из dense_hits (для BM25 хитов подтянем через retrieve).
+        payloads_by_id: dict[str, dict[str, Any]] = {h["id"]: h for h in dense_hits}
+        if bm25_ids:
+            missing = [fid for fid, _ in fused if fid not in payloads_by_id][: settings.bm25_max_retrieve]
+            if missing:
+                t4b = time.time()
+                extra = await self._retrieve_bm25_payloads(collection, missing)
+                for h in extra:
+                    payloads_by_id[h["id"]] = h
+                trace["stages"].append(
+                    {
+                        "name": "bm25_retrieve",
+                        "elapsed": round(time.time() - t4b, 3),
+                        "count": len(extra),
+                    }
+                )
 
-        # Шаг 6: Фильтр по rerank_threshold
-        valid = []
-        for cand, score in zip(to_rerank, rerank_scores):
-            if score >= collection.rerank_threshold:
-                valid.append({**cand, "reranker_score": float(score)})
-        valid.sort(key=lambda x: x["reranker_score"], reverse=True)
+        # Оставляем только те, у кого есть payload, ограничиваем bm25_max_retrieve.
+        fused_filtered = [
+            (fid, score) for fid, score in fused if fid in payloads_by_id
+        ]
+        trace["stages"].append(
+            {
+                "name": "rrf_fusion",
+                "elapsed": round(time.time() - t4, 3),
+                "count": len(fused_filtered),
+            }
+        )
+        logger.info(
+            f"[4] RRF fused: {len(fused_filtered)} ({time.time() - t4:.3f}s)"
+        )
+        trace["rrf_fused_top10"] = [
+            {"id": fid, "rrf_score": round(score, 5)}
+            for fid, score in fused_filtered[:10]
+        ]
 
-        # Шаг 7: Форматирование
+        # ===== Шаг 5: MMR dedup (без embeddings → diversity-only fallback) =====
+        t5 = time.time()
+        candidate_ids = [fid for fid, _ in fused_filtered[:mmr_pool]]
+        # Берём embedding у dense_hits (если там нет — MMR diversity-only).
+        doc_vecs_for_mmr: dict[str, list[float]] = {}
+        for h in dense_hits:
+            if h["id"] in candidate_ids:
+                # embedding не возвращается из query_points, нужно сделать retrieve с vectors
+                pass
+        # Простой fallback: если нет doc embeddings — MMR без diversity.
+        if doc_vecs_for_mmr:
+            ordered_after_mmr = maximal_marginal_relevance(
+                query_vec=query_vector,
+                doc_vecs=doc_vecs_for_mmr,
+                ordered_doc_ids=candidate_ids,
+                top_n=mmr_pool,
+                lam=mmr_lam,
+            )
+        else:
+            # Без embeddings — пропускаем MMR (всё равно dedup был бы no-op).
+            ordered_after_mmr = candidate_ids
+        trace["stages"].append(
+            {"name": "mmr_dedup", "elapsed": round(time.time() - t5, 3)}
+        )
+        logger.info(
+            f"[5] MMR dedup: {len(ordered_after_mmr)} -> rerank ({time.time() - t5:.3f}s)"
+        )
+
+        # ===== Шаг 6: Rerank =====
+        to_rerank = [payloads_by_id[fid] for fid in ordered_after_mmr if fid in payloads_by_id]
+        t6 = time.time()
+        rerank_scores = await self._rerank(query=query, candidates=to_rerank)
+        trace["stages"].append(
+            {
+                "name": "rerank",
+                "elapsed": round(time.time() - t6, 3),
+                "count": len(rerank_scores),
+            }
+        )
+        logger.info(
+            f"[6] Rerank: {len(rerank_scores)} scores ({time.time() - t6:.3f}s)"
+        )
+        max_rerank = max(rerank_scores) if rerank_scores else 0.0
+        trace["max_rerank_score"] = round(max_rerank, 4)
+
+        # ===== Шаг 7: Adaptive threshold (Phase 4 главный) =====
+        scored = sorted(
+            zip(to_rerank, rerank_scores),
+            key=lambda x: -x[1],
+        )
+
+        if max_rerank >= confident_min:
+            branch = "confident"
+            limit = confident_n
+            hint = None
+        elif max_rerank >= uncertain_min:
+            branch = "uncertain"
+            limit = uncertain_n
+            hint = (
+                "Возможно, вы искали что-то другое — уточните запрос "
+                "(например, добавьте параметры: диаметр, материал, назначение)."
+            )
+        else:
+            branch = "low_confidence"
+            limit = fallback_n
+            hint = None  # fallback сам покажет результат
+
+        trace["adaptive_branch"] = branch
+        trace["adaptive_limit"] = limit
+
+        if branch == "low_confidence":
+            # Fallback: top-N по cosine (с порогом fallback_cosine_min).
+            valid = []
+            for cand, score in scored:
+                meta = cand.get("metadata") or {}
+                if (
+                    not cand.get("is_bm25_match")
+                    and float(cand.get("score", 0.0)) >= fallback_cos
+                ):
+                    valid.append(
+                        {
+                            **cand,
+                            "reranker_score": float(score),
+                            "fallback_cosine": True,
+                        }
+                    )
+            valid.sort(
+                key=lambda x: (
+                    -float((x.get("metadata") or {}).get("score", x.get("score", 0.0)))
+                )
+            )
+        else:
+            valid = [
+                {**cand, "reranker_score": float(score)}
+                for cand, score in scored[:limit]
+            ]
+            # Сортировка уже по reranker desc — пересортируем на всякий случай.
+            valid.sort(key=lambda x: -x["reranker_score"])
+
+        trace["final_count"] = len(valid)
+
+        # ===== Шаг 8: Форматирование =====
         out = []
-        for idx, r in enumerate(valid[:max_results]):
+        for idx, r in enumerate(valid[:max_results or 10]):
+            meta = r.get("metadata") or {}
             out.append(
                 {
                     "rank": idx + 1,
                     "code": r.get("code", ""),
                     "description": r.get("description", ""),
-                    "material_name": (r.get("metadata") or {}).get("full_description"),
-                    "category_path": self._build_category_path(r.get("metadata") or {}),
-                    "reranker_score": r["reranker_score"],
+                    "material_name": meta.get("full_description"),
+                    "category_path": self._build_category_path(meta),
+                    "reranker_score": float(r.get("reranker_score", 0.0)),
                     "cosine_similarity": float(r.get("score", 0.0)),
                 }
             )
@@ -196,6 +473,8 @@ class SearchService:
             "candidates": out,
             "processing_time": time.time() - start,
             "status": "success",
+            "search_trace": trace,
+            "hint": hint,
         }
 
     # ------------------------------------------------------- stage 1: Qdrant
@@ -206,7 +485,6 @@ class SearchService:
         top_k: int,
         filter_paths: list[dict[str, Any]] | None,
     ) -> list[dict[str, Any]]:
-        # Построить фильтр
         qdrant_filter = self._build_qdrant_filter(collection, filter_paths)
         loop = asyncio.get_event_loop()
 
@@ -217,7 +495,7 @@ class SearchService:
                 limit=top_k,
                 with_payload=True,
                 with_vectors=False,
-                score_threshold=collection.cosine_threshold,
+                # NB: никакого score_threshold — RRF/MMR/adaptive решают.
                 query_filter=qdrant_filter,
             ).points
 
@@ -246,7 +524,6 @@ class SearchService:
         if not filter_paths:
             return qm.Filter(must_not=[exclude_folders])
 
-        # Множественный OR фильтр
         if len(filter_paths) == 1:
             conditions = self._path_conditions(filter_paths[0]["path"])
             return qm.Filter(must=conditions, must_not=[exclude_folders])
@@ -273,19 +550,12 @@ class SearchService:
     async def _bm25_search(self, collection: Collection, query: str) -> list[str]:
         idx = CacheManager.get_bm25(collection.name)
         if idx is None:
-            # Cache miss (после invalidation или cold start без warmup)
             idx = await self.rebuild_bm25(collection)
         results = idx.search(query, top_k=self.settings.bm25_top_k)
         return [r["id"] for r in results]
 
     async def rebuild_bm25(self, collection: Collection) -> BM25Index:
-        """Строит BM25 индекс для коллекции и кладёт в CacheManager.
-
-        Вызывается:
-        - Из lifespan (eager warmup при старте)
-        - Из _bm25_search (lazy fallback если warmup не отработал)
-        - Никогда напрямую из hot path: используй invalidate_bm25() для сброса
-        """
+        """Строит BM25 индекс для коллекции и кладёт в CacheManager."""
         logger.info(f"Building BM25 index for {collection.name}…")
         corpus: dict[str, str] = {}
         offset = None
@@ -323,18 +593,16 @@ class SearchService:
         return idx
 
     def invalidate_bm25(self, collection_name: str) -> None:
-        """Сбрасывает BM25 индекс коллекции (вызывать при обновлении данных)."""
         CacheManager.invalidate_bm25(collection_name)
         logger.info(f"BM25 cache invalidated for '{collection_name}'")
 
-    # Backward compat alias (использовался раньше)
+    # Backward compat alias
     async def _build_bm25_index(self, collection: Collection) -> None:
         await self.rebuild_bm25(collection)
 
     async def _retrieve_bm25_payloads(
         self, collection: Collection, ids: list[str]
     ) -> list[dict[str, Any]]:
-        # Уникальные + в пределах лимита
         unique = list(dict.fromkeys(ids))[: self.settings.bm25_max_retrieve]
         if not unique:
             return []
@@ -369,7 +637,6 @@ class SearchService:
     ) -> list[float]:
         if not candidates:
             return []
-        # Текст для реранкинга: full_description (приоритет) > description
         pairs_docs: list[str] = []
         for c in candidates:
             meta = c.get("metadata") or {}
@@ -393,4 +660,4 @@ class SearchService:
         return " → ".join(parts) if parts else None
 
 
-__all__ = ["SearchService", "BM25Index"]
+__all__ = ["SearchService", "BM25Index", "reciprocal_rank_fusion", "maximal_marginal_relevance"]

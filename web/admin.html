@@ -503,7 +503,7 @@
 
     <!-- === МОДАЛЬНЫЕ ОКНА === -->
 
-    <!-- Настройки коллекции -->
+    <!-- Настройки коллекции (Phase 4: RRF + MMR + adaptive) -->
     <div id="configModal" class="modal-overlay">
         <div class="modal-window">
             <div class="modal-header">
@@ -513,23 +513,89 @@
             <div class="modal-body">
                 <input type="hidden" id="cfgName">
 
-                <div style="margin-bottom: 20px;">
-                    <label style="display: block; margin-bottom: 8px; font-weight: 500;">Порог Cosine</label>
-                    <input type="number" step="0.05" id="cfgCosine">
-                    <small style="color: var(--adm-text-sec);">Минимальное сходство для первичной выборки.</small>
+                <!-- Видимость -->
+                <div class="config-section">
+                    <label class="config-checkbox-row">
+                        <input type="checkbox" id="cfgVisible" style="width: auto;">
+                        <span>Показывать в интерфейсе поиска</span>
+                    </label>
                 </div>
 
-                <div style="margin-bottom: 20px;">
-                    <label style="display: block; margin-bottom: 8px; font-weight: 500;">Порог Rerank</label>
-                    <input type="number" step="0.05" id="cfgRerank">
-                    <small style="color: var(--adm-text-sec);">Минимальный балл для Cross-Encoder
-                        ре-ранжирования.</small>
+                <!-- Phase 4: RRF fusion -->
+                <div class="config-section">
+                    <div class="config-section-title">
+                        <i class="fas fa-layer-group"></i>
+                        <span>RRF fusion</span>
+                        <small>Reciprocal Rank Fusion — слияние dense (vector) + BM25 (sparse) результатов</small>
+                    </div>
+                    <div class="form-row form-row-pair">
+                        <div class="form-field">
+                            <label class="form-label" for="cfgRrfK">k (smoothing)</label>
+                            <input type="number" id="cfgRrfK" min="1" max="200" step="1" value="60">
+                        </div>
+                        <div class="form-field">
+                            <label class="form-label" for="cfgMmrPool">MMR pool size</label>
+                            <input type="number" id="cfgMmrPool" min="10" max="500" step="10" value="100">
+                        </div>
+                    </div>
+                    <div class="form-row form-row-pair">
+                        <div class="form-field">
+                            <label class="form-label" for="cfgRrfDense">Dense weight</label>
+                            <input type="number" id="cfgRrfDense" min="0" max="5" step="0.1" value="1.0">
+                        </div>
+                        <div class="form-field">
+                            <label class="form-label" for="cfgRrfBm25">BM25 weight</label>
+                            <input type="number" id="cfgRrfBm25" min="0" max="5" step="0.1" value="0.7">
+                        </div>
+                    </div>
                 </div>
 
-                <div style="display: flex; gap: 10px; align-items: center;">
-                    <input type="checkbox" id="cfgVisible" style="width: auto;">
-                    <label for="cfgVisible">Показывать в интерфейсе поиска</label>
+                <!-- Phase 4: MMR + adaptive threshold -->
+                <div class="config-section">
+                    <div class="config-section-title">
+                        <i class="fas fa-filter"></i>
+                        <span>Адаптивный threshold</span>
+                        <small>Ручные пороги не нужны — система сама выбирает ветку по max(rerank_score)</small>
+                    </div>
+                    <div class="form-row form-row-pair">
+                        <div class="form-field">
+                            <label class="form-label" for="cfgMmrLambda">MMR λ (0..1)</label>
+                            <input type="number" id="cfgMmrLambda" min="0" max="1" step="0.05" value="0.7">
+                        </div>
+                        <div class="form-field">
+                            <label class="form-label" for="cfgConfidentMin">Confident ≥</label>
+                            <input type="number" id="cfgConfidentMin" min="0" max="1" step="0.05" value="0.5">
+                        </div>
+                    </div>
+                    <div class="form-row form-row-pair">
+                        <div class="form-field">
+                            <label class="form-label" for="cfgUncertainMin">Uncertain ≥</label>
+                            <input type="number" id="cfgUncertainMin" min="0" max="1" step="0.05" value="0.15">
+                        </div>
+                        <div class="form-field">
+                            <label class="form-label" for="cfgFallbackCosine">Fallback Cosine ≥</label>
+                            <input type="number" id="cfgFallbackCosine" min="0" max="1" step="0.05" value="0.30">
+                        </div>
+                    </div>
                 </div>
+
+                <!-- Legacy поля (deprecated, но оставлены для обратной совместимости) -->
+                <details class="config-section config-section-deprecated">
+                    <summary class="config-section-title">
+                        <i class="fas fa-clock-rotate-left"></i>
+                        <span>Устаревшие пороги (не используются)</span>
+                    </summary>
+                    <div class="form-row form-row-pair" style="margin-top: 12px;">
+                        <div class="form-field">
+                            <label class="form-label" for="cfgCosine">Cosine (legacy)</label>
+                            <input type="number" step="0.05" id="cfgCosine" disabled>
+                        </div>
+                        <div class="form-field">
+                            <label class="form-label" for="cfgRerank">Rerank (legacy)</label>
+                            <input type="number" step="0.05" id="cfgRerank" disabled>
+                        </div>
+                    </div>
+                </details>
             </div>
             <div class="modal-footer">
                 <button class="btn btn-outline modal-close-btn">Отмена</button>
