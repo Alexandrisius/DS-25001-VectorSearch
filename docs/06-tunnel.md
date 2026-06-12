@@ -58,10 +58,46 @@ make tunnel-up
 Или напрямую:
 
 ```bash
-docker compose --profile tunnel up -d
+docker compose -f docker-compose.yml -f docker-compose.cloudflared.yml up -d cloudflared
 ```
 
 Через ~30 секунд твой сайт будет доступен по `https://ksrmatch.online` 🎉
+
+## ⚠️ Gotcha: миграция `localhost` → `api` (после Start migration)
+
+Если у тебя в Cloudflare Dashboard жмёшь "Start migration" на **уже существующем**
+локально-сконфигурированном туннеле (созданном через `cloudflared tunnel create`),
+Cloudflare **мигрирует твои ingress rules как есть** — включая старый service URL.
+
+**Симптом:** туннель в статусе HEALTHY, логи показывают
+`INF Connection established`, но сайт возвращает `502 Bad Gateway` или
+`Unable to reach the origin service: dial tcp [::1]:8000: connection refused`.
+
+**Причина:** старый config.yml имел `service: http://localhost:8000`.
+Cloudflared контейнер НЕ в `network_mode: host` (он в Docker сети `ksr_net`),
+поэтому `localhost:8000` внутри контейнера = сам cloudflared, а не твой API.
+
+**Фикс (1 минута):**
+1. Zero Trust → Networks → Tunnels → `ksr-tunnel` → вкладка **"Published application routes"**
+2. Жми **Edit** на правиле `ksrmatch.online`
+3. Service URL: `localhost:8000` → **`api:8000`**
+4. Path: очисти (если был `^/blog` или другой regex из старого config)
+5. **Save** — cloudflared подхватит за ~10 сек
+
+**Проверить:**
+```bash
+make tunnel-logs
+# Должно появиться: "Updated to new configuration ... service: http://api:8000"
+# И исчезнуть "ERR Unable to reach the origin service"
+
+curl -s https://ksrmatch.online/health
+# {"status":"ok","version":"2.0.0"}
+```
+
+**Не путай вкладки:**
+- "Published application routes" — для **публичных** сайтов (твой случай)
+- "Hostname routes" (beta) — для **приватных** сетей через Cloudflare One Client
+  (требует WARP на стороне клиента, для обычного сайта не подходит)
 
 ## Проверить что туннель работает
 
