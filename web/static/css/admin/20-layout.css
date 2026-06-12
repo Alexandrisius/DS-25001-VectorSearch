@@ -1,0 +1,238 @@
+/* ==========================================================================
+   Admin layout — page chrome: body fill, login screen, dashboard grid
+   (sidebar + main content), top bar, content body.
+
+   The admin uses a 100vh / overflow:hidden body to lock the page when
+   the dashboard is visible. The login screen takes over before auth.
+   ========================================================================== */
+
+body {
+    background-color: var(--adm-bg);
+    color: var(--adm-text);
+    height: 100vh;
+    overflow: hidden;
+}
+
+/* Hide utility — `!important` is intentional to override any display
+   rule from a component class. */
+.hidden {
+    display: none !important;
+}
+
+/* === LOGIN SCREEN === */
+.login-container {
+    height: 100vh;
+    width: 100vw;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, var(--shadow-login-bg-from) 0%, var(--shadow-login-bg-to) 100%);
+}
+
+.login-card {
+    background: var(--color-login-glass);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    padding: 40px;
+    border-radius: var(--radius-xl);
+    width: 100%;
+    max-width: 400px;
+    box-shadow: var(--shadow-login-card);
+    border: 1px solid var(--shadow-glass-border);
+    text-align: center;
+}
+
+.login-card h2 {
+    color: white;
+    margin-bottom: 25px;
+    font-weight: 700;
+    font-size: 1.8rem;
+}
+
+.login-card input {
+    background: var(--shadow-glass-input-bg);
+    border-color: var(--shadow-glass-border);
+    color: white;
+    margin-bottom: 20px;
+    height: var(--input-height);
+}
+
+.login-card button {
+    width: 100%;
+    height: var(--input-height);
+    justify-content: center;
+}
+
+.auth-error {
+    color: #f87171;
+    margin-top: 15px;
+    font-size: 0.9rem;
+}
+
+/* === DASHBOARD LAYOUT === */
+.dashboard-layout {
+    display: flex;
+    height: 100vh;
+}
+
+/* Sidebar */
+.sidebar {
+    width: var(--adm-sidebar-width);
+    background-color: var(--adm-sidebar-bg);
+    color: var(--color-text-on-primary);
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid var(--color-hover-overlay);
+}
+
+.sidebar-header {
+    height: var(--adm-sidebar-header-height);
+    display: flex;
+    align-items: center;
+    padding: 0 25px;
+    border-bottom: 1px solid var(--color-hover-overlay);
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: white;
+    gap: 10px;
+}
+
+.sidebar-header__icon {
+    color: var(--adm-primary);
+}
+
+.nav-links {
+    flex: 1;
+    padding: 20px 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.nav-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 15px;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    color: var(--color-text-on-primary);
+    text-decoration: none;
+    transition: all 0.2s;
+}
+
+.nav-item:hover {
+    background-color: var(--color-hover-overlay);
+    color: white;
+}
+
+.nav-item.active {
+    background-color: var(--adm-primary);
+    color: white;
+}
+
+.sidebar-footer {
+    padding: 20px;
+    border-top: 1px solid var(--color-hover-overlay);
+}
+
+.nav-item--logout {
+    width: 100%;
+    border: none;
+    background: none;
+    text-align: left;
+    color: var(--color-text-on-primary);
+    cursor: pointer;
+    font-size: 1rem;
+    font-family: inherit;
+}
+
+/* Main Content */
+.main-content {
+    flex: 1;
+    overflow-y: auto;
+    background-color: var(--adm-bg);
+    display: flex;
+    flex-direction: column;
+}
+
+.top-bar {
+    height: var(--adm-top-bar-height);
+    background-color: var(--adm-surface);
+    border-bottom: 1px solid var(--adm-border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 30px;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.page-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+}
+
+.content-body {
+    padding: 30px;
+    flex: 1;
+}
+
+/* === MOBILE WARNING OVERLAY === */
+.mobile-warning-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: var(--shadow-modal-overlay-strong);
+    z-index: var(--z-warning);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.mobile-warning-overlay.hidden {
+    display: none;
+}
+
+.mobile-warning-card {
+    background: var(--adm-surface);
+    border-radius: var(--radius-lg);
+    padding: 40px 30px;
+    max-width: 400px;
+    text-align: center;
+    box-shadow: var(--shadow-modal-deep);
+}
+
+.mobile-warning-card i {
+    font-size: 4rem;
+    color: var(--adm-primary);
+    margin-bottom: 20px;
+    display: block;
+}
+
+.mobile-warning-card h2 {
+    font-size: 1.3rem;
+    margin-bottom: 15px;
+    color: var(--adm-text);
+}
+
+.mobile-warning-card p {
+    color: var(--adm-text-sec);
+    margin-bottom: 15px;
+    line-height: 1.5;
+}
+
+.mobile-warning-card .btn {
+    width: 100%;
+    margin-top: 10px;
+    justify-content: center;
+}
+
+.mobile-warning-card__hint {
+    font-size: 0.85rem;
+    opacity: 0.8;
+}

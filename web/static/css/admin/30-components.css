@@ -1,0 +1,397 @@
+/* ==========================================================================
+   Admin components — buttons, inputs, modals, forms, status badges.
+   ========================================================================== */
+
+/* === BUTTONS === */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    border-radius: var(--radius-md);
+    border: 1px solid transparent;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 0.9rem;
+}
+
+.btn-primary {
+    background-color: var(--adm-primary);
+    color: white;
+}
+
+.btn-primary:hover {
+    background-color: var(--adm-primary-hover);
+}
+
+.btn-danger {
+    background-color: transparent;
+    border-color: var(--adm-danger);
+    color: var(--adm-danger);
+}
+
+.btn-danger:hover {
+    background-color: var(--adm-danger-bg);
+}
+
+.btn-outline {
+    background-color: transparent;
+    border-color: var(--adm-border);
+    color: var(--adm-text);
+}
+
+.btn-outline:hover {
+    border-color: var(--adm-primary);
+    color: var(--adm-primary);
+}
+
+/* === SUCCESS / WARNING BUTTONS === */
+.btn-success {
+    background-color: var(--color-success);
+    color: white;
+    border-color: var(--color-success);
+}
+
+.btn-success:hover {
+    background-color: var(--color-success-deep);
+    border-color: var(--color-success-deep);
+}
+
+.btn-warning {
+    background-color: var(--color-warning);
+    color: white;
+    border-color: var(--color-warning);
+}
+
+.btn-warning:hover {
+    background-color: var(--color-warning-deep);
+    border-color: var(--color-warning-deep);
+}
+
+/* === GHOST BUTTON (for cancel) === */
+.btn-ghost {
+    background: transparent;
+    color: var(--adm-text-sec);
+    border: 1px solid var(--adm-border);
+}
+
+.btn-ghost:hover {
+    background: var(--adm-bg);
+    color: var(--adm-text);
+    border-color: var(--adm-text-sec);
+}
+
+/* === ICON BUTTONS (for compact action rows) === */
+.btn-icon {
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid var(--adm-border);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--adm-text-sec);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-icon:hover {
+    border-color: var(--adm-primary);
+    color: var(--adm-primary);
+}
+
+.btn-icon.danger:hover {
+    border-color: var(--adm-danger);
+    background: var(--adm-danger-bg);
+    color: var(--adm-danger);
+}
+
+/* Small variant of the base .btn (used in excel info card, etc.) */
+.btn-sm {
+    padding: 4px 8px;
+    font-size: 0.8rem;
+}
+
+/* === LOCKED COLLECTION BUTTON (prevent-click state) === */
+.btn-locked {
+    opacity: 0.6;
+    cursor: not-allowed;
+    background: var(--adm-bg) !important;
+    border-color: var(--adm-border) !important;
+    color: var(--adm-text-sec) !important;
+}
+
+.btn-locked:hover {
+    transform: none !important;
+    box-shadow: none !important;
+}
+
+/* === INPUTS / TEXTAREA / SELECT === */
+input,
+select,
+textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--adm-border);
+    border-radius: var(--radius-md);
+    background: var(--adm-surface);
+    color: var(--adm-text);
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+    border-color: var(--adm-primary);
+    box-shadow: 0 0 0 2px var(--color-focus-ring);
+}
+
+/* === FORMS === */
+.form-row {
+    display: flex;
+    gap: 12px;
+}
+
+.form-row-pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+@media (max-width: 600px) {
+    .form-row-pair { grid-template-columns: 1fr; }
+}
+
+.form-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.form-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--adm-text-sec);
+}
+
+.form-field input[type="text"] {
+    width: 100%;
+    padding: 10px 12px;
+    border: 2px solid var(--adm-border);
+    border-radius: var(--radius-sm);
+    background: var(--adm-surface);
+    color: var(--adm-text);
+    font-size: 0.9rem;
+    font-family: inherit;
+    transition: all 0.15s;
+}
+
+.form-field input[type="text"]:focus {
+    border-color: var(--adm-primary);
+    box-shadow: 0 0 0 3px var(--color-focus-ring-strong);
+    outline: none;
+}
+
+.form-field input.input-mono {
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+}
+
+.form-input {
+    /* Alias used in openrouter settings, custom input class */
+    width: 100%;
+    padding: 10px 12px;
+    border: 2px solid var(--adm-border);
+    border-radius: var(--radius-sm);
+    background: var(--adm-surface);
+    color: var(--adm-text);
+    font-size: 0.9rem;
+    transition: all 0.15s;
+}
+
+.form-input:focus {
+    border-color: var(--adm-primary);
+    box-shadow: 0 0 0 3px var(--color-focus-ring-strong);
+    outline: none;
+}
+
+/* === FORM ACTIONS (right-aligned row) === */
+.form-row-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+}
+
+.form-row-actions .btn {
+    min-width: 120px;
+    justify-content: center;
+}
+
+@media (max-width: 480px) {
+    .form-row-actions .btn {
+        min-width: 0;
+        flex: 1 1 auto;
+    }
+}
+
+.form-sublabel {
+    display: block;
+    margin-bottom: 5px;
+    font-size: 0.85rem;
+    color: var(--adm-text-sec);
+}
+
+/* === MODAL OVERLAY === */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: var(--shadow-modal-overlay);
+    backdrop-filter: blur(5px);
+    z-index: var(--z-modal);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s;
+}
+
+.modal-overlay.active {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.modal-window {
+    background: var(--adm-surface);
+    width: 100%;
+    max-width: 600px;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    transform: scale(0.95);
+    transition: transform 0.3s;
+    display: flex;
+    flex-direction: column;
+    max-height: 90vh;
+}
+
+.modal-overlay.active .modal-window {
+    transform: scale(1);
+}
+
+.modal-header {
+    padding: 20px 25px;
+    border-bottom: 1px solid var(--adm-border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modal-header--danger {
+    background: linear-gradient(135deg, var(--color-danger-strong) 0%, var(--color-danger-darker) 100%);
+    color: white;
+}
+
+.modal-header--danger h3,
+.modal-header--danger .modal-close {
+    color: white;
+}
+
+.modal-header h3 {
+    font-size: 1.2rem;
+    font-weight: 700;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: var(--adm-text-sec);
+}
+
+.modal-body {
+    padding: 25px;
+    overflow-y: auto;
+}
+
+.modal-footer {
+    padding: 20px 25px;
+    border-top: 1px solid var(--adm-border);
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+/* === MODAL RESIZER (drag to resize) === */
+/* CSS `resize` doesn't work well with modals, so we use a custom resizer. */
+.modal-resizer {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 8px;
+    cursor: ew-resize;
+    background: transparent;
+    z-index: 10;
+    transition: background 0.2s;
+}
+
+.modal-resizer:hover,
+.modal-resizer.active {
+    background: var(--adm-primary);
+    opacity: 0.5;
+}
+
+.modal-resizer-left {
+    left: 0;
+    border-radius: var(--radius-lg) 0 0 var(--radius-lg);
+}
+
+.modal-resizer-right {
+    right: 0;
+    border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+}
+
+/* === STATUS BADGES === */
+.status-badge {
+    padding: 4px 8px;
+    border-radius: var(--radius-full);
+    font-size: 0.75rem;
+    font-weight: 600;
+    display: inline-block;
+}
+
+.status-visible {
+    background: var(--adm-success-bg);
+    color: var(--adm-success);
+}
+
+.status-hidden {
+    background: var(--adm-danger-bg);
+    color: var(--adm-danger);
+}
+
+.status-badge.status-new {
+    background: var(--adm-success-bg);
+    color: var(--adm-success);
+}
+
+.status-badge.status-modified {
+    background: #fef3c7;
+    color: var(--color-warning-text);
+}
+
+.status-badge.status-deleted {
+    background: var(--adm-danger-bg);
+    color: var(--adm-danger);
+}

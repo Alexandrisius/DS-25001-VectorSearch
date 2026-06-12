@@ -1,0 +1,152 @@
+/* ==========================================================================
+   Base — element reset, body defaults, typography baseline, focus styles,
+   scrollbar, accessibility helpers.
+
+   Loaded once for both index.html and admin.html. The cascade layer system
+   ensures these rules can be overridden by components downstream.
+   ========================================================================== */
+
+@layer reset, base, components, utilities;
+
+@layer reset {
+    *, *::before, *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+        -webkit-tap-highlight-color: transparent;
+        font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    }
+}
+
+@layer base {
+    html {
+        -webkit-text-size-adjust: 100%;
+        text-size-adjust: 100%;
+    }
+
+    body {
+        font-family: var(--font-sans);
+        line-height: 1.5;
+        color: var(--color-text);
+        background-color: var(--color-bg);
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+    }
+
+    h1, h2, h3, h4, h5, h6 {
+        font-weight: 700;
+        line-height: 1.2;
+    }
+
+    code, kbd, samp, pre {
+        font-family: var(--font-mono);
+        font-size: 0.95em;
+    }
+}
+
+/* ==========================================================================
+   Universal focus-visible — single source of truth. All focusable elements
+   get a visible ring only for keyboard navigation, never on click.
+   This replaces all `outline: none` declarations across the codebase.
+   ========================================================================== */
+
+:focus {
+    outline: none;
+}
+
+:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+}
+
+/* ==========================================================================
+   Scrollbar — styled to match the theme. Firefox uses `scrollbar-color`,
+   WebKit uses pseudo-elements.
+   ========================================================================== */
+
+* {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border) transparent;
+}
+
+*::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+    background: var(--color-border);
+    border-radius: var(--radius-full);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+    background: var(--color-text-muted);
+}
+
+[data-theme="dark"] *::-webkit-scrollbar-thumb,
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme]) *::-webkit-scrollbar-thumb {
+        background: var(--color-border-strong);
+    }
+}
+
+/* ==========================================================================
+   Selection
+   ========================================================================== */
+
+::selection {
+    background: var(--color-primary-light);
+    color: var(--color-text);
+}
+
+[data-theme="dark"] ::selection,
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme]) ::selection {
+        background: var(--color-primary-light);
+        color: #f1f5f9;
+    }
+}
+
+/* ==========================================================================
+   Accessible-only helpers (visually hidden but available to screen readers)
+   ========================================================================== */
+
+.visually-hidden,
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* Skip-to-main link — visible on focus, hidden by default */
+.skip-link {
+    position: absolute;
+    top: var(--space-1);
+    left: var(--space-1);
+    z-index: var(--z-toast);
+    padding: var(--space-3) var(--space-4);
+    background: var(--color-primary);
+    color: var(--color-text-on-primary);
+    text-decoration: none;
+    border-radius: var(--radius-sm);
+    font-weight: 600;
+    transform: translateY(-200%);
+    transition: transform var(--transition-base) var(--ease-out);
+}
+
+.skip-link:focus-visible {
+    transform: translateY(0);
+    outline: 2px solid var(--color-text-on-primary);
+    outline-offset: 2px;
+}

@@ -1,0 +1,348 @@
+/* ==========================================================================
+   OpenRouter (LLM API) settings — toggle, API key, base URL, model
+   pickers, batching params, connection status.
+   ========================================================================== */
+
+/* === TOGGLE SWITCH (iOS style) === */
+.openrouter-toggle-section {
+    background: var(--adm-bg);
+    border: 1px solid var(--adm-border);
+    border-radius: var(--radius-md);
+    padding: 16px 20px;
+    margin-bottom: 20px;
+}
+
+.toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.toggle-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.toggle-label {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: var(--adm-text);
+}
+
+.toggle-hint {
+    font-size: 0.8rem;
+    color: var(--adm-text-sec);
+}
+
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 52px;
+    height: 28px;
+    flex-shrink: 0;
+}
+
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: var(--adm-border);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border-radius: var(--radius-full);
+}
+
+.toggle-slider::before {
+    position: absolute;
+    content: "";
+    height: 22px;
+    width: 22px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border-radius: 50%;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.toggle-switch input:checked + .toggle-slider {
+    background-color: var(--adm-primary);
+}
+
+.toggle-switch input:checked + .toggle-slider::before {
+    transform: translateX(24px);
+}
+
+.toggle-switch input:focus-visible + .toggle-slider {
+    box-shadow: 0 0 0 3px var(--color-focus-ring);
+}
+
+/* === FIELD SECTIONS === */
+.openrouter-field-section {
+    margin-bottom: 20px;
+}
+
+.openrouter-batch-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+}
+
+.field-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--adm-text);
+    margin-bottom: 10px;
+}
+
+.field-label i {
+    color: var(--adm-primary);
+    font-size: 0.85rem;
+}
+
+.field-hint-inline {
+    font-weight: normal;
+    color: var(--adm-text-sec);
+    font-size: 0.85rem;
+}
+
+.field-hint {
+    margin-top: 8px;
+    font-size: 0.8rem;
+    color: var(--adm-text-sec);
+}
+
+.field-hint a {
+    color: var(--adm-primary);
+    text-decoration: none;
+}
+
+.field-hint a:hover {
+    text-decoration: underline;
+}
+
+/* === API KEY input with show/hide toggle === */
+.api-key-input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.api-key-input-wrapper input {
+    width: 100%;
+    padding: 12px 48px 12px 14px;
+    border: 2px solid var(--adm-border);
+    border-radius: var(--radius-md);
+    background: var(--adm-surface);
+    color: var(--adm-text);
+    font-size: 0.95rem;
+    font-family: var(--font-mono);
+    transition: all 0.2s;
+}
+
+.api-key-input-wrapper input:focus {
+    border-color: var(--adm-primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+    outline: none;
+}
+
+.api-key-input-wrapper input::placeholder {
+    color: var(--adm-text-sec);
+    font-family: inherit;
+}
+
+.toggle-visibility-btn {
+    position: absolute;
+    right: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    color: var(--adm-text-sec);
+    cursor: pointer;
+    border-radius: 8px;
+    transition: all 0.2s;
+}
+
+.toggle-visibility-btn:hover {
+    background: var(--adm-bg);
+    color: var(--adm-primary);
+}
+
+/* === CONNECTION STATUS BLOCK === */
+.openrouter-status-section {
+    margin-bottom: 20px;
+    padding: 12px 16px;
+    background: var(--adm-bg);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--adm-border);
+}
+
+.openrouter-status-section .status-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--adm-border);
+}
+
+.openrouter-status-section .status-row:last-child {
+    border-bottom: none;
+}
+
+.openrouter-status-section .status-text-block {
+    flex: 1;
+    min-width: 0;
+}
+
+.openrouter-status-section .status-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--adm-text-sec);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.openrouter-status-section .status-model {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--adm-text);
+    margin: 2px 0;
+    word-break: break-all;
+}
+
+.openrouter-status-section .status-message {
+    font-size: 0.85rem;
+    color: var(--adm-text-sec);
+    word-break: break-word;
+}
+
+.openrouter-status-section .status-message.is-error {
+    color: var(--color-danger);
+}
+
+.openrouter-status-section .status-message.is-success {
+    color: var(--color-success);
+}
+
+/* === STATUS INDICATOR (in status row) === */
+.status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.status-indicator i {
+    font-size: 0.6rem;
+    flex-shrink: 0;
+}
+
+.status-indicator span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.status-indicator.status-inactive i {
+    color: var(--adm-text-sec);
+}
+
+.status-indicator.status-inactive span {
+    color: var(--adm-text-sec);
+}
+
+.status-indicator.status-configured i {
+    color: var(--color-warning);
+}
+
+.status-indicator.status-configured span {
+    color: var(--color-warning);
+}
+
+.status-indicator.status-active i {
+    color: var(--color-success);
+}
+
+.status-indicator.status-active span {
+    color: var(--color-success);
+}
+
+.status-indicator.status-testing i {
+    color: var(--adm-primary);
+    animation: pulse 1s infinite;
+}
+
+.status-indicator.status-testing span {
+    color: var(--adm-primary);
+}
+
+.status-indicator.status-success i {
+    color: var(--color-success);
+}
+
+.status-indicator.status-success span {
+    color: var(--color-success);
+}
+
+.status-indicator.status-error i {
+    color: var(--color-danger);
+}
+
+.status-indicator.status-error span {
+    color: var(--color-danger);
+}
+
+/* === ACTION BUTTONS === */
+.openrouter-actions {
+    display: flex;
+    gap: 12px;
+    padding-top: 8px;
+    border-top: 1px solid var(--adm-border);
+    margin-top: 8px;
+}
+
+.openrouter-actions .btn {
+    flex: 1;
+    justify-content: center;
+    padding: 12px 16px;
+    font-weight: 600;
+    border-radius: var(--radius-md);
+    transition: all 0.2s;
+}
+
+.openrouter-actions .btn:hover {
+    transform: translateY(-1px);
+}
+
+.openrouter-actions .btn-outline {
+    background: transparent;
+    border: 2px solid var(--adm-border);
+    color: var(--adm-text);
+}
+
+.openrouter-actions .btn-outline:hover {
+    border-color: var(--adm-primary);
+    color: var(--adm-primary);
+}

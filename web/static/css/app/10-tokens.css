@@ -1,0 +1,9 @@
+/* ==========================================================================
+   App-specific token re-exports.
+   The shared/00-tokens.css already provides everything the app needs
+   (`--color-primary`, `--bg-body` alias, etc.). This file exists to:
+     1. Make the cascade order explicit (tokens → base → layout → components).
+     2. Document app-specific custom properties (none currently, but
+        this is where app-only tokens would go).
+   No rules — pure marker file.
+   ========================================================================== */

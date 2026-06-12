@@ -1,0 +1,102 @@
+/* ==========================================================================
+   App layout — page chrome: body padding, container width, app-layout grid,
+   app-main (which the sidebar pushes to the right), header, footer.
+
+   The 1700px "smart overlay" media query below is a deliberate opt-in: on
+   very wide monitors the sidebar stops pushing the main column because
+   there's enough horizontal space for both to coexist without overlap.
+   ========================================================================== */
+
+body {
+    padding: 20px;
+    min-height: 100vh;
+    padding-bottom: 40px;
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.container {
+    max-width: var(--container-max-width);
+    margin: 0 auto;
+    position: relative;
+}
+
+/* --- Header --- */
+header {
+    text-align: center;
+    height: auto;
+    min-height: 100px;
+    margin-bottom: 35px;
+    padding-top: 15px;
+    padding-bottom: 10px;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+h1 {
+    color: var(--text-main);
+    font-size: 2.2rem;
+    font-weight: 800;
+    margin-bottom: 4px;
+    line-height: 1.2;
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.subtitle {
+    color: var(--text-secondary);
+    font-size: 1rem;
+    max-width: 500px;
+    margin: 0 auto;
+    line-height: 1.4;
+}
+
+/* --- Two-column layout: catalog sidebar + main content --- */
+.app-layout {
+    display: flex;
+    align-items: flex-start;
+    position: relative;
+}
+
+.app-main {
+    flex: 1;
+    min-width: 0;
+    transition: margin-left 0.3s ease;
+    /* Default: push strategy on laptop screens */
+    margin-left: var(--sidebar-width);
+}
+
+/* Wide monitors (>=1700px): enable "smart overlay" so the sidebar
+   stops pushing the main column when there's room to coexist. */
+@media (min-width: 1700px) {
+    .app-main {
+        margin-left: max(0px,
+            var(--sidebar-width) + var(--sidebar-gap)
+            - (100vw - var(--container-max-width)) / 2
+        );
+    }
+}
+
+/* When sidebar is collapsed, use the narrower collapsed width. */
+.app-layout.sidebar-collapsed .app-main {
+    margin-left: var(--sidebar-collapsed-width);
+}
+
+@media (min-width: 1700px) {
+    .app-layout.sidebar-collapsed .app-main {
+        margin-left: max(0px,
+            var(--sidebar-collapsed-width) + var(--sidebar-gap)
+            - (100vw - var(--container-max-width)) / 2
+        );
+    }
+}
+
+/* --- Footer --- */
+footer {
+    text-align: center;
+    margin-top: 30px;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+}

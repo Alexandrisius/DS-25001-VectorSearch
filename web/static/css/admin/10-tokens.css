@@ -1,0 +1,7 @@
+/* ==========================================================================
+   Admin-specific token re-exports.
+   All tokens come from shared/00-tokens.css. This file is a marker
+   that documents the cascade order and the admin-specific custom
+   properties (currently only the admin sidebar/header dimensions,
+   which are already defined in shared).
+   ========================================================================== */

@@ -1,0 +1,331 @@
+/* ==========================================================================
+   Diff view — the comparison UI shown after parsing the import source.
+   Three tabs (added / modified / deleted) + a Folders tab.
+   ========================================================================== */
+
+.diff-summary {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+.diff-stat {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 20px;
+    border-radius: var(--radius-md);
+    font-weight: 600;
+    font-size: 1rem;
+}
+
+.diff-stat.added {
+    background: var(--adm-success-bg);
+    color: var(--adm-success);
+}
+
+.diff-stat.modified {
+    background: #fef3c7;
+    color: var(--color-warning-deep);
+}
+
+.diff-stat.deleted {
+    background: var(--adm-danger-bg);
+    color: var(--adm-danger);
+}
+
+.diff-stat.folders {
+    background: rgba(99, 102, 241, 0.1);
+    color: var(--adm-primary);
+}
+
+.diff-stat .count {
+    font-size: 1.25rem;
+    font-weight: 700;
+}
+
+/* === Diff Tabs === */
+.diff-tabs {
+    display: flex;
+    gap: 5px;
+    margin-bottom: 15px;
+    border-bottom: 2px solid var(--adm-border);
+    padding-bottom: 0;
+}
+
+.diff-tab-btn {
+    padding: 10px 20px;
+    border: none;
+    background: none;
+    color: var(--adm-text-sec);
+    font-weight: 500;
+    font-size: 0.9rem;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    transition: all 0.2s;
+}
+
+.diff-tab-btn:hover {
+    color: var(--adm-text);
+}
+
+.diff-tab-btn.active {
+    color: var(--adm-primary);
+    border-bottom-color: var(--adm-primary);
+}
+
+.diff-tab-btn .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: var(--radius-full);
+    font-size: 0.75rem;
+    margin-left: 6px;
+    background: var(--adm-bg);
+}
+
+.diff-tab-btn.active .badge {
+    background: rgba(99, 102, 241, 0.15);
+    color: var(--adm-primary);
+}
+
+/* === Diff Table === */
+.diff-table-wrap {
+    max-height: 350px;
+    overflow-y: auto;
+    border: 1px solid var(--adm-border);
+    border-radius: var(--radius-md);
+}
+
+.diff-table {
+    width: 100%;
+    font-size: 0.85rem;
+}
+
+.diff-table th {
+    background: var(--adm-bg);
+    padding: 10px 15px;
+    text-align: left;
+    font-weight: 600;
+    color: var(--adm-text-sec);
+    position: sticky;
+    top: 0;
+    z-index: 5;
+}
+
+.diff-table td {
+    padding: 10px 15px;
+    border-bottom: 1px solid var(--adm-border);
+    vertical-align: top;
+}
+
+.diff-table .code-col {
+    width: 180px;
+    font-family: monospace;
+    font-weight: 600;
+    color: var(--adm-primary);
+}
+
+.diff-table .desc-col {
+    max-width: 400px;
+    word-break: break-word;
+}
+
+/* Modified records: old → new layout */
+.diff-old {
+    background: var(--adm-danger-bg);
+    color: var(--adm-danger);
+    padding: 4px 8px;
+    border-radius: 4px;
+    display: block;
+    margin-bottom: 6px;
+    text-decoration: line-through;
+    opacity: 0.8;
+}
+
+.diff-new {
+    background: var(--adm-success-bg);
+    color: var(--adm-success);
+    padding: 4px 8px;
+    border-radius: 4px;
+    display: block;
+}
+
+.diff-arrow {
+    color: var(--adm-text-sec);
+    margin: 4px 0;
+    font-size: 0.75rem;
+}
+
+/* Empty / loading state */
+.diff-empty {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--adm-text-sec);
+}
+
+.diff-empty i {
+    font-size: 2rem;
+    margin-bottom: 10px;
+    display: block;
+    opacity: 0.5;
+}
+
+.diff-loading {
+    text-align: center;
+    padding: 40px 20px;
+}
+
+.diff-loading i {
+    font-size: 2rem;
+    color: var(--adm-primary);
+    animation: spin 1s linear infinite;
+}
+
+.diff-loading p {
+    margin-top: 10px;
+}
+
+/* Checkbox column for selecting records */
+.diff-checkbox {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+}
+
+/* Deletion warning banner */
+.diff-delete-warning {
+    background: var(--adm-danger-bg);
+    border: 1px solid var(--adm-danger);
+    border-radius: var(--radius-md);
+    padding: 12px 15px;
+    margin-bottom: 15px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--adm-danger);
+    font-size: 0.9rem;
+}
+
+.diff-delete-warning i {
+    font-size: 1.2rem;
+}
+
+/* === FOLDER ROWS in diff === */
+.diff-table tr.folder-added {
+    background: rgba(16, 185, 129, 0.08);
+}
+
+.diff-table tr.folder-modified {
+    background: rgba(217, 119, 6, 0.08);
+}
+
+.diff-table tr.folder-deleted {
+    background: rgba(239, 68, 68, 0.08);
+}
+
+.diff-table tr.folder-added td:first-child::before,
+.diff-table tr.folder-modified td:first-child::before,
+.diff-table tr.folder-deleted td:first-child::before {
+    display: none;  /* legacy ::before markers — replaced by status-badge below */
+}
+
+.diff-table tr.folder-added td,
+.diff-table tr.folder-modified td,
+.diff-table tr.folder-deleted td {
+    padding: 10px 12px;
+    vertical-align: middle;
+}
+
+.folder-name-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.folder-leaf-name {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--adm-text);
+}
+
+.folder-full-path {
+    font-size: 0.75rem;
+    color: var(--adm-text-sec);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.folder-full-path i {
+    font-size: 0.65rem;
+    opacity: 0.7;
+}
+
+.folder-count-cell {
+    text-align: center;
+    font-weight: 600;
+    font-size: 0.95rem;
+}
+
+.count-arrow {
+    color: var(--adm-text-sec);
+    font-size: 0.7rem;
+    margin: 0 6px;
+}
+
+.count-old {
+    color: var(--adm-danger);
+    text-decoration: line-through;
+    opacity: 0.8;
+}
+
+.count-new {
+    color: var(--adm-success);
+    font-weight: 700;
+}
+
+.count-up {
+    color: var(--adm-success);
+}
+
+.count-down {
+    color: var(--adm-danger);
+}
+
+.folder-table-subheader th {
+    background: var(--adm-bg);
+    padding: 8px 12px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--adm-text-sec);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--adm-border);
+}
+
+.folder-more-row {
+    text-align: center;
+    color: var(--adm-text-sec);
+    font-style: italic;
+    padding: 12px !important;
+}
+
+/* Section header rows (e.g. "Новые папки — 5 шт.") */
+.diff-folder-section-header {
+    background: var(--adm-success-bg);
+    color: var(--adm-success);
+    font-weight: 600;
+    padding: 10px 15px;
+}
+
+.diff-folder-section-header--modified {
+    background: #fef3c7;
+    color: var(--color-warning-deep);
+}
+
+.diff-folder-section-header--deleted {
+    background: var(--adm-danger-bg);
+    color: var(--adm-danger);
+}

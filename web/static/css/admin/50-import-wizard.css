@@ -1,0 +1,688 @@
+/* ==========================================================================
+   Import wizard — step navigation, progress bar, column mapper (3 panels
+   side by side), numbered checkboxes, multi-select dropdown, delimiter
+   selector, source tabs (paste/Excel), Excel drop zone, preview table.
+   ========================================================================== */
+
+/* === WIZARD STEPS === */
+.step-content {
+    display: none;
+}
+
+.step-content.active {
+    display: block;
+    animation: fadeIn 0.3s;
+}
+
+.progress-bar-container {
+    background: var(--adm-bg);
+    height: 12px;
+    border-radius: 6px;
+    overflow: hidden;
+    margin-top: 10px;
+}
+
+.progress-bar-fill {
+    height: 100%;
+    background: var(--adm-primary);
+    width: 0%;
+    transition: width 0.3s ease;
+}
+
+/* === COLUMN MAPPER (step 2) === */
+.column-mapper {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 25px;
+    margin-top: 20px;
+}
+
+.mapper-section {
+    display: flex;
+    flex-direction: column;
+}
+
+.mapper-section label {
+    font-weight: 600;
+    margin-bottom: 10px;
+    color: var(--adm-text);
+}
+
+/* Modern select (replaces native arrow) */
+.form-select-modern {
+    width: 100%;
+    padding: 12px 15px;
+    background: var(--adm-surface);
+    border: 1px solid var(--adm-border);
+    border-radius: var(--radius-md);
+    font-size: 0.95rem;
+    color: var(--adm-text);
+    appearance: none;
+    background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%2364748b%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E");
+    background-repeat: no-repeat;
+    background-position: right 15px top 50%;
+    background-size: 12px auto;
+    cursor: pointer;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.form-select-modern:focus {
+    border-color: var(--adm-primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+/* === Multi-Select Dropdown (legacy) === */
+.multi-select-dropdown {
+    position: relative;
+    width: 100%;
+}
+
+.select-trigger {
+    width: 100%;
+    padding: 12px 15px;
+    background: var(--adm-surface);
+    border: 1px solid var(--adm-border);
+    border-radius: var(--radius-md);
+    font-size: 0.95rem;
+    color: var(--adm-text);
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    user-select: none;
+    transition: all 0.2s;
+}
+
+.select-trigger:hover {
+    border-color: var(--adm-primary-hover);
+}
+
+.select-trigger.active {
+    border-color: var(--adm-primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+.select-options {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    right: 0;
+    background: var(--adm-surface);
+    border: 1px solid var(--adm-border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    max-height: 250px;
+    overflow-y: auto;
+    z-index: 100;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-10px);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    padding: 5px;
+}
+
+.select-options.open {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+.option-item {
+    display: flex;
+    align-items: center;
+    padding: 10px 12px;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: background 0.1s;
+    gap: 10px;
+}
+
+.option-item:hover {
+    background: var(--adm-bg);
+}
+
+.option-item input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    min-width: 18px;
+    min-height: 18px;
+    margin: 0;
+    cursor: pointer;
+    border-radius: 4px;
+    border: 2px solid var(--adm-text-sec);
+    appearance: none;
+    position: relative;
+    background: transparent;
+    box-shadow: none;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.option-item input[type="checkbox"]:checked {
+    background: var(--adm-primary);
+    border-color: var(--adm-primary);
+}
+
+.option-item input[type="checkbox"]:checked::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 45%;
+    width: 5px;
+    height: 9px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+    transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.option-text {
+    font-size: 0.9rem;
+    color: var(--adm-text);
+    font-weight: 500;
+}
+
+.selected-count {
+    font-size: 0.85rem;
+    color: var(--adm-text-sec);
+}
+
+/* === Delimiter Selector (CSV/TSV/auto) === */
+.delimiter-selector {
+    background: var(--adm-bg);
+    border: 1px solid var(--adm-border);
+    border-radius: var(--radius-md);
+    padding: 15px;
+}
+
+.delimiter-selector__label {
+    font-weight: 600;
+    margin-bottom: 8px;
+    display: block;
+}
+
+.delimiter-options {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.delimiter-option {
+    cursor: pointer;
+}
+
+.delimiter-option input[type="radio"] {
+    display: none;
+}
+
+.delimiter-btn {
+    display: inline-block;
+    padding: 8px 16px;
+    border: 2px solid var(--adm-border);
+    border-radius: var(--radius-md);
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--adm-text-sec);
+    background: var(--adm-surface);
+    transition: all 0.2s;
+}
+
+.delimiter-option input[type="radio"]:checked + .delimiter-btn {
+    border-color: var(--adm-primary);
+    background: var(--adm-primary);
+    color: white;
+}
+
+.delimiter-option:hover .delimiter-btn {
+    border-color: var(--adm-primary);
+}
+
+/* === 3-Column Mapper (Code / Desc / Hierarchy) === */
+.import-mapper-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.mapper-card {
+    background: var(--adm-bg);
+    border: 1px solid var(--adm-border);
+    border-radius: var(--radius-lg);
+    padding: 20px;
+}
+
+.mapper-card-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 700;
+    font-size: 1rem;
+    margin-bottom: 15px;
+    color: var(--adm-text);
+}
+
+.mapper-card-header i {
+    color: var(--adm-primary);
+    font-size: 1.1rem;
+}
+
+.mapper-hint {
+    font-size: 0.8rem;
+    color: var(--adm-text-sec);
+    margin-top: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.mapper-hint i {
+    color: var(--adm-primary);
+}
+
+/* === Numbered Checkboxes (column-select with order numbers) === */
+.numbered-select-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 200px;
+    overflow-y: auto;
+    padding: 4px;
+}
+
+.numbered-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.15s;
+    user-select: none;
+}
+
+.numbered-option:hover {
+    background: var(--adm-surface);
+}
+
+.num-badge {
+    width: 24px;
+    height: 24px;
+    min-width: 24px;
+    border-radius: 50%;
+    border: 2px solid var(--adm-border);
+    background: var(--adm-surface);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--adm-text-sec);
+    transition: all 0.2s;
+}
+
+.numbered-option.selected .num-badge {
+    background: var(--adm-primary);
+    border-color: var(--adm-primary);
+    color: white;
+}
+
+.numbered-option:not(.selected):hover .num-badge {
+    border-color: var(--adm-primary);
+    color: var(--adm-primary);
+}
+
+.num-label {
+    font-size: 0.9rem;
+    color: var(--adm-text);
+    font-weight: 500;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* === Header Separator (small input for column-join delimiter) === */
+.header-separator {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+    font-size: 0.75rem;
+}
+
+.header-separator label {
+    color: var(--adm-text-sec);
+    white-space: nowrap;
+}
+
+.header-separator input {
+    width: 40px;
+    padding: 4px 8px;
+    text-align: center;
+    font-family: monospace;
+    font-size: 0.85rem;
+    font-weight: 600;
+    border-radius: 4px;
+}
+
+/* === Preview Row (3 live previews under mapper cards) === */
+.preview-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 20px;
+    padding: 12px;
+    background: var(--adm-surface);
+    border: 1px solid var(--adm-border);
+    border-radius: var(--radius-md);
+}
+
+.preview-row .concat-preview {
+    flex: 1;
+    margin: 0;
+    min-width: 0;
+}
+
+.concat-preview {
+    margin-top: 10px;
+    padding: 8px 12px;
+    background: var(--adm-bg);
+    border: 1px dashed var(--adm-border);
+    border-radius: 6px;
+    font-size: 0.8rem;
+    color: var(--adm-text-sec);
+}
+
+.concat-preview span {
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.concat-preview code {
+    display: block;
+    margin-top: 4px;
+    color: var(--adm-primary);
+    font-weight: 600;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    white-space: normal;
+    line-height: 1.4;
+}
+
+/* === Preview Table (first 5 rows of parsed data) === */
+.import-preview {
+    background: var(--adm-bg);
+    border: 1px solid var(--adm-border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+}
+
+.preview-header {
+    padding: 12px 15px;
+    background: var(--adm-surface);
+    border-bottom: 1px solid var(--adm-border);
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--adm-text);
+}
+
+.preview-header i {
+    color: var(--adm-primary);
+}
+
+.preview-count {
+    margin-left: auto;
+    font-size: 0.85rem;
+    color: var(--adm-text-sec);
+    font-weight: 500;
+}
+
+.preview-table-wrap {
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.preview-table {
+    width: 100%;
+    font-size: 0.85rem;
+}
+
+.preview-table th {
+    background: var(--adm-surface);
+    padding: 10px 12px;
+    text-align: left;
+    font-weight: 600;
+    color: var(--adm-text-sec);
+    position: sticky;
+    top: 0;
+}
+
+.preview-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--adm-border);
+    color: var(--adm-text);
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.preview-table tr:nth-child(even) td {
+    background: var(--color-row-stripe);
+}
+
+/* === IMPORT MODAL — wide & resizable (3 mapper panels) === */
+#importModal .modal-window {
+    max-width: 90vw;
+    width: 1200px;
+    min-width: 800px;
+    position: relative;
+}
+
+/* Wider preview cells in the import modal */
+#importModal .preview-table td {
+    max-width: 300px;
+}
+
+#importModal .preview-table-wrap {
+    max-height: 250px;
+    overflow: auto;
+}
+
+/* === IMPORT SOURCE TABS (paste / Excel) === */
+.import-source-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    border-bottom: 2px solid var(--adm-border);
+    padding-bottom: 12px;
+}
+
+.source-tab {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 18px;
+    border: 2px solid var(--adm-border);
+    border-radius: var(--radius-md);
+    background: var(--adm-surface);
+    color: var(--adm-text-sec);
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.source-tab:hover {
+    border-color: var(--adm-primary);
+    color: var(--adm-text);
+}
+
+.source-tab.active {
+    border-color: var(--adm-primary);
+    background: rgba(99, 102, 241, 0.08);
+    color: var(--adm-primary);
+    font-weight: 600;
+}
+
+.source-tab i {
+    font-size: 1rem;
+}
+
+.import-source-content {
+    display: none;
+}
+
+.import-source-content.active {
+    display: block;
+}
+
+.import-source-paste {
+    margin-bottom: 15px;
+    color: var(--adm-text-sec);
+}
+
+.import-source-excel {
+    margin-bottom: 15px;
+    color: var(--adm-text-sec);
+}
+
+#pasteArea {
+    height: 180px;
+    font-family: monospace;
+}
+
+/* === EXCEL DROP ZONE === */
+.excel-drop-zone {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+    border: 3px dashed var(--adm-border);
+    border-radius: var(--radius-lg);
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.03) 0%, rgba(99, 102, 241, 0.01) 100%);
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s;
+    min-height: 200px;
+}
+
+.excel-drop-zone:hover,
+.excel-drop-zone.drag-over {
+    border-color: var(--adm-primary);
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.08) 0%, rgba(99, 102, 241, 0.04) 100%);
+}
+
+.excel-drop-zone.drag-over {
+    transform: scale(1.02);
+    box-shadow: var(--shadow-primary-glow);
+}
+
+.excel-drop-zone i {
+    font-size: 4rem;
+    color: var(--color-excel);
+    margin-bottom: 16px;
+    opacity: 0.8;
+}
+
+.excel-drop-zone p {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--adm-text);
+    margin: 0 0 8px 0;
+}
+
+.excel-drop-zone span {
+    font-size: 0.85rem;
+    color: var(--adm-text-sec);
+    margin-bottom: 12px;
+}
+
+.excel-drop-zone .btn {
+    margin-top: 8px;
+}
+
+/* === EXCEL FILE INFO CARD === */
+.excel-file-info {
+    margin-top: 16px;
+}
+
+.file-info-card {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px 20px;
+    background: linear-gradient(135deg, var(--color-excel) 0%, var(--color-excel-deep) 100%);
+    border-radius: var(--radius-md);
+    color: white;
+}
+
+.file-info-card i {
+    font-size: 2.5rem;
+    opacity: 0.9;
+}
+
+.file-details {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.file-name {
+    font-weight: 700;
+    font-size: 1rem;
+}
+
+.file-stats {
+    font-size: 0.85rem;
+    opacity: 0.9;
+}
+
+.file-info-card .btn {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: transparent;
+    color: white;
+}
+
+.file-info-card .btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+/* === EXCEL SHEET SELECTOR === */
+.excel-sheet-selector {
+    margin-top: 16px;
+    padding: 16px;
+    background: var(--adm-bg);
+    border: 1px solid var(--adm-border);
+    border-radius: var(--radius-md);
+}
+
+.excel-sheet-selector__label {
+    font-weight: 600;
+    margin-bottom: 8px;
+    display: block;
+}
+
+/* === RESPONSIVE === */
+@media (max-width: 1250px) {
+    #importModal .modal-window {
+        max-width: 95vw;
+    }
+}
+
+@media (max-width: 900px) {
+    .import-mapper-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+@media (max-width: 600px) {
+    .import-mapper-grid {
+        grid-template-columns: 1fr;
+    }
+}

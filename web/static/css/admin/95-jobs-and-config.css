@@ -1,0 +1,150 @@
+/* ==========================================================================
+   Jobs view + Collection config modal — the two remaining admin
+   features that don't fit the other category files.
+   ========================================================================== */
+
+/* === JOBS TABLE === */
+#jobsTable {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+#jobsTable thead th {
+    text-align: left;
+    padding: 10px 12px;
+    font-weight: 600;
+    color: var(--adm-text-secondary, var(--adm-text-sec));
+    border-bottom: 1px solid var(--adm-border, #2a3548);
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+#jobsTable tbody td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--adm-border, #2a3548);
+    vertical-align: middle;
+}
+
+#jobsTable tbody td:last-child {
+    text-align: center;
+    width: 80px;
+}
+
+#jobsTable tbody tr:hover {
+    background: var(--adm-bg-hover, rgba(255, 255, 255, 0.03));
+}
+
+#jobsTable .btn-stop-job {
+    padding: 4px 8px;
+    font-size: 0.8rem;
+    background: #dc2626;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+#jobsTable .btn-stop-job:hover {
+    background: #b91c1c;
+}
+
+#jobsTable .job-id {
+    font-family: monospace;
+    font-size: 0.8rem;
+}
+
+#jobsTable .job-progress {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+#jobsTable .job-progress-bar {
+    width: 100px;
+    height: 6px;
+    background: var(--adm-bg);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+#jobsTable .job-progress-bar-fill {
+    height: 100%;
+    background: var(--adm-primary);
+    transition: width 0.3s ease;
+}
+
+/* === CONFIG MODAL SECTIONS (Phase 4 RRF + MMR + adaptive) === */
+.config-section {
+    padding: 16px;
+    background: var(--adm-bg);
+    border: 1px solid var(--adm-border);
+    border-radius: var(--radius-md);
+    margin-bottom: 14px;
+}
+
+.config-section-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--adm-text);
+    margin-bottom: 12px;
+}
+
+.config-section-title i {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(99, 102, 241, 0.12);
+    color: var(--adm-primary);
+    border-radius: 6px;
+    font-size: 0.75rem;
+}
+
+.config-section-title small {
+    margin-left: auto;
+    font-weight: 400;
+    font-size: 0.72rem;
+    color: var(--adm-text-sec);
+    text-align: right;
+}
+
+.config-section-deprecated {
+    background: var(--adm-surface);
+    border-style: dashed;
+}
+
+.config-section-deprecated summary {
+    cursor: pointer;
+    list-style: none;
+    margin-bottom: 0;
+}
+
+.config-section-deprecated summary::-webkit-details-marker {
+    display: none;
+}
+
+.config-section-deprecated[open] summary {
+    margin-bottom: 12px;
+}
+
+.config-checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    user-select: none;
+    font-size: 0.9rem;
+}
+
+.config-checkbox-row input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--adm-primary);
+    cursor: pointer;
+}

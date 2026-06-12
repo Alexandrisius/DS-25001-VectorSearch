@@ -1,0 +1,40 @@
+/* ==========================================================================
+   Long-press toast — temporary feedback banner for tree interactions
+   (e.g. "Added to filter"). Animations come from shared/02-animations.css.
+   ========================================================================== */
+
+.longpress-toast {
+    position: fixed;
+    bottom: 100px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--surface);
+    color: var(--text-main);
+    padding: 12px 20px;
+    border-radius: var(--radius-full);
+    box-shadow: var(--shadow-toast);
+    border: 1px solid var(--border);
+    font-size: 0.9rem;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    z-index: var(--z-toast);
+    animation: toast-in 0.3s ease-out;
+}
+
+.longpress-toast i {
+    color: var(--primary);
+}
+
+.longpress-toast.toast-warning {
+    border-color: var(--color-folder);
+}
+
+.longpress-toast.toast-warning i {
+    color: var(--color-folder);
+}
+
+.longpress-toast.fade-out {
+    animation: toast-out 0.3s ease-in forwards;
+}

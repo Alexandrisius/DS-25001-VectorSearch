@@ -1,0 +1,333 @@
+/* ==========================================================================
+   Statuses settings — list, add form, color picker, default status.
+   This file is the "Статусы записей" card in the settings page.
+   ========================================================================== */
+
+/* === STATUS LIST === */
+.status-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 24px;
+}
+
+.status-item {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px 20px;
+    background: var(--adm-bg);
+    border: 1px solid var(--adm-border);
+    border-radius: var(--radius-md);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+}
+
+.status-item:hover {
+    border-color: var(--adm-primary);
+    box-shadow: var(--shadow-primary-soft);
+    transform: translateY(-1px);
+}
+
+/* Colored accent bar on the left edge */
+.status-item::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    border-radius: var(--radius-md) 0 0 var(--radius-md);
+    background: var(--status-color, var(--adm-primary));
+}
+
+.status-item.is-removing {
+    opacity: 0;
+    transform: translateX(-20px);
+}
+
+.status-color-preview {
+    width: 44px;
+    height: 44px;
+    border-radius: var(--radius-md);
+    background: var(--status-color, var(--adm-primary));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    position: relative;
+    transition: transform 0.2s, box-shadow 0.2s;
+    flex-shrink: 0;
+    box-shadow: var(--shadow-color-pill);
+}
+
+.status-color-preview:hover {
+    transform: scale(1.05);
+    box-shadow: var(--shadow-color-pill-hover);
+}
+
+.status-color-preview i {
+    color: white;
+    font-size: 1rem;
+    opacity: 0;
+    transition: opacity 0.2s;
+    text-shadow: var(--shadow-text);
+}
+
+.status-color-preview:hover i {
+    opacity: 1;
+}
+
+.status-item .status-color-picker {
+    position: absolute;
+    width: 44px;
+    height: 44px;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.status-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+
+.status-id-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    background: var(--adm-surface);
+    border: 1px solid var(--adm-border);
+    border-radius: 6px;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--adm-text-sec);
+    width: fit-content;
+}
+
+.status-id-badge i {
+    font-size: 0.65rem;
+    opacity: 0.6;
+}
+
+.status-item .status-label-input {
+    padding: 10px 14px;
+    border: 2px solid var(--adm-border);
+    border-radius: var(--radius-md);
+    background: var(--adm-surface);
+    color: var(--adm-text);
+    font-size: 0.95rem;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.status-item .status-label-input:focus {
+    border-color: var(--adm-primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+    outline: none;
+}
+
+.status-item.is-invalid .status-label-input {
+    border-color: var(--adm-danger);
+}
+
+.btn-remove-status {
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 2px solid var(--adm-border);
+    color: var(--adm-text-sec);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all 0.2s;
+    flex-shrink: 0;
+}
+
+.btn-remove-status:hover {
+    border-color: var(--adm-danger);
+    background: var(--adm-danger-bg);
+    color: var(--adm-danger);
+    transform: scale(1.05);
+}
+
+/* === ADD STATUS FORM === */
+.add-status-section {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.05) 0%, rgba(99, 102, 241, 0.02) 100%);
+    border: 2px dashed var(--adm-border);
+    border-radius: var(--radius-md);
+    padding: 20px;
+    margin-bottom: 24px;
+    transition: all 0.2s;
+}
+
+.add-status-section:hover {
+    border-color: var(--adm-primary);
+}
+
+.add-status-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--adm-text);
+}
+
+.add-status-header i {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--adm-primary);
+    color: white;
+    border-radius: 8px;
+    font-size: 0.8rem;
+}
+
+.add-status-row {
+    display: grid;
+    grid-template-columns: 1fr 1.5fr 50px 44px;
+    gap: 12px;
+    align-items: center;
+}
+
+.add-status-row input[type="text"] {
+    padding: 12px 14px;
+    border: 2px solid var(--adm-border);
+    border-radius: var(--radius-md);
+    background: var(--adm-surface);
+    color: var(--adm-text);
+    font-size: 0.9rem;
+    transition: all 0.2s;
+}
+
+.add-status-row input[type="text"]:focus {
+    border-color: var(--adm-primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+    outline: none;
+}
+
+.add-status-row input[type="text"]::placeholder {
+    color: var(--adm-text-sec);
+}
+
+.new-status-color-wrapper {
+    position: relative;
+    width: 50px;
+    height: 44px;
+}
+
+.new-status-color-preview {
+    width: 100%;
+    height: 100%;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    border: 2px solid var(--adm-border);
+    transition: all 0.2s;
+}
+
+.new-status-color-preview:hover {
+    border-color: var(--adm-primary);
+    transform: scale(1.05);
+}
+
+.new-status-color-wrapper input[type="color"] {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+}
+
+#addStatusBtn {
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-md);
+    font-size: 1.1rem;
+}
+
+/* === DEFAULT STATUS SECTION === */
+.default-status-section {
+    background: var(--adm-bg);
+    border: 1px solid var(--adm-border);
+    border-radius: var(--radius-md);
+    padding: 20px;
+    margin-bottom: 24px;
+}
+
+.default-status-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+    font-weight: 600;
+    color: var(--adm-text);
+}
+
+.default-status-header i {
+    color: var(--adm-primary);
+}
+
+.default-status-description {
+    font-size: 0.85rem;
+    color: var(--adm-text-sec);
+    margin-bottom: 16px;
+    line-height: 1.5;
+}
+
+#defaultStatusSelect {
+    padding: 12px 16px;
+    border: 2px solid var(--adm-border);
+    border-radius: var(--radius-md);
+    font-size: 0.95rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+#defaultStatusSelect:hover {
+    border-color: var(--adm-primary);
+}
+
+#defaultStatusSelect:focus {
+    border-color: var(--adm-primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+    outline: none;
+}
+
+/* === SAVE SECTION === */
+.save-statuses-section {
+    display: flex;
+    justify-content: flex-end;
+    padding-top: 8px;
+    border-top: 1px solid var(--adm-border);
+    margin-top: 8px;
+}
+
+#saveStatusesBtn {
+    padding: 12px 24px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    border-radius: var(--radius-md);
+    transition: all 0.2s;
+}
+
+#saveStatusesBtn:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-primary-strong);
+}

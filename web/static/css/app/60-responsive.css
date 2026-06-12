@@ -1,0 +1,265 @@
+/* ==========================================================================
+   Responsive — all @media queries for the app.
+   Largest → smallest: 1700 (overlay), 1600, 1400, 1200, 992, 768.
+   Mobile-first collapse: at <= 1200px the sidebar becomes a top
+   full-width block instead of a left rail.
+   ========================================================================== */
+
+/* Larger laptops: shrink the sidebar */
+@media (max-width: 1600px) {
+    :root {
+        --sidebar-width: 420px;
+    }
+    .catalog-sidebar {
+        width: var(--sidebar-width);
+        min-width: 320px;
+    }
+}
+
+@media (max-width: 1400px) {
+    :root {
+        --sidebar-width: 350px;
+    }
+    .catalog-sidebar {
+        width: var(--sidebar-width);
+        min-width: 280px;
+    }
+}
+
+/* Tablets / small laptops: sidebar goes on top, full width */
+@media (max-width: 1200px) {
+    .app-layout {
+        flex-direction: column;
+        width: 100%;
+    }
+    .app-main {
+        width: 100%;
+        flex: none;
+        margin-left: 0 !important;
+    }
+    .app-layout.sidebar-collapsed .app-main {
+        margin-left: 0 !important;
+    }
+    .catalog-sidebar {
+        width: 100% !important;
+        min-width: 100%;
+        max-width: 100%;
+        position: relative;
+        top: 0;
+        height: auto;
+        max-height: none;
+        border-radius: var(--radius-lg);
+        border: 2px solid var(--border);
+        margin-bottom: 20px;
+    }
+    .sidebar-resizer {
+        display: none;
+    }
+    .sidebar-content {
+        max-height: 350px;
+        overflow-y: auto;
+    }
+    .catalog-sidebar.collapsed {
+        width: 100% !important;
+        min-width: 100%;
+        border-radius: var(--radius-lg);
+    }
+    .catalog-sidebar.collapsed .sidebar-content,
+    .catalog-sidebar.collapsed .sidebar-footer,
+    .catalog-sidebar.collapsed .breadcrumbs {
+        display: none;
+    }
+    .catalog-sidebar.collapsed .sidebar-title {
+        writing-mode: horizontal-tb;
+        flex-direction: row;
+    }
+    .catalog-sidebar.collapsed .sidebar-title span {
+        display: inline;
+    }
+    .catalog-sidebar.collapsed .sidebar-header {
+        flex-direction: row;
+        justify-content: space-between;
+        padding: 16px 20px;
+        height: auto;
+    }
+    .catalog-sidebar.collapsed .sidebar-toggle-btn {
+        writing-mode: horizontal-tb;
+        margin-top: 0;
+    }
+}
+
+@media (max-width: 992px) {
+    body {
+        padding: 10px;
+    }
+    .container {
+        width: 100%;
+    }
+    .app-layout {
+        flex-direction: column;
+        width: 100%;
+    }
+    .app-main {
+        width: 100%;
+        flex: none;
+    }
+    .main-card {
+        width: 100%;
+    }
+    /* Header controls collapse to absolute-positioned squares in the corners */
+    .header-controls {
+        position: static !important;
+        transform: none !important;
+        width: 0;
+        height: 0;
+        overflow: visible;
+        padding: 0;
+        margin: 0;
+    }
+    .admin-header-btn,
+    .theme-toggle {
+        position: absolute !important;
+        top: 15px !important;
+        width: 44px;
+        height: 44px;
+        padding: 0 !important;
+        display: flex !important;
+        align-items: center;
+        justify-content: center;
+    }
+    .admin-header-btn {
+        left: 15px !important;
+        right: auto !important;
+        bottom: auto !important;
+        z-index: 1001;
+    }
+    .theme-toggle {
+        right: 15px !important;
+        left: auto !important;
+        bottom: auto !important;
+        z-index: 1001;
+        margin: 0 !important;
+    }
+    .theme-toggle span {
+        display: none;
+    }
+    .header-top-row {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 15px;
+    }
+    .metrics-panel {
+        display: flex;
+        flex-direction: row;
+        flex-wrap: wrap;
+        justify-content: flex-start;
+        align-items: center;
+        gap: 10px;
+        width: 100%;
+        max-width: 100%;
+        margin: 0;
+        flex: 0 0 auto;
+    }
+    .custom-select-wrapper {
+        width: 100%;
+        min-width: 0;
+        flex: 0 0 auto;
+    }
+    .button-group {
+        flex-direction: column-reverse;
+    }
+    .btn {
+        width: 100%;
+    }
+    /* Convert the results table to a card-like stacked layout */
+    .ksr-table,
+    .ksr-table tbody,
+    .ksr-table tr,
+    .ksr-table td {
+        display: block;
+        width: 100%;
+    }
+    .ksr-table thead {
+        display: none;
+    }
+    .ksr-table tr {
+        margin-bottom: 15px;
+        border-bottom: 1px solid var(--border);
+        padding-bottom: 15px;
+        position: relative;
+    }
+    .ksr-table td:nth-child(1) {
+        display: inline-block;
+        width: auto;
+        padding: 15px 0 5px 15px !important;
+        vertical-align: middle;
+        font-size: 1.1rem;
+        border: none;
+    }
+    .ksr-table td:nth-child(2) {
+        display: inline-block;
+        width: auto;
+        padding: 15px 0 5px 5px !important;
+        vertical-align: middle;
+        border: none;
+        max-width: calc(100% - 120px);
+    }
+    .ksr-table td:nth-child(3) {
+        display: inline-block;
+        width: auto;
+        padding: 15px 15px 5px 5px !important;
+        vertical-align: middle;
+        border: none;
+    }
+    .ksr-table td:nth-child(4) {
+        padding: 5px 15px 15px 15px !important;
+        border: none;
+        clear: both;
+    }
+    .ksr-table td:nth-child(5) {
+        position: absolute;
+        right: 10px;
+        top: 15px;
+        padding: 0 !important;
+        border: none;
+        width: auto;
+    }
+    .ksr-table td:nth-child(6) {
+        padding: 0 15px 15px 15px !important;
+        border: none;
+        display: flex;
+        gap: 15px;
+    }
+    .score-wrapper {
+        flex: 1;
+    }
+    .progress-bg {
+        width: 100%;
+    }
+    .app-status-bar {
+        text-align: center;
+    }
+    .result-category-path span {
+        max-width: 200px;
+    }
+    .result-category-path {
+        font-size: 0.72rem;
+        padding: 3px 6px;
+    }
+}
+
+@media (max-width: 768px) {
+    .sidebar-content {
+        max-height: 280px;
+    }
+    .tree-node-header {
+        padding: 10px 8px;
+    }
+    .tree-node-name {
+        font-size: 0.8rem;
+    }
+    .tree-node-copy {
+        opacity: 1;
+        padding: 4px 8px;
+    }
+}

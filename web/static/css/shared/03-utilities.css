@@ -1,0 +1,23 @@
+/* ==========================================================================
+   Utilities — small, single-purpose, reusable classes. Kept here so they
+   don't have to be redefined per-component.
+   ========================================================================== */
+
+/* Universal hide — `!important` is intentional to override any display
+   rule from a component class. The `hidden` HTML attribute also uses this. */
+.hidden,
+[hidden] {
+    display: none !important;
+}
+
+/* Inline spinner — small CSS-only loader, used in buttons */
+.spinner {
+    display: inline-block;
+    width: 18px;
+    height: 18px;
+    border: 2px solid var(--color-text-on-primary);
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 1s infinite linear;
+    vertical-align: middle;
+}

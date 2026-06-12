@@ -1,0 +1,297 @@
+/* ==========================================================================
+   Design tokens — single source of truth for colors, spacing, type, motion.
+   Used by every other CSS file in the project via custom-property references.
+   Naming: semantic (`--color-primary`, `--space-4`), not visual
+   (`--blue-500`, `--font-12`). Aliases at the bottom preserve the old
+   `--adm-*` names so legacy code keeps working.
+   ========================================================================== */
+
+:root {
+    /* --- Brand palette --------------------------------------------------- */
+    --color-primary: #6366f1;
+    --color-primary-hover: #4f46e5;
+    --color-primary-light: #e0e7ff;
+    --color-primary-glow: rgba(99, 102, 241, 0.25);
+
+    /* --- Semantic status ------------------------------------------------- */
+    --color-success: #10b981;
+    --color-success-bg: #d1fae5;
+    --color-success-text: #047857;
+    --color-success-deep: #059669;
+    --color-success-deepest: #064e3b;
+
+    --color-danger: #ef4444;
+    --color-danger-bg: #fee2e2;
+    --color-danger-text: #b91c1c;
+    --color-danger-deep: #7f1d1d;
+    --color-danger-strong: #dc2626;
+    --color-danger-darker: #c82333;
+
+    --color-warning: #f59e0b;
+    --color-warning-bg: #fef3c7;
+    --color-warning-text: #92400e;
+    --color-warning-deep: #d97706;
+
+    /* --- Folder / category highlight (used for tree icons, breadcrumbs) -- */
+    --color-folder: #f59e0b;
+    --color-material: #10b981;
+    --color-excel: #22c55e;
+    --color-excel-deep: #16a34a;
+
+    /* --- Surfaces, borders, text ---------------------------------------- */
+    --color-bg: #f1f5f9;
+    --color-bg-2: #f8fafc;
+    --color-surface: #ffffff;
+    --color-surface-2: #1e293b;            /* admin sidebar / dark surface */
+    --color-surface-3: #020617;            /* admin sidebar darkest */
+    --color-border: #e2e8f0;
+    --color-border-strong: #334155;        /* dark theme border */
+    --color-border-dark: #2a3548;          /* jobs table fallback */
+
+    --color-text: #1e293b;
+    --color-text-muted: #64748b;
+    --color-text-faint: #94a3b8;           /* dark theme muted */
+    --color-text-on-primary: #ffffff;
+
+    --color-hover-overlay: rgba(255, 255, 255, 0.05);
+    --color-hover-overlay-strong: rgba(255, 255, 255, 0.08);
+    --color-bg-hover: rgba(0, 0, 0, 0.03);
+    --color-row-stripe: rgba(0, 0, 0, 0.02);
+
+    /* --- Selection / focus ---------------------------------------------- */
+    --color-focus-ring: rgba(99, 102, 241, 0.2);
+    --color-focus-ring-strong: rgba(99, 102, 241, 0.15);
+    --color-focus-glow: rgba(99, 102, 241, 0.08);
+
+    /* --- Shadows -------------------------------------------------------- */
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
+    --shadow-lg: 0 4px 20px -2px rgba(0, 0, 0, 0.08);
+    --shadow-xl: 0 10px 40px -10px rgba(0, 0, 0, 0.15);
+    --shadow-modal: 0 20px 40px rgba(0, 0, 0, 0.3);
+    --shadow-modal-deep: 0 20px 60px rgba(0, 0, 0, 0.5);
+    --shadow-toast: 0 4px 20px rgba(0, 0, 0, 0.25);
+    --shadow-color-pill: 0 2px 8px rgba(0, 0, 0, 0.1);
+    --shadow-color-pill-hover: 0 4px 12px rgba(0, 0, 0, 0.15);
+    --shadow-text: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-status-dot: 0 0 0 2px rgba(255, 255, 255, 0.8);
+    --shadow-primary-soft: 0 4px 12px rgba(99, 102, 241, 0.1);
+    --shadow-primary-medium: 0 4px 12px rgba(99, 102, 241, 0.15);
+    --shadow-primary-strong: 0 4px 12px rgba(99, 102, 241, 0.3);
+    --shadow-primary-glow: 0 8px 24px rgba(99, 102, 241, 0.15);
+    --shadow-primary-glow-small: 0 0 6px var(--color-primary-glow);
+    --shadow-button-primary: 0 4px 12px rgba(79, 70, 229, 0.3);
+    --shadow-login-card: 0 20px 40px rgba(0, 0, 0, 0.3);
+    --shadow-modal-overlay: rgba(0, 0, 0, 0.5);
+    --shadow-modal-overlay-strong: rgba(0, 0, 0, 0.9);
+    --shadow-login-bg-from: #1e293b;
+    --shadow-login-bg-to: #0f172a;
+    --shadow-glass: rgba(255, 255, 255, 0.1);
+    --shadow-glass-border: rgba(255, 255, 255, 0.2);
+    --shadow-glass-input-bg: rgba(0, 0, 0, 0.3);
+
+    /* --- Spacing scale (4px base) --------------------------------------- */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 20px;
+    --space-6: 24px;
+    --space-7: 28px;
+    --space-8: 32px;
+    --space-10: 40px;
+    --space-12: 48px;
+
+    /* --- Typography ---------------------------------------------------- */
+    --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+    --font-mono: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+
+    /* --- Type scale (rem) ---------------------------------------------- */
+    --text-xs: 0.65rem;
+    --text-sm: 0.75rem;
+    --text-base: 0.85rem;
+    --text-md: 0.9rem;
+    --text-lg: 1rem;
+    --text-xl: 1.1rem;
+    --text-2xl: 1.25rem;
+    --text-3xl: 1.5rem;
+    --text-4xl: 2.2rem;
+
+    /* --- Radii ---------------------------------------------------------- */
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-xl: 20px;
+    --radius-2xl: 24px;
+    --radius-full: 9999px;
+
+    /* --- Z-index scale -------------------------------------------------- */
+    --z-base: 0;
+    --z-dropdown: 100;
+    --z-sticky: 200;
+    --z-modal: 1000;
+    --z-toast: 10000;
+    --z-warning: 10001;
+
+    /* --- Motion --------------------------------------------------------- */
+    --transition-fast: 0.15s;
+    --transition-base: 0.2s;
+    --transition-slow: 0.3s;
+    --ease-out: cubic-bezier(0.4, 0, 0.2, 1);
+    --ease-soft: cubic-bezier(0.4, 0, 0.2, 1);
+
+    /* --- App-specific layout (sidebar / container) ---------------------- */
+    --sidebar-width: 500px;
+    --sidebar-collapsed-width: 70px;
+    --sidebar-gap: 30px;
+    --container-max-width: 1600px;
+    --header-height: 155px;
+
+    /* --- Admin-specific layout ----------------------------------------- */
+    --adm-sidebar-width: 260px;
+    --adm-top-bar-height: 70px;
+    --adm-sidebar-header-height: 70px;
+
+    /* --- Inputs / borders (sizing) ------------------------------------- */
+    --input-height: 44px;
+    --button-height: 44px;
+    --field-radius: 10px;
+    --card-radius: 12px;
+    --card-radius-lg: 16px;
+
+    /* --- Overlay (login glass) ---------------------------------------- */
+    --color-login-glass: rgba(255, 255, 255, 0.1);
+
+    /* ====================================================================
+       LEGACY ALIASES — preserve old `--adm-*` names so the unrefactored
+       admin code keeps working without changes. New code should use the
+       semantic names above (`--color-primary`, `--space-4`, etc.).
+       ==================================================================== */
+    --adm-primary: var(--color-primary);
+    --adm-primary-hover: var(--color-primary-hover);
+    --adm-bg: var(--color-bg);
+    --adm-sidebar-bg: var(--color-surface-2);
+    --adm-surface: var(--color-surface);
+    --adm-border: var(--color-border);
+    --adm-text: var(--color-text);
+    --adm-text-sec: var(--color-text-muted);
+    --adm-text-secondary: var(--color-text-muted);  /* fix: was undefined */
+    --adm-success: var(--color-success);
+    --adm-success-bg: var(--color-success-bg);
+    --adm-danger: var(--color-danger);
+    --adm-danger-bg: var(--color-danger-bg);
+    --adm-warning: var(--color-warning);
+    --adm-bg-hover: var(--color-bg-hover);
+
+    /* --- App-legacy aliases (used by the public search UI) --- */
+    --primary: var(--color-primary);
+    --primary-dark: var(--color-primary-hover);
+    --primary-light: var(--color-primary-light);
+    --primary-glow: var(--color-primary-glow);
+    --success: var(--color-success);
+    --success-bg: var(--color-success-bg);
+    --danger: var(--color-danger);
+    --danger-bg: var(--color-danger-bg);
+    --bg-body: var(--color-bg);
+    --surface: var(--color-surface);
+    --text-main: var(--color-text);
+    --text-secondary: var(--color-text-muted);
+    --border: var(--color-border);
+    --shadow-card: var(--shadow-lg);
+    --shadow-float: var(--shadow-xl);
+}
+
+/* ==========================================================================
+   DARK THEME — opt-in via [data-theme="dark"] on <html>.
+   Only semantic tokens need to change; every component cascades from them.
+   ========================================================================== */
+
+[data-theme="dark"] {
+    --color-primary: #818cf8;
+    --color-primary-hover: #6366f1;
+    --color-primary-light: #312e81;
+    --color-primary-glow: rgba(129, 140, 248, 0.3);
+
+    --color-success: #34d399;
+    --color-success-bg: var(--color-success-deepest);
+    --color-success-text: #6ee7b7;
+    --color-success-deep: #10b981;
+
+    --color-danger: #f87171;
+    --color-danger-bg: var(--color-danger-deep);
+    --color-danger-text: #fca5a5;
+
+    --color-warning: #fbbf24;
+    --color-warning-bg: var(--color-warning-text);
+    --color-warning-text: #fde68a;
+
+    --color-bg: #0f172a;
+    --color-bg-2: #020617;
+    --color-surface: #1e293b;
+    --color-border: var(--color-border-strong);
+    --color-text: #f1f5f9;
+    --color-text-muted: var(--color-text-faint);
+
+    --shadow-md: 0 4px 20px -2px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 4px 20px -2px rgba(0, 0, 0, 0.4);
+    --shadow-xl: 0 10px 40px -10px rgba(0, 0, 0, 0.6);
+
+    /* Inverted overlays for dark theme: subtle white tint to "lift" surfaces */
+    --color-bg-hover: rgba(255, 255, 255, 0.03);
+    --color-row-stripe: rgba(255, 255, 255, 0.02);
+
+    /* App-legacy aliases cascade automatically via the light-theme aliases */
+}
+
+/* ==========================================================================
+   OS-level color scheme: when no manual choice has been made, fall back to
+   the user's OS preference. [data-theme] (set by JS) takes precedence.
+   ========================================================================== */
+
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme]) {
+        --color-primary: #818cf8;
+        --color-primary-hover: #6366f1;
+        --color-primary-light: #312e81;
+        --color-primary-glow: rgba(129, 140, 248, 0.3);
+
+        --color-success: #34d399;
+        --color-success-bg: var(--color-success-deepest);
+
+        --color-danger: #f87171;
+        --color-danger-bg: var(--color-danger-deep);
+
+        --color-warning: #fbbf24;
+        --color-warning-bg: var(--color-warning-text);
+
+        --color-bg: #0f172a;
+        --color-surface: #1e293b;
+        --color-border: var(--color-border-strong);
+        --color-text: #f1f5f9;
+        --color-text-muted: var(--color-text-faint);
+
+        --shadow-md: 0 4px 20px -2px rgba(0, 0, 0, 0.4);
+        --shadow-lg: 0 4px 20px -2px rgba(0, 0, 0, 0.4);
+        --shadow-xl: 0 10px 40px -10px rgba(0, 0, 0, 0.6);
+
+        /* Inverted overlays for dark theme: subtle white tint to "lift" surfaces */
+        --color-bg-hover: rgba(255, 255, 255, 0.03);
+        --color-row-stripe: rgba(255, 255, 255, 0.02);
+
+        /* App-legacy aliases cascade automatically */
+    }
+}
+
+/* ==========================================================================
+   Respect reduced motion preference. Animation, transition, scroll-behavior
+   effectively become instant. This is the WCAG 2.1 AAA (2.3.3) requirement.
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}

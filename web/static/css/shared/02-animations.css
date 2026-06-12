@@ -1,0 +1,63 @@
+/* ==========================================================================
+   Animations — all @keyframes in the project live here, registered once.
+   Components reference them by name (e.g. `animation: spin 1s linear infinite`).
+   Centralising avoids duplication (previously `spin` was defined in both
+   admin.css and styles.css) and makes the motion budget easy to audit.
+   ========================================================================== */
+
+/* Spinner rotation — generic, used for buttons, loaders, indicators */
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+}
+
+/* Generic fade-in for content swap (wizard steps, modals, results) */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Pulse — used for status indicators in "testing" state */
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.4; }
+}
+
+/* Sticky-breadcrumb slide-down — used in the catalog sidebar */
+@keyframes sticky-slide-down {
+    from { opacity: 0; transform: translateY(-5px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Highlight-pulse — used when navigating to a category from results/search */
+@keyframes highlight-pulse-anim {
+    0% {
+        background: var(--color-success);
+        box-shadow: 0 0 18px var(--color-success);
+    }
+    60% {
+        background: rgba(16, 185, 129, 0.18);
+        box-shadow: 0 0 12px rgba(16, 185, 129, 0.5);
+    }
+    100% {
+        background: transparent;
+        box-shadow: none;
+    }
+}
+
+/* Filter-indicator pulse — the small dot shown on collapsed sidebar */
+@keyframes filter-pulse {
+    0%, 100% { opacity: 1;   transform: scale(1); }
+    50%      { opacity: 0.7; transform: scale(1.2); }
+}
+
+/* Toast enter / exit — for longpress feedback */
+@keyframes toast-in {
+    from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+    to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+@keyframes toast-out {
+    from { opacity: 1; transform: translateX(-50%) translateY(0); }
+    to   { opacity: 0; transform: translateX(-50%) translateY(20px); }
+}
