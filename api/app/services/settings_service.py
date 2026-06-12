@@ -131,24 +131,33 @@ class SettingsService:
         return list(result.scalars().all())
 
     async def update_cleaning_rules(self, rules: list[dict[str, Any]]) -> list[CleaningRule]:
-        existing = await self.list_cleaning_rules()
-        for r in existing:
-            await self.session.delete(r)
-        await self.session.flush()
+        """Полная замена набора cleaning_rules атомарно.
 
-        for i, r in enumerate(rules):
-            self.session.add(
-                CleaningRule(
-                    name=r.get("name"),
-                    pattern=r["pattern"],
-                    replacement=r.get("replacement", ""),
-                    enabled=r.get("enabled", True),
-                    apply_to_columns=r.get("apply_to_columns", ["*"]),
-                    sort_order=r.get("sort_order", (i + 1) * 10),
+        delete-all-then-insert внутри одной транзакции. При любой ошибке —
+        rollback, чтобы старые правила остались нетронутыми.
+        """
+        try:
+            existing = await self.list_cleaning_rules()
+            for r in existing:
+                await self.session.delete(r)
+            await self.session.flush()
+
+            for i, r in enumerate(rules):
+                self.session.add(
+                    CleaningRule(
+                        name=r.get("name"),
+                        pattern=r["pattern"],
+                        replacement=r.get("replacement", ""),
+                        enabled=r.get("enabled", True),
+                        apply_to_columns=r.get("apply_to_columns", ["hierarchy_level"]),
+                        sort_order=r.get("sort_order", (i + 1) * 10),
+                    )
                 )
-            )
-        await self.session.flush()
-        return await self.list_cleaning_rules()
+            await self.session.flush()
+            return await self.list_cleaning_rules()
+        except Exception:
+            await self.session.rollback()
+            raise
 
 
 __all__ = ["SettingsService"]

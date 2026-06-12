@@ -233,7 +233,8 @@ document.addEventListener('DOMContentLoaded', () => {
     initSettingsPage(); // Инициализация страницы настроек
     initOpenRouterSettings(); // Инициализация настроек OpenRouter
     loadOpenRouterSettings(); // Загрузка настроек OpenRouter
-    loadCleaningRules();      // Загрузка правил очистки
+    initCleaningRulesEvents(); // События UI правил очистки
+    CleaningRulesModule.load(); // Загрузка + рендер правил очистки
 });
 
 /**
@@ -350,65 +351,32 @@ function renderStatusesSettings() {
 // === CLEANING RULES (Правила очистки) ===
 
 /**
- * Загрузка правил очистки с сервера
- */
-async function loadCleaningRules() {
-    try {
-        // Используем authFetch если возможно, или обычный fetch
-        const fetchFunc = typeof authFetch === 'function' ? authFetch : fetch;
-
-        const res = await fetchFunc('/admin/cleaning_rules');
-
-        if (res.ok) {
-            const data = await res.json();
-            state.cleaningRules = data.rules || [];
-            console.log(`🧹 Загружено ${state.cleaningRules.length} правил очистки`);
-        } else {
-            console.error(`❌ Ошибка загрузки правил: ${res.status}`);
-        }
-    } catch (e) {
-        console.error('❌ Исключение при загрузке правил очистки:', e);
-    }
-}
-
-/**
- * Применение правил очистки к строке
+ * Применение правил очистки к строке.
+ * Используется в JS-стороне при импорте: для каждого значения (description,
+ * hierarchy, path_level_N) вызывается с соответствующим target.
+ *
  * @param {string} text - Исходный текст
- * @param {string} columnType - Тип колонки ('hierarchy' | 'description' | 'code')
+ * @param {string} target - Целевое поле: 'description' | 'hierarchy' | 'hierarchy_level'
  * @returns {string} Очищенный текст
  */
-function applyCleaningRules(text, columnType = null) {
+function applyCleaningRules(text, target = null) {
     if (!text || typeof text !== 'string') return text;
 
     let result = text;
 
-    // Применяем правила
     if (state.cleaningRules && state.cleaningRules.length > 0) {
         for (const rule of state.cleaningRules) {
             if (!rule.enabled) continue;
 
-            // Проверка apply_to_columns
-            // В JS логике мы используем типы колонок ('hierarchy', 'description') вместо имен
-            // Если правило применяется ко всем ("*") или к конкретному типу
             const applyTo = rule.apply_to_columns || ["*"];
-
-            // Если правило глобальное ("*") или тип колонок совпадает с одним из разрешенных
-            // (можно расширить логику, если apply_to_columns содержит конкретные имена колонок из Excel,
-            // но здесь мы знаем только семантический тип: иерархия или описание)
-            const isApplicable = applyTo.includes("*") ||
-                (columnType && applyTo.some(col => col.toLowerCase() === columnType.toLowerCase()));
+            const isApplicable = applyTo.includes("*")
+                || (target && applyTo.includes(target));
 
             if (!isApplicable) continue;
 
             try {
-                // ПРОВЕРКА REGEX
-                // Сервер передает паттерн как строку. В JSON слэши экранированы.
-                // new RegExp создаст правильный регекс.
                 const regex = new RegExp(rule.pattern, 'g');
-
-                if (regex.test(result)) {
-                    result = result.replace(regex, rule.replacement || '');
-                }
+                result = result.replace(regex, rule.replacement || '');
             } catch (e) {
                 console.warn(`❌ Invalid regex in rule '${rule.name}':`, e);
             }
@@ -2811,159 +2779,485 @@ async function uploadExcelFile(file, sheet = null) {
 
 // === ПРАВИЛА ОЧИСТКИ ДАННЫХ ===
 
-// ПРИМЕЧАНИЕ: Функции загрузки и применения правил вынесены в начало файла (state.cleaningRules)
-// Здесь остаются функции рендеринга и управления UI.
+/**
+ * Готовые шаблоны правил.
+ * Клик по чипу в UI вставляет значения в форму добавления.
+ */
+const BUILTIN_TEMPLATES = [
+    {
+        id: 'remove-section-prefix',
+        name: 'Удалить «Раздел N.N» / «Группа N.N»',
+        pattern: '^(Раздел|Группа)\\s+[\\d\\.\\s]+',
+        replacement: '',
+        description: 'Убирает префиксы «Раздел 1.2.3» / «Группа 4.5» в начале строк иерархии.',
+        apply_to_columns: ['hierarchy', 'hierarchy_level'],
+    },
+    {
+        id: 'collapse-whitespace',
+        name: 'Схлопнуть лишние пробелы',
+        pattern: '\\s+',
+        replacement: ' ',
+        description: 'Заменяет любые последовательности пробелов и переносов одним пробелом.',
+        apply_to_columns: ['*'],
+    },
+    {
+        id: 'trim-quotes',
+        name: 'Убрать обрамляющие кавычки',
+        pattern: '^["«»\'`]+|["«»\'`]+$',
+        replacement: '',
+        description: 'Снимает " « » ‘ ’ ` в начале и конце строки.',
+        apply_to_columns: ['description', 'hierarchy', 'hierarchy_level'],
+    },
+    {
+        id: 'remove-parentheses',
+        name: 'Удалить текст в скобках',
+        pattern: '\\s*\\([^)]*\\)',
+        replacement: '',
+        description: 'Удаляет «(любой текст)» вместе с обрамляющими пробелами.',
+        apply_to_columns: ['description', 'hierarchy', 'hierarchy_level'],
+    },
+    {
+        id: 'remove-trademark-prefix',
+        name: 'Убрать «Товарный знак:»',
+        pattern: '^Товарный\\s+знак[:\\s]*',
+        replacement: '',
+        description: 'Удаляет префикс «Товарный знак:» в начале описания.',
+        apply_to_columns: ['description'],
+    },
+    {
+        id: 'remove-special-chars',
+        name: 'Удалить спецсимволы',
+        pattern: '[^\\w\\s\\-./()№]',
+        replacement: '',
+        description: 'Оставляет только буквы, цифры, пробелы, тире, точки, скобки, №.',
+        apply_to_columns: ['description', 'hierarchy', 'hierarchy_level'],
+    },
+    {
+        id: 'remove-trailing-dot',
+        name: 'Убрать точку в конце',
+        pattern: '\\.+$',
+        replacement: '',
+        description: 'Удаляет финальные точки в конце строки.',
+        apply_to_columns: ['description', 'hierarchy', 'hierarchy_level'],
+    },
+];
 
 /**
- * Рендер списка правил очистки.
+ * Модуль управления правилами очистки данных.
+ *
+ * Архитектура:
+ * - state.cleaningRules: [{ id, name, pattern, replacement, enabled, apply_to_columns }]
+ * - load() — загрузить с сервера + render
+ * - save() — отправить на сервер + перезагрузить
+ * - add(draft) / delete(id) / toggle(id) — мутации
+ * - render() / renderTemplates() — рендеринг UI
+ * - openPreviewModal(id|draft) — модалка live-теста
+ *
+ * Исправлены 3 бага из предыдущей версии:
+ * - render() вызывается после load() автоматически
+ * - add() мутирует state.cleaningRules, а не несуществующую глобальную cleaningRules
+ * - save() сериализует state.cleaningRules
  */
-function renderCleaningRules() {
-    const container = document.getElementById('cleaningRulesList');
-    if (!container) return;
+const CleaningRulesModule = {
+    TARGET_LABELS: {
+        description: 'Описание',
+        hierarchy: 'Иерархия',
+        hierarchy_level: 'Уровни иерархии',
+        '*': 'Все поля',
+    },
+    TARGET_ICONS: {
+        description: 'fa-align-left',
+        hierarchy: 'fa-sitemap',
+        hierarchy_level: 'fa-layer-group',
+        '*': 'fa-globe',
+    },
 
-    // Используем глобальный state
-    if (!state.cleaningRules || state.cleaningRules.length === 0) {
-        container.innerHTML = '<p style="color: var(--adm-text-sec); text-align: center; padding: 20px;">Нет правил очистки</p>';
-        return;
-    }
+    async load() {
+        try {
+            const res = await authFetch('/admin/cleaning_rules');
+            if (res.ok) {
+                const data = await res.json();
+                state.cleaningRules = data.rules || [];
+                console.log(`🧹 Загружено ${state.cleaningRules.length} правил очистки`);
+                this.render();
+                this.renderTemplates();
+            } else {
+                console.error(`❌ Ошибка загрузки правил: ${res.status}`);
+            }
+        } catch (e) {
+            console.error('❌ Исключение при загрузке правил очистки:', e);
+        }
+    },
 
-    container.innerHTML = state.cleaningRules.map((rule, idx) => `
-        <div class="cleaning-rule-item ${rule.enabled ? '' : 'disabled'}" data-rule-id="${rule.id}">
-            <div class="rule-toggle">
-                <label class="toggle-switch">
-                    <input type="checkbox" ${rule.enabled ? 'checked' : ''} 
-                           onchange="toggleCleaningRule('${rule.id}')">
-                    <span class="toggle-slider"></span>
-                </label>
+    async save() {
+        try {
+            const payload = state.cleaningRules.map(r => this._serializeForApi(r));
+            const response = await authFetch('/admin/cleaning_rules', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            if (response.ok) {
+                const data = await response.json();
+                state.cleaningRules = data.rules || [];
+                this.render();
+                alert('Правила очистки сохранены');
+            } else {
+                const err = await response.json().catch(() => ({ detail: 'Ошибка' }));
+                alert(`Ошибка: ${err.detail}`);
+            }
+        } catch (e) {
+            console.error('Ошибка сохранения правил:', e);
+            alert('Ошибка сохранения');
+        }
+    },
+
+    add(draft) {
+        state.cleaningRules.push({
+            id: null,
+            name: draft.name,
+            pattern: draft.pattern,
+            replacement: draft.replacement || '',
+            enabled: true,
+            apply_to_columns: draft.apply_to_columns,
+        });
+        this.render();
+        // Закрыть форму после добавления
+        this._closeAddForm();
+    },
+
+    _closeAddForm() {
+        const form = document.getElementById('addRuleForm');
+        const section = document.getElementById('addRuleSection');
+        if (form) form.hidden = true;
+        if (section) section.classList.remove('open');
+    },
+
+    delete(ruleId) {
+        if (!confirm('Удалить это правило очистки?')) return;
+        state.cleaningRules = state.cleaningRules.filter(r => r.id !== ruleId);
+        this.render();
+    },
+
+    toggle(ruleId) {
+        const rule = state.cleaningRules.find(r => r.id === ruleId);
+        if (rule) {
+            rule.enabled = !rule.enabled;
+            this.render();
+        }
+    },
+
+    collectDraft() {
+        const name = document.getElementById('newRuleName').value.trim();
+        const pattern = document.getElementById('newRulePattern').value.trim();
+        const replacement = document.getElementById('newRuleReplacement').value;
+        const targets = Array.from(
+            document.querySelectorAll('input[name="newRuleTarget"]:checked')
+        ).map(cb => cb.value);
+
+        const errors = [];
+        if (!name) errors.push('Введите название');
+        if (!pattern) errors.push('Введите regex-паттерн');
+        if (targets.length === 0) errors.push('Выберите хотя бы одно поле');
+        try { new RegExp(pattern); }
+        catch (e) { errors.push(`Невалидный regex: ${e.message}`); }
+
+        return {
+            valid: errors.length === 0,
+            errors,
+            draft: { name, pattern, replacement, apply_to_columns: targets },
+        };
+    },
+
+    clearForm() {
+        document.getElementById('newRuleName').value = '';
+        document.getElementById('newRulePattern').value = '';
+        document.getElementById('newRuleReplacement').value = '';
+        // Сбрасываем к дефолту — только «Уровни иерархии»
+        document.querySelectorAll('input[name="newRuleTarget"]').forEach(cb => {
+            cb.checked = cb.value === 'hierarchy_level';
+        });
+    },
+
+    render() {
+        const container = document.getElementById('cleaningRulesList');
+        if (!container) return;
+
+        if (!state.cleaningRules || state.cleaningRules.length === 0) {
+            container.innerHTML = `
+                <p style="color: var(--adm-text-sec); text-align: center; padding: 20px; margin: 0;">
+                    Нет правил. Добавьте первое — или используйте готовый шаблон выше.
+                </p>`;
+            return;
+        }
+
+        container.innerHTML = state.cleaningRules.map(rule => {
+            const targets = rule.apply_to_columns && rule.apply_to_columns.length > 0
+                ? rule.apply_to_columns
+                : ['*'];
+            const badges = targets.map(t => `
+                <span class="rule-target-badge">
+                    <i class="fas ${this.TARGET_ICONS[t] || 'fa-tag'}"></i>
+                    ${escapeHtml(this.TARGET_LABELS[t] || t)}
+                </span>
+            `).join('');
+            const pattern = escapeHtml(rule.pattern);
+            const replacement = escapeHtml(rule.replacement || '');
+            return `
+                <div class="cleaning-rule-item ${rule.enabled ? '' : 'disabled'}" data-rule-id="${escapeHtml(rule.id)}">
+                    <div class="rule-toggle">
+                        <label class="toggle-switch">
+                            <input type="checkbox" ${rule.enabled ? 'checked' : ''}
+                                   onchange="CleaningRulesModule.toggle('${escapeHtml(rule.id)}')">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="rule-body">
+                        <div class="rule-line-1">
+                            <span class="rule-name">${escapeHtml(rule.name)}</span>
+                            <code class="rule-pattern">/${pattern}/${replacement}/</code>
+                        </div>
+                        <div class="rule-line-2">${badges}</div>
+                    </div>
+                    <div class="rule-actions">
+                        <button class="btn-icon" onclick="CleaningRulesModule.openPreviewModalById('${escapeHtml(rule.id)}')" title="Тест">
+                            <i class="fas fa-vial"></i>
+                        </button>
+                        <button class="btn-icon danger" onclick="CleaningRulesModule.delete('${escapeHtml(rule.id)}')" title="Удалить">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    },
+
+    renderTemplates() {
+        const list = document.getElementById('templatesList');
+        if (!list) return;
+        list.innerHTML = BUILTIN_TEMPLATES.map(t => `
+            <button class="template-chip" type="button"
+                    data-template-id="${escapeHtml(t.id)}"
+                    title="${escapeHtml(t.description)}">
+                <i class="fas fa-magic"></i>
+                ${escapeHtml(t.name)}
+            </button>
+        `).join('');
+        list.querySelectorAll('.template-chip').forEach(chip => {
+            chip.addEventListener('click', () => this.applyTemplate(chip.dataset.templateId));
+        });
+    },
+
+    applyTemplate(templateId) {
+        const tpl = BUILTIN_TEMPLATES.find(t => t.id === templateId);
+        if (!tpl) return;
+        // Раскрыть форму, если свёрнута
+        const form = document.getElementById('addRuleForm');
+        const section = document.getElementById('addRuleSection');
+        if (form && form.hidden) {
+            form.hidden = false;
+            section?.classList.add('open');
+        }
+        // Обновить визуал pill-кнопок под выбранные targets
+        this._syncPillChecked();
+        document.getElementById('newRuleName').value = tpl.name;
+        document.getElementById('newRulePattern').value = tpl.pattern;
+        document.getElementById('newRuleReplacement').value = tpl.replacement || '';
+        document.querySelectorAll('input[name="newRuleTarget"]').forEach(cb => {
+            cb.checked = tpl.apply_to_columns.includes(cb.value)
+                || tpl.apply_to_columns.includes('*');
+        });
+        this._syncPillChecked();
+        document.getElementById('newRuleName').focus();
+        // Прокрутить к форме
+        document.getElementById('addRuleToggle')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    },
+
+    /**
+     * Синхронизировать визуальное состояние pill-кнопок (класс .checked)
+     * с состоянием скрытых чекбоксов.
+     */
+    _syncPillChecked() {
+        document.querySelectorAll('.target-pill').forEach(pill => {
+            const cb = pill.querySelector('input[type="checkbox"]');
+            pill.classList.toggle('checked', !!(cb && cb.checked));
+        });
+    },
+
+    /**
+     * Открыть preview для сохранённого правила (по id).
+     */
+    openPreviewModalById(ruleId) {
+        const rule = state.cleaningRules.find(r => r.id === ruleId);
+        if (!rule) return;
+        this._openPreviewModal(rule);
+    },
+
+    /**
+     * Открыть preview для ещё не сохранённого draft-правила.
+     * Используется кнопкой «Тест» в форме добавления.
+     */
+    openPreviewModalForDraft(draft) {
+        const rule = {
+            id: null,
+            name: draft.name,
+            pattern: draft.pattern,
+            replacement: draft.replacement,
+            enabled: true,
+            apply_to_columns: draft.apply_to_columns,
+        };
+        this._openPreviewModal(rule);
+    },
+
+    _openPreviewModal(rule) {
+        const modal = document.getElementById('cleaningRulePreviewModal');
+        const meta = document.getElementById('previewMeta');
+        if (!modal || !meta) return;
+
+        const targets = (rule.apply_to_columns && rule.apply_to_columns.length > 0)
+            ? rule.apply_to_columns
+            : ['*'];
+        meta.innerHTML = `
+            <div class="preview-rule-name">${escapeHtml(rule.name)}</div>
+            <code class="preview-rule-pattern">/${escapeHtml(rule.pattern)}/${escapeHtml(rule.replacement || '')}/</code>
+            <div class="preview-rule-targets">
+                ${targets.map(t => `
+                    <span class="rule-target-badge">
+                        <i class="fas ${this.TARGET_ICONS[t] || 'fa-tag'}"></i>
+                        ${escapeHtml(this.TARGET_LABELS[t] || t)}
+                    </span>
+                `).join('')}
             </div>
-            <div class="rule-content">
-                <div class="rule-name">${escapeHtml(rule.name)}</div>
-                <code class="rule-pattern">${escapeHtml(rule.pattern)}</code>
-            </div>
-            <div class="rule-actions">
-                <button class="btn-icon danger" onclick="deleteCleaningRule('${rule.id}')" title="Удалить">
-                    <i class="fas fa-trash"></i>
-                </button>
-            </div>
-        </div>
-    `).join('');
-}
+        `;
+        document.getElementById('previewTestInput').value = '';
+        document.getElementById('previewOutput').innerHTML =
+            '<em style="color: var(--adm-text-sec);">Нажмите «Запустить»...</em>';
+        document.getElementById('previewSteps').innerHTML = '';
+        modal.classList.add('active');
+
+        const runBtn = document.getElementById('runPreviewBtn');
+        runBtn.onclick = () => {
+            const input = document.getElementById('previewTestInput').value;
+            const result = this._applyRuleToText(rule, input);
+            const out = document.getElementById('previewOutput');
+            out.textContent = result || '(пусто)';
+
+            let matched = false;
+            try { matched = new RegExp(rule.pattern, 'g').test(input); }
+            catch (e) { matched = false; }
+
+            document.getElementById('previewSteps').innerHTML = `
+                <div class="preview-step">
+                    <span class="step-label">Шаг 1</span>
+                    <code>${escapeHtml(input) || '(пусто)'}</code>
+                    <span class="arrow">→</span>
+                    <code>${escapeHtml(result) || '(пусто)'}</code>
+                    <span class="step-status ${matched ? 'matched' : 'no-match'}">
+                        <i class="fas ${matched ? 'fa-check' : 'fa-minus'}"></i>
+                        ${matched ? 'найдено' : 'без совпадений'}
+                    </span>
+                </div>
+            `;
+        };
+    },
+
+    _applyRuleToText(rule, text) {
+        if (!text) return '';
+        try {
+            const re = new RegExp(rule.pattern, 'g');
+            return text.replace(re, rule.replacement || '');
+        } catch (e) {
+            return text;
+        }
+    },
+
+    _serializeForApi(r) {
+        return {
+            id: r.id || null,
+            name: r.name,
+            pattern: r.pattern,
+            replacement: r.replacement || '',
+            enabled: r.enabled,
+            apply_to_columns: r.apply_to_columns,
+            sort_order: r.sort_order || 0,
+        };
+    },
+};
 
 /**
- * Переключение активности правила.
- * @param {string} ruleId - ID правила
+ * Инициализация событий UI для правил очистки.
+ * Вызывается из DOMContentLoaded.
  */
-function toggleCleaningRule(ruleId) {
-    const rule = state.cleaningRules.find(r => r.id === ruleId);
-    if (rule) {
-        rule.enabled = !rule.enabled;
-        renderCleaningRules();
-    }
-}
-
-/**
- * Удаление правила.
- * @param {string} ruleId - ID правила
- */
-function deleteCleaningRule(ruleId) {
-    if (!confirm('Удалить это правило очистки?')) return;
-    state.cleaningRules = state.cleaningRules.filter(r => r.id !== ruleId);
-    renderCleaningRules();
-}
-
-/**
- * Добавление нового правила очистки.
- */
-function addCleaningRule() {
-    const nameInput = document.getElementById('newRuleName');
-    const patternInput = document.getElementById('newRulePattern');
-    const replacementInput = document.getElementById('newRuleReplacement');
-
-    if (!nameInput || !patternInput) return;
-
-    const name = nameInput.value.trim();
-    const pattern = patternInput.value.trim();
-    const replacement = replacementInput ? replacementInput.value : '';
-
-    if (!name || !pattern) {
-        alert('Введите название и regex-паттерн');
-        return;
-    }
-
-    // Проверяем валидность regex
-    try {
-        new RegExp(pattern);
-    } catch (e) {
-        alert(`Невалидный regex: ${e.message}`);
-        return;
-    }
-
-    // Генерируем уникальный ID
-    const id = 'rule_' + Date.now();
-
-    cleaningRules.push({
-        id,
-        name,
-        pattern,
-        replacement,
-        enabled: true,
-        apply_to_columns: ['*']
+function initCleaningRulesEvents() {
+    // Раскрывалка формы добавления
+    const addToggle = document.getElementById('addRuleToggle');
+    const addForm = document.getElementById('addRuleForm');
+    const addSection = document.getElementById('addRuleSection');
+    addToggle?.addEventListener('click', () => {
+        if (!addForm) return;
+        const willShow = addForm.hidden;
+        addForm.hidden = !willShow;
+        addSection?.classList.toggle('open', willShow);
+        if (willShow) {
+            document.getElementById('newRuleName')?.focus();
+        }
     });
 
-    // Очищаем форму
-    nameInput.value = '';
-    patternInput.value = '';
-    if (replacementInput) replacementInput.value = '';
+    // Кнопка «Отмена» — закрывает форму и сбрасывает
+    document.getElementById('cancelAddRuleBtn')?.addEventListener('click', () => {
+        CleaningRulesModule._closeAddForm();
+        CleaningRulesModule.clearForm();
+    });
 
-    renderCleaningRules();
-}
-
-/**
- * Сохранение правил очистки на сервер.
- */
-async function saveCleaningRules() {
-    try {
-        const response = await authFetch('/admin/cleaning_rules', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(cleaningRules)
+    // Клик по pill — переключает чекбокс и визуал
+    document.querySelectorAll('.target-pill').forEach(pill => {
+        pill.addEventListener('click', (e) => {
+            if (e.target.tagName === 'INPUT') return; // нативный чекбокс сам разберётся
+            const cb = pill.querySelector('input[type="checkbox"]');
+            if (!cb) return;
+            cb.checked = !cb.checked;
+            pill.classList.toggle('checked', cb.checked);
         });
+    });
 
-        if (response.ok) {
-            alert('Правила очистки сохранены!');
-        } else {
-            const error = await response.json().catch(() => ({ detail: 'Ошибка' }));
-            alert(`Ошибка: ${error.detail}`);
+    document.getElementById('addCleaningRuleBtn')?.addEventListener('click', () => {
+        const result = CleaningRulesModule.collectDraft();
+        if (!result.valid) {
+            alert(result.errors.join('\n'));
+            return;
         }
-    } catch (error) {
-        console.error('Ошибка сохранения правил:', error);
-        alert('Ошибка сохранения правил');
-    }
+        CleaningRulesModule.add(result.draft);
+        CleaningRulesModule.clearForm();
+    });
+
+    document.getElementById('saveCleaningRulesBtn')?.addEventListener('click', () => {
+        CleaningRulesModule.save();
+    });
+
+    document.getElementById('previewCleaningRuleBtn')?.addEventListener('click', () => {
+        const result = CleaningRulesModule.collectDraft();
+        if (!result.valid) {
+            alert(result.errors.join('\n'));
+            return;
+        }
+        CleaningRulesModule.openPreviewModalForDraft(result.draft);
+    });
+
+    document.getElementById('templatesToggle')?.addEventListener('click', () => {
+        const list = document.getElementById('templatesList');
+        const section = document.getElementById('templatesSection');
+        if (!list || !section) return;
+        const willShow = list.hidden;
+        list.hidden = !willShow;
+        section.classList.toggle('open', willShow);
+    });
+
+    document.querySelectorAll('[data-close="preview"]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.getElementById('cleaningRulePreviewModal')?.classList.remove('active');
+        });
+    });
 }
-
-/**
- * Инициализация управления правилами очистки.
- */
-function initCleaningRulesSettings() {
-    const addBtn = document.getElementById('addCleaningRuleBtn');
-    const saveBtn = document.getElementById('saveCleaningRulesBtn');
-
-    if (addBtn) {
-        addBtn.addEventListener('click', addCleaningRule);
-    }
-
-    if (saveBtn) {
-        saveBtn.addEventListener('click', saveCleaningRules);
-    }
-
-    // Загружаем правила
-    loadCleaningRules();
-}
-
-// Добавляем инициализацию в DOMContentLoaded
-document.addEventListener('DOMContentLoaded', () => {
-    initCleaningRulesSettings();
-});
 
 /**
  * Валидация маппинга колонок перед импортом.
@@ -3074,8 +3368,7 @@ function buildRecordsFromMapping() {
 
         // Склеиваем описание через кастомный разделитель (обрезаем кавычки)
         let description = descCols.map(c => cleanValue(row[c])).filter(Boolean).join(descSeparator);
-        // User requested NOT to clean description for materials, only folders
-        // description = applyCleaningRules(description, 'description');
+        description = applyCleaningRules(description, 'description');
 
         // Склеиваем иерархию через " → " (фиксированный разделитель для категорий каталога)
         let hierarchy = null;
@@ -3083,7 +3376,7 @@ function buildRecordsFromMapping() {
             // Каждую часть иерархии чистим ОТДЕЛЬНО, чтобы правила (например ^Раздел) работали для каждого уровня
             const parts = hierarchyCols.map(c => {
                 let val = cleanValue(row[c]);
-                val = applyCleaningRules(val, 'hierarchy'); // Чистим каждый уровень!
+                val = applyCleaningRules(val, 'hierarchy_level');
                 return val;
             }).filter(Boolean);
 
@@ -3764,7 +4057,7 @@ async function performDiffAnalysis() {
         // Гарантируем наличие правил очистки
         if (!state.cleaningRules || state.cleaningRules.length === 0) {
             console.log('⚠️ Правила очистки не загружены, загружаем...');
-            await loadCleaningRules();
+            await CleaningRulesModule.load();
         }
 
         const res = await fetch(`/get_all_codes?database=${state.activeCollection}`);

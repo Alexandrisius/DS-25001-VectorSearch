@@ -2900,14 +2900,33 @@ body.resizing-columns .data-table-full th {
 }
 
 .cleaning-rule-item {
-    display: flex;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
     align-items: center;
-    gap: 16px;
-    padding: 16px 20px;
+    gap: 14px;
+    padding: 12px 16px;
     background: var(--adm-bg);
     border: 1px solid var(--adm-border);
     border-radius: 12px;
     transition: all 0.2s;
+}
+
+@media (max-width: 560px) {
+    .cleaning-rule-item {
+        grid-template-columns: auto 1fr;
+        grid-template-areas:
+            "toggle body"
+            "actions actions";
+    }
+    .cleaning-rule-item .rule-toggle { grid-area: toggle; }
+    .cleaning-rule-item .rule-body { grid-area: body; }
+    .cleaning-rule-item .rule-actions {
+        grid-area: actions;
+        justify-content: flex-end;
+        border-top: 1px solid var(--adm-border);
+        padding-top: 10px;
+        margin-top: 4px;
+    }
 }
 
 .cleaning-rule-item:hover {
@@ -2923,31 +2942,51 @@ body.resizing-columns .data-table-full th {
     flex-shrink: 0;
 }
 
-.rule-content {
-    flex: 1;
+.rule-body {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
     min-width: 0;
+}
+
+.rule-line-1 {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    flex-wrap: wrap;
 }
 
 .rule-name {
     font-weight: 600;
-    font-size: 0.95rem;
+    font-size: 0.92rem;
     color: var(--adm-text);
-    margin-bottom: 6px;
+    margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
 }
 
 .rule-pattern {
     display: inline-block;
-    padding: 4px 10px;
+    padding: 3px 8px;
     background: var(--adm-surface);
     border: 1px solid var(--adm-border);
     border-radius: 6px;
     font-family: 'SF Mono', 'Fira Code', monospace;
-    font-size: 0.8rem;
+    font-size: 0.76rem;
     color: var(--adm-primary);
     max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.rule-line-2 {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
 }
 
 .rule-actions {
@@ -3130,4 +3169,402 @@ body.resizing-columns .data-table-full th {
 }
 #jobsTable .btn-danger:hover {
     background: #b91c1c;
+}
+
+/* === CLEANING RULES v3: TEMPLATES, TARGETS, PREVIEW === */
+
+/* Готовые шаблоны */
+.templates-section {
+    background: var(--adm-bg);
+    border: 1px solid var(--adm-border);
+    border-radius: 10px;
+    margin-bottom: 16px;
+    overflow: hidden;
+}
+.templates-toggle {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    background: transparent;
+    border: none;
+    color: var(--adm-text);
+    font-weight: 500;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: background 0.15s;
+    font-family: inherit;
+    text-align: left;
+}
+.templates-toggle:hover {
+    background: var(--adm-surface);
+}
+.templates-toggle .toggle-icon {
+    margin-left: auto;
+    transition: transform 0.2s;
+    font-size: 0.8rem;
+    color: var(--adm-text-sec);
+}
+.templates-section.open .templates-toggle .toggle-icon {
+    transform: rotate(180deg);
+}
+.templates-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 12px 16px;
+    border-top: 1px solid var(--adm-border);
+    background: var(--adm-surface);
+}
+.template-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: var(--adm-bg);
+    border: 1px solid var(--adm-border);
+    border-radius: 20px;
+    color: var(--adm-text);
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: inherit;
+}
+.template-chip:hover {
+    border-color: var(--adm-primary);
+    color: var(--adm-primary);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(99, 102, 241, 0.1);
+}
+.template-chip i {
+    color: var(--adm-primary);
+    font-size: 0.7rem;
+}
+
+/* Бэйджи target-полей в карточке правила (компактнее v2) */
+.rule-targets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 6px;
+}
+.rule-target-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 7px;
+    font-size: 0.65rem;
+    font-weight: 600;
+    border-radius: 5px;
+    background: rgba(99, 102, 241, 0.1);
+    color: var(--adm-primary);
+    border: 1px solid rgba(99, 102, 241, 0.2);
+    text-transform: uppercase;
+    letter-spacing: 0.2px;
+    line-height: 1.3;
+}
+.rule-target-badge i {
+    font-size: 0.6rem;
+}
+
+/* === ФОРМА ДОБАВЛЕНИЯ ПРАВИЛ v4 === */
+
+/* Кнопка-раскрывалка формы */
+.add-rule-toggle {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    background: var(--adm-bg);
+    border: 1.5px dashed var(--adm-border);
+    border-radius: 10px;
+    color: var(--adm-text);
+    font-weight: 500;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: inherit;
+    text-align: left;
+}
+.add-rule-toggle:hover {
+    border-color: var(--adm-primary);
+    background: rgba(99, 102, 241, 0.04);
+    color: var(--adm-primary);
+}
+.add-rule-toggle .toggle-icon {
+    margin-left: auto;
+    transition: transform 0.2s;
+    font-size: 0.8rem;
+    color: var(--adm-text-sec);
+}
+.add-rule-section.open .add-rule-toggle .toggle-icon {
+    transform: rotate(180deg);
+}
+.add-rule-section.open .add-rule-toggle {
+    border-style: solid;
+    border-color: var(--adm-primary);
+}
+
+/* Контейнер формы (внутри раскрытой панели) */
+.add-rule-form {
+    margin-top: 12px;
+    padding: 16px;
+    background: var(--adm-bg);
+    border: 1px solid var(--adm-border);
+    border-radius: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+/* Пары полей (Название + Замена) */
+.form-row-pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+@media (max-width: 600px) {
+    .form-row-pair { grid-template-columns: 1fr; }
+}
+
+/* Одно поле в форме */
+.form-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0; /* чтобы input не вылезал */
+}
+.form-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--adm-text-sec);
+}
+.form-field input[type="text"] {
+    width: 100%;
+    padding: 10px 12px;
+    border: 2px solid var(--adm-border);
+    border-radius: 8px;
+    background: var(--adm-surface);
+    color: var(--adm-text);
+    font-size: 0.9rem;
+    font-family: inherit;
+    transition: all 0.15s;
+}
+.form-field input[type="text"]:focus {
+    border-color: var(--adm-primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+    outline: none;
+}
+.form-field input.input-mono {
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 0.85rem;
+}
+
+/* Pill-чекбоксы для таргетов */
+.target-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+.target-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 12px;
+    border: 1.5px solid var(--adm-border);
+    border-radius: 20px;
+    background: var(--adm-surface);
+    color: var(--adm-text);
+    font-size: 0.82rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+    user-select: none;
+    white-space: nowrap;
+}
+.target-pill:hover {
+    border-color: var(--adm-primary);
+    color: var(--adm-primary);
+}
+.target-pill input[type="checkbox"] {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+    width: 0;
+    height: 0;
+}
+.target-pill i {
+    font-size: 0.75rem;
+    opacity: 0.7;
+}
+.target-pill.checked {
+    background: rgba(99, 102, 241, 0.12);
+    border-color: var(--adm-primary);
+    color: var(--adm-primary);
+}
+.target-pill.checked i {
+    opacity: 1;
+}
+
+/* Кнопки в форме добавления */
+.form-row-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+}
+.form-row-actions .btn {
+    min-width: 120px;
+    justify-content: center;
+}
+@media (max-width: 480px) {
+    .form-row-actions .btn { min-width: 0; flex: 1 1 auto; }
+}
+
+/* === КНОПКА GHOST (Отмена) === */
+.btn-ghost {
+    background: transparent;
+    color: var(--adm-text-sec);
+    border: 1px solid var(--adm-border);
+}
+.btn-ghost:hover {
+    background: var(--adm-bg);
+    color: var(--adm-text);
+    border-color: var(--adm-text-sec);
+}
+
+/* === Модалка preview правила === */
+.preview-modal .modal-window {
+    max-width: 720px;
+}
+.preview-meta {
+    padding: 12px 14px;
+    background: var(--adm-bg);
+    border: 1px solid var(--adm-border);
+    border-radius: 8px;
+    margin-bottom: 16px;
+}
+.preview-rule-name {
+    font-weight: 600;
+    color: var(--adm-text);
+    margin-bottom: 6px;
+    font-size: 0.95rem;
+}
+.preview-rule-pattern {
+    display: inline-block;
+    padding: 4px 10px;
+    background: var(--adm-surface);
+    border: 1px solid var(--adm-border);
+    border-radius: 6px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 0.8rem;
+    color: var(--adm-primary);
+    word-break: break-all;
+}
+.preview-rule-targets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+.preview-label {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--adm-text-sec);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 14px 0 6px;
+}
+.preview-input,
+.preview-output {
+    width: 100%;
+    min-height: 70px;
+    padding: 10px 12px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 0.85rem;
+    border: 2px solid var(--adm-border);
+    border-radius: 8px;
+    background: var(--adm-bg);
+    color: var(--adm-text);
+    resize: vertical;
+    line-height: 1.4;
+}
+.preview-input:focus {
+    border-color: var(--adm-primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+    outline: none;
+}
+.preview-output {
+    background: rgba(16, 185, 129, 0.04);
+    border-color: rgba(16, 185, 129, 0.3);
+    min-height: 50px;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.preview-run {
+    margin: 10px 0 4px;
+}
+.preview-steps {
+    margin-top: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.preview-step {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 8px 12px;
+    background: var(--adm-bg);
+    border-left: 3px solid var(--adm-primary);
+    border-radius: 0 6px 6px 0;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 0.78rem;
+}
+.preview-step code {
+    padding: 2px 6px;
+    background: var(--adm-surface);
+    border: 1px solid var(--adm-border);
+    border-radius: 4px;
+    max-width: 240px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.preview-step .arrow {
+    color: var(--adm-primary);
+    font-weight: bold;
+    font-family: inherit;
+}
+.preview-step .step-label {
+    color: var(--adm-text-sec);
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-family: inherit;
+    margin-right: 4px;
+}
+.preview-step .step-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.7rem;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-family: inherit;
+    margin-left: auto;
+}
+.preview-step .step-status.matched {
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--adm-success);
+}
+.preview-step .step-status.no-match {
+    background: rgba(100, 116, 139, 0.1);
+    color: var(--adm-text-sec);
 }

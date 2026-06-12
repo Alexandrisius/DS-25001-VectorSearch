@@ -1,9 +1,9 @@
 """Схемы настроек (статусы, правила, провайдеры)."""
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal, get_args
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class StatusConfig(BaseModel):
@@ -25,6 +25,13 @@ class StatusesUpdateRequest(BaseModel):
     default_status: str
 
 
+# Допустимые target-поля для cleaning_rules.
+# NB: "code" намеренно исключён — это идентификатор материала,
+# очистка regex-ом может его сломать.
+CleaningRuleTarget = Literal["description", "hierarchy", "hierarchy_level", "*"]
+ALLOWED_TARGETS: frozenset[str] = frozenset(get_args(CleaningRuleTarget))
+
+
 class CleaningRuleOut(BaseModel):
     id: int
     name: str | None
@@ -41,8 +48,21 @@ class CleaningRuleUpdate(BaseModel):
     pattern: str
     replacement: str = ""
     enabled: bool = True
-    apply_to_columns: list[str] = Field(default_factory=lambda: ["*"])
+    apply_to_columns: list[CleaningRuleTarget] = Field(
+        default_factory=lambda: ["hierarchy_level"]
+    )
     sort_order: int = 0
+
+    @field_validator("apply_to_columns")
+    @classmethod
+    def _validate_targets(cls, v: list[str]) -> list[str]:
+        for t in v:
+            if t not in ALLOWED_TARGETS:
+                raise ValueError(
+                    f"Недопустимый target '{t}'. "
+                    f"Допустимые: {sorted(ALLOWED_TARGETS)}"
+                )
+        return v
 
 
 class ApiProviderOut(BaseModel):

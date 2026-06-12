@@ -3,7 +3,8 @@ from __future__ import annotations
 
 import re
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError
@@ -16,6 +17,7 @@ from app.schemas.settings import (
     StatusConfigOut,
     StatusesUpdateRequest,
 )
+from app.services.cleaning_runner import CleaningRunner
 from app.services.settings_service import SettingsService
 
 router = APIRouter(prefix="/admin", tags=["admin-settings"])
@@ -102,6 +104,9 @@ async def update_cleaning_rules(
             )
     svc = SettingsService(session)
     updated = await svc.update_cleaning_rules([r.model_dump() for r in rules])
+    # Сбросить кэш CleaningRunner, чтобы следующий импорт подхватил
+    # новые правила сразу, а не через TTL (60 сек).
+    CleaningRunner.clear_cache()
     return {
         "status": "success",
         "rules": [
@@ -152,7 +157,7 @@ async def get_openrouter_settings(session: DBSession) -> dict:
 
 @router.put("/openrouter-settings", dependencies=[Depends(get_current_admin)])
 async def update_openrouter_settings(
-    req: ApiProviderUpdate, session: DBSession
+    req: ApiProviderUpdate, request: Request, session: DBSession
 ) -> dict:
     svc = SettingsService(session)
     prov = await svc.update_provider(
@@ -165,6 +170,12 @@ async def update_openrouter_settings(
         batch_size=req.batch_size,
         max_workers=req.max_workers,
     )
+    # Сбросить singleton EmbeddingService в app.state, чтобы при следующем
+    # /match lazy fallback пересоздал его с актуальным ключом из БД.
+    # Иначе embedding_service живёт до рестарта API со старым api_key.
+    if hasattr(request.app.state, "embedding_service"):
+        request.app.state.embedding_service = None
+        logger.info("🔄 EmbeddingService singleton reset (api_key changed in DB)")
     return {
         "status": "success",
         "enabled": prov.enabled,

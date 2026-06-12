@@ -376,35 +376,81 @@
                                 <h3>Правила очистки данных</h3>
                             </div>
                             <p class="settings-card-desc">
-                                Regex-правила для автоматической очистки текстовых данных при импорте.
-                                Правила применяются ко всем текстовым полям (описание, иерархия).
+                                Regex-правила для предобработки текстов при импорте.
+                                Применяются к описанию материалов, иерархии и её уровням.
                             </p>
 
-                            <!-- Список правил очистки -->
-                            <div id="cleaningRulesList" class="cleaning-rules-list">
-                                <!-- Заполняется через JS -->
+                            <!-- Готовые шаблоны (раскрывающийся список) -->
+                            <div class="templates-section" id="templatesSection">
+                                <button id="templatesToggle" class="templates-toggle" type="button">
+                                    <i class="fas fa-lightbulb"></i>
+                                    <span>Готовые шаблоны</span>
+                                    <i class="fas fa-chevron-down toggle-icon"></i>
+                                </button>
+                                <div id="templatesList" class="templates-list" hidden>
+                                    <!-- Заполняется JS -->
+                                </div>
                             </div>
 
-                            <!-- Форма добавления нового правила -->
-                            <div class="add-rule-section">
-                                <div class="add-rule-header">
+                            <!-- Список текущих правил -->
+                            <div id="cleaningRulesList" class="cleaning-rules-list">
+                                <!-- Заполняется JS -->
+                            </div>
+
+                            <!-- Форма добавления нового правила (свёрнута по умолчанию) -->
+                            <div class="add-rule-section" id="addRuleSection">
+                                <button id="addRuleToggle" class="add-rule-toggle" type="button">
                                     <i class="fas fa-plus"></i>
-                                    <span>Добавить правило</span>
-                                </div>
-                                <div class="add-rule-form">
-                                    <div class="form-row">
-                                        <input type="text" id="newRuleName" placeholder="Название правила">
+                                    <span>Новое правило</span>
+                                    <i class="fas fa-chevron-down toggle-icon"></i>
+                                </button>
+                                <div id="addRuleForm" class="add-rule-form" hidden>
+                                    <div class="form-row form-row-pair">
+                                        <div class="form-field">
+                                            <label class="form-label" for="newRuleName">Название</label>
+                                            <input type="text" id="newRuleName"
+                                                placeholder="Кратко о чём правило">
+                                        </div>
+                                        <div class="form-field">
+                                            <label class="form-label" for="newRuleReplacement">Замена</label>
+                                            <input type="text" id="newRuleReplacement"
+                                                placeholder="Пусто = удалить">
+                                        </div>
                                     </div>
-                                    <div class="form-row">
-                                        <input type="text" id="newRulePattern" placeholder="Regex паттерн"
-                                            style="font-family: monospace;">
+                                    <div class="form-field">
+                                        <label class="form-label" for="newRulePattern">Regex-паттерн</label>
+                                        <input type="text" id="newRulePattern" class="input-mono"
+                                            placeholder="\\s+">
                                     </div>
-                                    <div class="form-row">
-                                        <input type="text" id="newRuleReplacement"
-                                            placeholder="Замена (оставьте пустым для удаления)">
-                                        <button id="addCleaningRuleBtn" class="btn btn-primary"
-                                            title="Добавить правило">
-                                            <i class="fas fa-plus"></i>
+                                    <div class="form-field">
+                                        <label class="form-label">Применить к</label>
+                                        <div class="target-pills" id="newRuleTargets">
+                                            <label class="target-pill" data-target="description">
+                                                <input type="checkbox" name="newRuleTarget" value="description">
+                                                <i class="fas fa-align-left"></i>
+                                                <span>Описание</span>
+                                            </label>
+                                            <label class="target-pill" data-target="hierarchy">
+                                                <input type="checkbox" name="newRuleTarget" value="hierarchy">
+                                                <i class="fas fa-sitemap"></i>
+                                                <span>Иерархия</span>
+                                            </label>
+                                            <label class="target-pill" data-target="hierarchy_level">
+                                                <input type="checkbox" name="newRuleTarget" value="hierarchy_level" checked>
+                                                <i class="fas fa-layer-group"></i>
+                                                <span>Уровни иерархии</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="form-row form-row-actions">
+                                        <button id="cancelAddRuleBtn" class="btn btn-ghost" type="button">
+                                            Отмена
+                                        </button>
+                                        <button id="previewCleaningRuleBtn" class="btn btn-outline" type="button">
+                                            <i class="fas fa-vial"></i> Тест
+                                        </button>
+                                        <button id="addCleaningRuleBtn" class="btn btn-primary" type="button">
+                                            <i class="fas fa-plus"></i> Добавить
                                         </button>
                                     </div>
                                 </div>
@@ -422,6 +468,37 @@
 
             </div>
         </main>
+    </div>
+
+    <!-- Превью правила очистки -->
+    <div id="cleaningRulePreviewModal" class="modal-overlay">
+        <div class="modal-window preview-modal">
+            <div class="modal-header">
+                <h3>Проверка правила очистки</h3>
+                <button class="modal-close" data-close="preview">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="preview-meta" id="previewMeta">
+                    <!-- Имя, паттерн, таргеты -->
+                </div>
+                <label class="preview-label">Исходный текст</label>
+                <textarea id="previewTestInput" class="preview-input" rows="3"
+                    placeholder="Введите тестовую строку, например: «Раздел  1.2.3  Трубы»"></textarea>
+                <button id="runPreviewBtn" class="btn btn-primary preview-run" type="button">
+                    <i class="fas fa-play"></i> Запустить
+                </button>
+                <label class="preview-label">Результат</label>
+                <div id="previewOutput" class="preview-output">
+                    <em style="color: var(--adm-text-sec);">Нажмите «Запустить»...</em>
+                </div>
+                <div id="previewSteps" class="preview-steps">
+                    <!-- Пошаговая трассировка -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" data-close="preview">Закрыть</button>
+            </div>
+        </div>
     </div>
 
     <!-- === МОДАЛЬНЫЕ ОКНА === -->
@@ -879,7 +956,7 @@
         </div>
     </div>
 
-    <script src="/static/js/admin.js?v=2.3.4"></script>
+    <script src="/static/js/admin.js?v=3.0.1"></script>
 </body>
 
 </html>

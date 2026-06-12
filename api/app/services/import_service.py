@@ -201,8 +201,13 @@ class ImportService:
         skipped_empty = 0
 
         for idx, rec in enumerate(records):
+            # NB: code НЕ очищается — он идентификатор материала.
             code = str(rec.get("code", "")).strip()
-            description = str(rec.get("description", "")).strip()
+            description = self.cleaning.apply(
+                str(rec.get("description", "")).strip(),
+                "description",
+                cleaning_rules,
+            )
             hierarchy = rec.get("hierarchy")
             if not code or not description:
                 skipped_empty += 1

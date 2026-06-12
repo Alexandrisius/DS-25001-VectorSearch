@@ -326,6 +326,8 @@ document.addEventListener('DOMContentLoaded', function () {
     /**
      * Загрузка списка доступных баз данных с сервера.
      * Выполняет GET /databases и инициализирует UI компоненты выбора базы.
+     * Пороги (rerank/cosine) и record_count подтягиваются здесь же
+     * и обновляются при каждой загрузке/перезагрузке страницы.
      */
     async function loadAvailableDatabases() {
         try {
