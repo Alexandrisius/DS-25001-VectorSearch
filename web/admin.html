@@ -43,7 +43,7 @@
             <p>Для полноценной работы с админ-панелью рекомендуется использовать компьютер с большим экраном.</p>
             <p class="mobile-warning-card__hint">На мобильных устройствах некоторые функции могут работать
                 некорректно.</p>
-            <button id="mobileWarningClose" class="btn btn-primary">Понятно, продолжить</button>
+            <button type="button" id="mobileWarningClose" class="btn btn-primary">Понятно, продолжить</button>
         </div>
     </div>
 
@@ -53,7 +53,7 @@
             <h2 id="loginTitle">Вход в админку</h2>
             <label class="visually-hidden" for="authPassword">Пароль администратора</label>
             <input type="password" id="authPassword" placeholder="Введите пароль..." autofocus>
-            <button id="authBtn" class="btn btn-primary">Войти</button>
+            <button type="button" id="authBtn" class="btn btn-primary">Войти</button>
             <div id="authError" class="hidden auth-error" role="alert">Неверный пароль</div>
         </div>
     </div>
@@ -189,8 +189,8 @@
                                 <div class="new-status-color-preview" id="newStatusColorPreview"></div>
                                         <input type="color" id="newStatusColor" value="#6366f1">
                                     </div>
-                                    <button id="addStatusBtn" class="btn btn-primary" title="Добавить статус">
-                                        <i class="fas fa-plus"></i>
+                                    <button type="button" id="addStatusBtn" class="btn btn-primary" title="Добавить статус">
+                                        <i class="fas" aria-hidden="true"></i>
                                     </button>
                                 </div>
                             </div>
@@ -211,8 +211,8 @@
 
                             <!-- Кнопка сохранения -->
                             <div class="save-statuses-section">
-                                <button id="saveStatusesBtn" class="btn btn-primary">
-                                    <i class="fas fa-save"></i> Сохранить изменения
+                                <button type="button" id="saveStatusesBtn" class="btn btn-primary">
+                                    <i class="fas" aria-hidden="true"></i> Сохранить изменения
                                 </button>
                             </div>
                         </div>
@@ -377,11 +377,11 @@
 
                             <!-- Кнопки действий -->
                             <div class="openrouter-actions">
-                                <button id="testOpenrouterBtn" class="btn btn-outline">
-                                    <i class="fas fa-plug"></i> Проверить подключение
+                                <button type="button" id="testOpenrouterBtn" class="btn btn-outline">
+                                    <i class="fas" aria-hidden="true"></i> Проверить подключение
                                 </button>
-                                <button id="saveOpenrouterBtn" class="btn btn-primary">
-                                    <i class="fas fa-save"></i> Сохранить
+                                <button type="button" id="saveOpenrouterBtn" class="btn btn-primary">
+                                    <i class="fas" aria-hidden="true"></i> Сохранить
                                 </button>
                             </div>
                         </div>
@@ -475,8 +475,8 @@
 
                             <!-- Кнопка сохранения -->
                             <div class="save-rules-section">
-                                <button id="saveCleaningRulesBtn" class="btn btn-primary">
-                                    <i class="fas fa-save"></i> Сохранить правила
+                                <button type="button" id="saveCleaningRulesBtn" class="btn btn-primary">
+                                    <i class="fas" aria-hidden="true"></i> Сохранить правила
                                 </button>
                             </div>
                         </div>
@@ -492,7 +492,7 @@
         <div class="modal-window preview-modal">
             <div class="modal-header">
                 <h3 id="cleaningPreviewTitle">Проверка правила очистки</h3>
-                <button class="modal-close" data-close="preview" aria-label="Закрыть">&times;</button>
+                <button type="button" class="modal-close" data-close="preview" aria-label="Закрыть">&times;</button>
             </div>
             <div class="modal-body">
                 <div class="preview-meta" id="previewMeta">
@@ -513,7 +513,7 @@
                 </div>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-outline" data-close="preview">Закрыть</button>
+                <button type="button" class="btn btn-outline" data-close="preview">Закрыть</button>
             </div>
         </div>
     </div>
@@ -525,7 +525,7 @@
         <div class="modal-window">
             <div class="modal-header">
                 <h3 id="configTitle">Настройки коллекции</h3>
-                <button class="modal-close" aria-label="Закрыть">&times;</button>
+                <button type="button" class="modal-close" aria-label="Закрыть">&times;</button>
             </div>
             <div class="modal-body">
                 <input type="hidden" id="cfgName">
@@ -615,8 +615,8 @@
                 </details>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-outline modal-close-btn">Отмена</button>
-                <button id="saveConfigBtn" class="btn btn-primary">Сохранить</button>
+                <button type="button" class="btn btn-outline modal-close-btn">Отмена</button>
+                <button type="button" id="saveConfigBtn" class="btn btn-primary">Сохранить</button>
             </div>
         </div>
     </div>
@@ -626,7 +626,7 @@
         <div class="modal-window">
             <div class="modal-header">
                 <h3 id="createTitle">Создать коллекцию</h3>
-                <button class="modal-close" aria-label="Закрыть">&times;</button>
+                <button type="button" class="modal-close" aria-label="Закрыть">&times;</button>
             </div>
             <div class="modal-body">
                 <div class="form-section-spaced">
@@ -654,8 +654,8 @@
                 </div>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-outline modal-close-btn">Отмена</button>
-                <button id="createCollBtn" class="btn btn-primary">Создать</button>
+                <button type="button" class="btn btn-outline modal-close-btn">Отмена</button>
+                <button type="button" id="createCollBtn" class="btn btn-primary">Создать</button>
             </div>
         </div>
     </div>
@@ -665,7 +665,7 @@
         <div class="modal-window">
             <div class="modal-header">
                 <h3 id="addRecordTitle">Добавить запись</h3>
-                <button class="modal-close" aria-label="Закрыть">&times;</button>
+                <button type="button" class="modal-close" aria-label="Закрыть">&times;</button>
             </div>
             <div class="modal-body">
                 <div class="form-section-spaced">
@@ -678,8 +678,8 @@
                 </div>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-outline modal-close-btn">Отмена</button>
-                <button id="saveRecBtn" class="btn btn-primary">Сохранить</button>
+                <button type="button" class="btn btn-outline modal-close-btn">Отмена</button>
+                <button type="button" id="saveRecBtn" class="btn btn-primary">Сохранить</button>
             </div>
         </div>
     </div>
@@ -689,7 +689,7 @@
         <div class="modal-window modal-window--narrow">
             <div class="modal-header modal-header--danger">
                 <h3 id="deleteTitle"><i class="fas fa-exclamation-triangle" aria-hidden="true"></i> Удаление коллекции</h3>
-                <button class="modal-close" aria-label="Закрыть">&times;</button>
+                <button type="button" class="modal-close" aria-label="Закрыть">&times;</button>
             </div>
             <div class="modal-body">
                 <div class="delete-warning">
@@ -714,9 +714,9 @@
                 </div>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-outline modal-close-btn">Отмена</button>
-                <button id="confirmDeleteBtn" class="btn btn-danger" disabled>
-                    <i class="fas fa-trash"></i> Удалить навсегда
+                <button type="button" class="btn btn-outline modal-close-btn">Отмена</button>
+                <button type="button" id="confirmDeleteBtn" class="btn btn-danger" disabled>
+                    <i class="fas" aria-hidden="true"></i> Удалить навсегда
                 </button>
             </div>
         </div>
@@ -730,7 +730,7 @@
             <div class="modal-resizer modal-resizer-right" data-direction="right"></div>
             <div class="modal-header">
                 <h3 id="importTitle"><i class="fas fa-file-import" aria-hidden="true"></i> Импорт данных</h3>
-                <button class="modal-close" aria-label="Закрыть">&times;</button>
+                <button type="button" class="modal-close" aria-label="Закрыть">&times;</button>
             </div>
             <div class="modal-body">
                 <input type="hidden" id="importTargetCollection">
@@ -740,11 +740,11 @@
 
                     <!-- Вкладки: CSV / Excel -->
                     <div class="import-source-tabs">
-                        <button class="source-tab active" data-source="paste">
-                            <i class="fas fa-paste"></i> Вставить CSV/TSV
+                        <button type="button" class="source-tab active" data-source="paste">
+                            <i class="fas" aria-hidden="true"></i> Вставить CSV/TSV
                         </button>
-                        <button class="source-tab" data-source="excel">
-                            <i class="fas fa-file-excel"></i> Загрузить Excel
+                        <button type="button" class="source-tab" data-source="excel">
+                            <i class="fas" aria-hidden="true"></i> Загрузить Excel
                         </button>
                     </div>
 
@@ -808,8 +808,8 @@
                                     <span id="excelFileName" class="file-name">—</span>
                                     <span id="excelFileStats" class="file-stats">—</span>
                                 </div>
-                                <button id="excelFileClear" class="btn btn-sm btn-outline" title="Очистить">
-                                    <i class="fas fa-times"></i>
+                                <button type="button" id="excelFileClear" class="btn btn-sm btn-outline" title="Очистить">
+                                    <i class="fas" aria-hidden="true"></i>
                                 </button>
                             </div>
                         </div>
@@ -958,20 +958,20 @@
 
                     <!-- Табы для категорий -->
                     <div class="diff-tabs">
-                        <button class="diff-tab-btn active" data-tab="added">
-                            <i class="fas fa-plus"></i> Добавленные
+                        <button type="button" class="diff-tab-btn active" data-tab="added">
+                            <i class="fas" aria-hidden="true"></i> Добавленные
                             <span class="badge" id="diffAddedBadge">0</span>
                         </button>
-                        <button class="diff-tab-btn" data-tab="modified">
-                            <i class="fas fa-edit"></i> Изменённые
+                        <button type="button" class="diff-tab-btn" data-tab="modified">
+                            <i class="fas" aria-hidden="true"></i> Изменённые
                             <span class="badge" id="diffModifiedBadge">0</span>
                         </button>
-                        <button class="diff-tab-btn" data-tab="deleted">
-                            <i class="fas fa-trash"></i> Удалённые
+                        <button type="button" class="diff-tab-btn" data-tab="deleted">
+                            <i class="fas" aria-hidden="true"></i> Удалённые
                             <span class="badge" id="diffDeletedBadge">0</span>
                         </button>
-                        <button class="diff-tab-btn" data-tab="folders">
-                            <i class="fas fa-folder"></i> Папки
+                        <button type="button" class="diff-tab-btn" data-tab="folders">
+                            <i class="fas" aria-hidden="true"></i> Папки
                             <span class="badge" id="diffFoldersBadge">0</span>
                         </button>
                     </div>
@@ -1018,20 +1018,20 @@
             </div>
             <div class="modal-footer">
                 <!-- Кнопки меняются в зависимости от шага -->
-                <button id="importBackBtn" class="btn btn-outline hidden">
-                    <i class="fas fa-arrow-left"></i> Назад
+                <button type="button" id="importBackBtn" class="btn btn-outline hidden">
+                    <i class="fas" aria-hidden="true"></i> Назад
                 </button>
-                <button id="importNextBtn" class="btn btn-primary">
-                    Далее <i class="fas fa-arrow-right"></i>
+                <button type="button" id="importNextBtn" class="btn btn-primary">
+                    Далее <i class="fas" aria-hidden="true"></i>
                 </button>
-                <button id="importCompareBtn" class="btn btn-warning hidden">
-                    <i class="fas fa-code-compare"></i> Сравнить с базой
+                <button type="button" id="importCompareBtn" class="btn btn-warning hidden">
+                    <i class="fas" aria-hidden="true"></i> Сравнить с базой
                 </button>
-                <button id="importUploadBtn" class="btn btn-primary hidden">
-                    <i class="fas fa-upload"></i> Загрузить всё
+                <button type="button" id="importUploadBtn" class="btn btn-primary hidden">
+                    <i class="fas" aria-hidden="true"></i> Загрузить всё
                 </button>
-                <button id="importApplyBtn" class="btn btn-success hidden">
-                    <i class="fas fa-check"></i> Применить изменения
+                <button type="button" id="importApplyBtn" class="btn btn-success hidden">
+                    <i class="fas" aria-hidden="true"></i> Применить изменения
                 </button>
             </div>
         </div>

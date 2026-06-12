@@ -64,7 +64,7 @@
                         <i class="fas fa-folder-tree"></i>
                         <span>Каталог</span>
                     </div>
-                    <button class="sidebar-toggle-btn" id="sidebarToggle" title="Свернуть/Развернуть каталог">
+                    <button type="button" class="sidebar-toggle-btn" id="sidebarToggle" title="Свернуть/Развернуть каталог">
                         <span class="toggle-text">Свернуть</span>
                         <i class="fas fa-angles-left"></i>
                     </button>
@@ -79,8 +79,8 @@
                                class="catalog-search-input" 
                                placeholder="Поиск категорий..."
                                autocomplete="off">
-                        <button class="catalog-search-clear hidden" id="catalogSearchClear" title="Очистить">
-                            <i class="fas fa-times"></i>
+                        <button type="button" class="catalog-search-clear hidden" id="catalogSearchClear" title="Очистить">
+                            <i class="fas" aria-hidden="true"></i>
                         </button>
                     </div>
                     <div class="catalog-search-results hidden" id="catalogSearchResults">
@@ -92,8 +92,8 @@
                 <div class="multi-select-hint hidden" id="multiSelectHint">
                     <i class="fas fa-info-circle"></i>
                     <span>Выбрано категорий: <strong id="selectedCount">0</strong></span>
-                    <button class="clear-selection-btn" id="clearSelectionBtn">
-                        <i class="fas fa-times"></i> Сбросить
+                    <button type="button" class="clear-selection-btn" id="clearSelectionBtn">
+                        <i class="fas" aria-hidden="true"></i> Сбросить
                     </button>
                 </div>
                 
@@ -125,11 +125,11 @@
                             </span>
                         </div>
                         <div class="sidebar-buttons-group">
-                            <button class="refresh-catalog-btn" id="refreshCatalogBtn" title="Обновить каталог">
-                                <i class="fas fa-sync-alt"></i>
+                            <button type="button" class="refresh-catalog-btn" id="refreshCatalogBtn" title="Обновить каталог">
+                                <i class="fas" aria-hidden="true"></i>
                             </button>
-                            <button class="collapse-all-btn" id="collapseAllBtn" title="Свернуть все категории">
-                                <i class="fas fa-compress-alt"></i>
+                            <button type="button" class="collapse-all-btn" id="collapseAllBtn" title="Свернуть все категории">
+                                <i class="fas" aria-hidden="true"></i>
                             </button>
                         </div>
                     </div>
