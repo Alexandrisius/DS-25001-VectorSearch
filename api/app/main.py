@@ -1,6 +1,7 @@
 """FastAPI application entry point."""
 from __future__ import annotations
 
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -26,9 +27,33 @@ from app.config import get_settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import logger, setup_logging
 from app.core.middleware import RequestContextMiddleware
-from app.db.postgres import close_db
+from app.db.postgres import close_db, get_session_maker
 from app.db.qdrant import close_qdrant
 from app.db.redis import close_redis
+from app.services.cache_manager import CacheManager
+from app.services.embedding_service import EmbeddingService
+from app.services.rerank_service import RerankService
+from app.services.search_service import SearchService
+from app.services.collection_service import CollectionService
+
+
+def _build_embedding_service(prov) -> EmbeddingService:
+    """Создать EmbeddingService из APIProvider (или fallback на env)."""
+    from app.core.security import decrypt_secret
+    settings = get_settings()
+    if prov and prov.enabled and prov.api_key_encrypted:
+        return EmbeddingService(
+            api_key=decrypt_secret(prov.api_key_encrypted),
+            model=prov.model_embed,
+            batch_size=prov.batch_size,
+            max_workers=prov.max_workers,
+            base_url=prov.base_url,
+        )
+    return EmbeddingService(
+        api_key=settings.openrouter_api_key or "",
+        model=settings.openrouter_embed_model,
+        base_url=settings.openrouter_base_url,
+    )
 
 
 @asynccontextmanager
@@ -46,9 +71,50 @@ async def lifespan(app: FastAPI):
     else:
         logger.warning(f"⚠️ web/ not found at {web_dir}")
 
+    # === Eager warmup: EmbeddingService singleton + BM25 indices ===
+    CacheManager.bm25_indices = {}
+    app.state.embedding_service = None
+    app.state.embedding_service_lock = None  # lazy init fallback
+
+    SessionLocal = get_session_maker()
+    embedding = None
+    try:
+        async with SessionLocal() as session:
+            from app.di import _get_active_provider
+            prov = await _get_active_provider(session)
+            embedding = _build_embedding_service(prov)
+            app.state.embedding_service = embedding
+            model_name = embedding.model
+            logger.info(f"✅ EmbeddingService ready (model={model_name})")
+
+            # === Eager BM25 warmup ===
+            coll_svc = CollectionService(session)
+            visible = await coll_svc.list_visible_fast()
+            rerank_api_key = embedding.api_key
+            rerank_model = prov.model_rerank if prov and prov.model_rerank else settings.openrouter_model_rerank
+            rerank = RerankService(api_key=rerank_api_key, model=rerank_model, base_url=embedding.base_url)
+            for coll in visible:
+                t0 = time.time()
+                try:
+                    svc = SearchService(session, embedding, rerank)
+                    idx = await svc.rebuild_bm25(coll)
+                    logger.info(
+                        f"✅ BM25 ready: '{coll.name}' "
+                        f"({idx.corpus_size} docs, {time.time() - t0:.1f}s)"
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"⚠️ BM25 warmup failed for '{coll.name}': {e}. "
+                        "Search will rebuild on first request."
+                    )
+    except Exception as e:
+        logger.warning(f"⚠️ Eager warmup error: {e}. Lazy fallback enabled.")
+
     yield
 
     logger.info("🛑 Shutting down...")
+    CacheManager.bm25_indices.clear()
+    app.state.embedding_service = None
     await close_db()
     await close_redis()
     close_qdrant()

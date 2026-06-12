@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from fastapi import Depends
+from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -29,19 +29,17 @@ async def _get_active_provider(session: AsyncSession) -> ApiProvider | None:
     return await svc.get_active_provider() or await svc.get_provider("openrouter")
 
 
-async def get_embedding_service(session: DBSession) -> EmbeddingService:
-    prov = await _get_active_provider(session)
+def _build_embedding_service(prov) -> EmbeddingService:
+    """Создать EmbeddingService из APIProvider (или fallback на env)."""
     settings = get_settings()
     if prov and prov.enabled and prov.api_key_encrypted:
-        api_key = decrypt_secret(prov.api_key_encrypted)
         return EmbeddingService(
-            api_key=api_key,
+            api_key=decrypt_secret(prov.api_key_encrypted),
             model=prov.model_embed,
             batch_size=prov.batch_size,
             max_workers=prov.max_workers,
             base_url=prov.base_url,
         )
-    # Fallback на env-ключ (если есть)
     return EmbeddingService(
         api_key=settings.openrouter_api_key or "missing",
         model=settings.openrouter_model_embed,
@@ -49,6 +47,25 @@ async def get_embedding_service(session: DBSession) -> EmbeddingService:
         max_workers=settings.openrouter_max_workers,
         base_url=settings.openrouter_base_url,
     )
+
+
+async def get_embedding_service(request: Request) -> EmbeddingService:
+    """Singleton из app.state (lifespan-scoped).
+
+    Если lifespan не отработал (тесты, прямой импорт) — создаём на лету
+    с lazy fallback.
+    """
+    svc = getattr(request.app.state, "embedding_service", None)
+    if svc is not None:
+        return svc
+    # Lazy fallback (не должно срабатывать в prod)
+    from app.db.postgres import get_session_maker
+    SessionLocal = get_session_maker()
+    async with SessionLocal() as session:
+        prov = await _get_active_provider(session)
+        svc = _build_embedding_service(prov)
+        request.app.state.embedding_service = svc
+    return svc
 
 
 async def get_rerank_service(session: DBSession) -> RerankService:

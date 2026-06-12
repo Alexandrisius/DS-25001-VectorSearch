@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+from collections import OrderedDict
 from typing import Any
 
 import httpx
@@ -96,7 +97,7 @@ class EmbeddingService:
         self.max_retries = max_retries
         self.base_url = (base_url or "").strip() or None
         self.endpoint = _resolve_embed_url(self.base_url)
-        self._cache: dict[str, list[float]] = {}
+        self._cache: OrderedDict[str, list[float]] = OrderedDict()
         self._cache_max = get_settings().embedding_cache_size
 
     # ---------------------------------------------------------------------
@@ -112,6 +113,7 @@ class EmbeddingService:
             cache_key = self._cache_key(normalized)
             cached = self._cache.get(cache_key)
             if cached is not None:
+                self._cache.move_to_end(cache_key)  # mark as recently used
                 return cached
 
         vectors = await self._call_api([normalized])
@@ -305,11 +307,11 @@ class EmbeddingService:
         return hashlib.sha256(f"{self.endpoint}|{self.model}|{text}".encode()).hexdigest()[:32]
 
     def _cache_put(self, text: str, vector: list[float]) -> None:
-        if len(self._cache) >= self._cache_max:
-            # LRU eviction (простая версия)
-            first_key = next(iter(self._cache))
-            del self._cache[first_key]
-        self._cache[self._cache_key(text)] = vector
+        key = self._cache_key(text)
+        # True LRU: while over capacity, pop oldest (FIFO from front)
+        while len(self._cache) >= self._cache_max:
+            self._cache.popitem(last=False)
+        self._cache[key] = vector  # new items go to end (most recent)
 
 
 __all__ = ["EmbeddingService", "KNOWN_EMBED_DIMS", "OPENROUTER_EMBED_URL", "OPENROUTER_RERANK_URL"]

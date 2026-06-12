@@ -277,6 +277,10 @@ class ImportService:
                 await self.session.commit()
             except Exception as e:
                 logger.error(f"[import] chunk {chunk_idx+1} commit failed: {e}")
+            else:
+                # Invalidate BM25 — следующий /match пересоберёт индекс
+                from app.services.cache_manager import CacheManager
+                CacheManager.invalidate_bm25(collection.name)
                 await self.session.rollback()
                 raise
 
@@ -372,6 +376,9 @@ class ImportService:
                 "folders": folder_stats,
             }
             await self.session.commit()
+            # Invalidate BM25 — следующий /match пересоберёт индекс
+            from app.services.cache_manager import CacheManager
+            CacheManager.invalidate_bm25(collection.name)
             publish_job_progress(str(job.id), {
                 "type": "done",
                 "data": {

@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.db.qdrant import get_qdrant_client
 from app.models.collection import Collection
+from app.services.cache_manager import CacheManager
 from app.services.embedding_service import EmbeddingService
 from app.services.rerank_service import RerankService
 
@@ -97,7 +98,6 @@ class SearchService:
         self.rerank = rerank_service
         self.settings = get_settings()
         self.qdrant = get_qdrant_client()
-        self._bm25_cache: dict[str, BM25Index] = {}
 
     # ----------------------------------------------------------- public
     async def search(
@@ -147,14 +147,18 @@ class SearchService:
                 candidates.extend(extra)
 
         # Шаг 4: Подготовить для rerank (interleave dense + bm25, лимит)
+        # Cohere rerank sweet spot: 30-50 docs. Делаем 30 dense + 20 bm25 = 50 max.
         dense_part = [c for c in candidates if not c.get("is_bm25_match")]
         bm25_part = [c for c in candidates if c.get("is_bm25_match")]
 
         rerank_limit = settings.hybrid_rerank_limit
+        max_for_rerank = settings.max_for_rerank
         if len(candidates) <= rerank_limit:
-            to_rerank = candidates
+            to_rerank = candidates[:max_for_rerank]
         else:
-            to_rerank = dense_part[:100] + bm25_part[:30]
+            dense_n = min(max_for_rerank - 20, len(dense_part))
+            bm25_n = min(20, len(bm25_part))
+            to_rerank = dense_part[:dense_n] + bm25_part[:bm25_n]
 
         # Шаг 5: Rerank
         t5 = time.time()
@@ -267,15 +271,21 @@ class SearchService:
 
     # ----------------------------------------------------- stage 1.5: BM25
     async def _bm25_search(self, collection: Collection, query: str) -> list[str]:
-        if collection.name not in self._bm25_cache:
-            await self._build_bm25_index(collection)
-        idx = self._bm25_cache.get(collection.name)
-        if not idx:
-            return []
+        idx = CacheManager.get_bm25(collection.name)
+        if idx is None:
+            # Cache miss (после invalidation или cold start без warmup)
+            idx = await self.rebuild_bm25(collection)
         results = idx.search(query, top_k=self.settings.bm25_top_k)
         return [r["id"] for r in results]
 
-    async def _build_bm25_index(self, collection: Collection) -> None:
+    async def rebuild_bm25(self, collection: Collection) -> BM25Index:
+        """Строит BM25 индекс для коллекции и кладёт в CacheManager.
+
+        Вызывается:
+        - Из lifespan (eager warmup при старте)
+        - Из _bm25_search (lazy fallback если warmup не отработал)
+        - Никогда напрямую из hot path: используй invalidate_bm25() для сброса
+        """
         logger.info(f"Building BM25 index for {collection.name}…")
         corpus: dict[str, str] = {}
         offset = None
@@ -308,8 +318,18 @@ class SearchService:
                 break
         idx = BM25Index()
         idx.fit(corpus)
-        self._bm25_cache[collection.name] = idx
+        CacheManager.set_bm25(collection.name, idx)
         logger.info(f"BM25 built: {len(corpus)} docs")
+        return idx
+
+    def invalidate_bm25(self, collection_name: str) -> None:
+        """Сбрасывает BM25 индекс коллекции (вызывать при обновлении данных)."""
+        CacheManager.invalidate_bm25(collection_name)
+        logger.info(f"BM25 cache invalidated for '{collection_name}'")
+
+    # Backward compat alias (использовался раньше)
+    async def _build_bm25_index(self, collection: Collection) -> None:
+        await self.rebuild_bm25(collection)
 
     async def _retrieve_bm25_payloads(
         self, collection: Collection, ids: list[str]

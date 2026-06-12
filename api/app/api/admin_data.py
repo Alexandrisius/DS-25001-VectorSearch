@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from qdrant_client.http import models as qm
 from sqlalchemy import select
 
@@ -72,6 +72,7 @@ async def admin_update_point(
     name: str,
     id: str,
     req: UpdateCellRequest,
+    request: Request,
     session: DBSession = None,
     _: dict = Depends(get_current_admin),
 ) -> dict:
@@ -94,7 +95,7 @@ async def admin_update_point(
     from app.di import get_embedding_service
     from app.services.material_service import MaterialService
 
-    embedding = await get_embedding_service(session)
+    embedding = await get_embedding_service(request)
     mat_svc = MaterialService(session, embedding_service=embedding)
     material = await mat_svc.update_cell(material, coll, req.field, req.value)
 
@@ -110,6 +111,10 @@ async def admin_update_point(
         except Exception as e:
             folder_sync = {"error": str(e)}
 
+    # Invalidate BM25 cache (новое описание/код → новый текст в индексе)
+    from app.services.cache_manager import CacheManager
+    CacheManager.invalidate_bm25(coll.name)
+
     return {
         "status": "success",
         "id": str(material.qdrant_point_id),
@@ -124,6 +129,7 @@ async def admin_update_point(
 async def admin_delete_point(
     name: str,
     id: str,
+    request: Request,
     session: DBSession = None,
     _: dict = Depends(get_current_admin),
 ) -> dict:
@@ -148,7 +154,7 @@ async def admin_delete_point(
 
     # Проверить осиротевшие папки
     from app.di import get_embedding_service
-    embedding = await get_embedding_service(session)
+    embedding = await get_embedding_service(request)
     folder_svc = FolderService(session, embedding_service=embedding)
     deleted_folders = await folder_svc.check_orphans_after_delete(coll, material)
 

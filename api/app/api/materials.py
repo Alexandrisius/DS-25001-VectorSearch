@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from qdrant_client.http import models as qm
 from sqlalchemy import select
 
@@ -23,6 +23,7 @@ router = APIRouter(tags=["materials"])
 @router.post("/update_record")
 async def update_record(
     request: UpdateRequest,
+    req: Request,
     session: DBSession,
 ) -> dict:
     """Обновить одну запись (генерирует новый эмбеддинг)."""
@@ -32,7 +33,7 @@ async def update_record(
     coll_svc = CollectionService(session)
     coll = await coll_svc.get_or_404(request.database or (await coll_svc.get_current_active(None)).name)
 
-    embedding = await get_embedding_service(session)
+    embedding = await get_embedding_service(req)
     mat_svc = MaterialService(session, embedding_service=embedding)
     await mat_svc.upsert(coll, request.code, request.description)
     coll.last_updated = request.database  # type: ignore[assignment]
@@ -42,6 +43,7 @@ async def update_record(
 @router.post("/update_batch_records")
 async def update_batch_records(
     request: BatchUpdateRequest,
+    req: Request,
     session: DBSession,
 ) -> dict:
     """Пакетное обновление (синхронное)."""
@@ -51,7 +53,7 @@ async def update_batch_records(
     coll_svc = CollectionService(session)
     coll = await coll_svc.get_or_404(request.database or (await coll_svc.get_current_active(None)).name)
 
-    embedding = await get_embedding_service(session)
+    embedding = await get_embedding_service(req)
     mat_svc = MaterialService(session, embedding_service=embedding)
     count = 0
     for r in request.records:
