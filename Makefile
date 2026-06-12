@@ -1,4 +1,5 @@
 .PHONY: help up down restart ps \
+        up-all up-tunnel start \
         logs logs-api logs-worker logs-celery logs-db \
         shell-api shell-worker shell-postgres shell-qdrant \
         migrate revision rebuild-api rebuild \
@@ -16,6 +17,8 @@ help:
 	@echo ""
 	@echo "--- BASIC -----------------------------------------------"
 	@echo "  make up              Start the whole stack (api, postgres, qdrant, redis, worker, flower)"
+	@echo "  make up-tunnel       Start stack + Cloudflare Tunnel (public site)"
+	@echo "  make start           Same as up-tunnel (shortcut)"
 	@echo "  make down            Stop the stack"
 	@echo "  make restart         Restart the stack"
 	@echo "  make ps              Containers status"
@@ -77,6 +80,7 @@ up:
 	@echo "   [FL] Flower:   http://localhost:5555 (admin/admin)"
 	@echo ""
 	@echo "[TIP] Next step: make migrate"
+	@echo "[TIP] For public site: make up-tunnel"
 
 down:
 	docker compose down
@@ -86,6 +90,30 @@ restart:
 
 ps:
 	docker compose ps
+
+# Start stack + Cloudflare tunnel in one command.
+# Use this when you want the site accessible from internet
+# (https://ksrmatch.online).
+# Requires TUNNEL_TOKEN in .env.
+up-tunnel: up
+	@if ! grep -q "^TUNNEL_TOKEN=." .env 2>/dev/null; then \
+		echo "[X] TUNNEL_TOKEN not set in .env"; \
+		echo "   1. Get token: https://one.dash.cloudflare.com/ -> Zero Trust -> Networks -> Tunnels -> ksr-tunnel -> Add connector -> Docker"; \
+		echo "   2. Add to .env: TUNNEL_TOKEN=eyJh..."; \
+		echo "   3. Run make up-tunnel again"; \
+		exit 1; \
+	fi
+	docker compose -f docker-compose.yml -f docker-compose.cloudflared.yml up -d cloudflared
+	@echo ""
+	@echo "[OK] Stack + Tunnel started:"
+	@echo "   [NET] Local:   http://localhost:8000"
+	@echo "   [NET] Public:  https://ksrmatch.online"
+	@echo "   [CFG]  Admin:  http://localhost:8000/admin (admin/admin)"
+	@echo ""
+	@echo "[TIP] Logs: make logs (api) or make tunnel-logs"
+
+# Quick alias for up-tunnel
+start: up-tunnel
 
 # =============================================================================
 # LOGS
