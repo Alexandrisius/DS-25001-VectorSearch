@@ -1,5 +1,9 @@
 /**
- * Modal open/close + resize helpers.
+ * Modal open/close + focus management + resize helpers.
+ *
+ * Focus management (trap + restore) lives in shared/focus-trap.js and
+ * is enabled by adding the `data-trap-focus` attribute to a
+ * `.modal-overlay`.
  *
  * Resize is specific to the import modal (other modals are small).
  */
@@ -7,14 +11,21 @@
 import { state } from './state.js';
 import { els } from './els.js';
 import { STORAGE_KEYS } from '../shared/constants.js';
+import { trapFocus, releaseFocus } from '../shared/focus-trap.js';
 
 /**
- * Open a modal by its key in els.modals.
+ * Open a modal by its key in els.modals. If the modal has the
+ * `data-trap-focus` attribute, focus is trapped inside it.
  *
  * @param {'config'|'import'|'create'|'addRecord'|'deleteConfirm'} name
  */
 export function openModal(name) {
-    if (els.modals[name]) els.modals[name].classList.add('active');
+    const modal = els.modals[name];
+    if (!modal) return;
+    modal.classList.add('active');
+    if (modal.hasAttribute('data-trap-focus')) {
+        trapFocus(modal);
+    }
 }
 
 /**
@@ -39,6 +50,8 @@ export function closeModal(name) {
             state.jobWs = null;
         }
     }
+
+    releaseFocus();
 }
 
 /**
@@ -50,6 +63,17 @@ export function initModals() {
         btn.addEventListener('click', function () {
             const modal = this.closest('.modal-overlay');
             if (modal) modal.classList.remove('active');
+            releaseFocus();
+        });
+    });
+
+    // Click on the backdrop (but not the modal-window) closes the modal.
+    document.querySelectorAll('.modal-overlay').forEach((overlay) => {
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) {
+                overlay.classList.remove('active');
+                releaseFocus();
+            }
         });
     });
 }
@@ -86,8 +110,7 @@ export function initModalResize() {
             startWidth = modalWindow.offsetWidth;
             currentResizer = resizer;
             resizer.classList.add('active');
-            document.body.style.cursor = 'ew-resize';
-            document.body.style.userSelect = 'none';
+            document.body.classList.add('is-resizing');
             e.preventDefault();
         });
     });
@@ -107,8 +130,7 @@ export function initModalResize() {
         if (!isResizing) return;
         isResizing = false;
         if (currentResizer) currentResizer.classList.remove('active');
-        document.body.style.cursor = '';
-        document.body.style.userSelect = '';
+        document.body.classList.remove('is-resizing');
         try {
             localStorage.setItem(STORAGE_KEYS.importModalWidth, String(modalWindow.offsetWidth));
         } catch {

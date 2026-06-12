@@ -7,6 +7,8 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
+    <meta name="description" content="KSR Matcher — семантический векторный поиск по классификатору строительных ресурсов (КСР) на русском языке.">
+    <meta name="theme-color" content="#6366f1">
     <title>⚡ KSR Matcher AI</title>
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg?v=3">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -27,20 +29,22 @@
 </head>
 
 <body>
+    <a class="skip-link" href="#query">Пропустить навигацию</a>
     <div class="container">
         <header>
             <div class="header-controls">
                 <!-- Кнопка админки (шестерёнка) -->
-                <a href="/admin" class="admin-header-btn" title="Настройка коллекций">
-                    <i class="fas fa-cog"></i>
+                <a href="/admin" class="admin-header-btn" title="Настройка коллекций" aria-label="Открыть админку">
+                    <i class="fas fa-cog" aria-hidden="true"></i>
                 </a>
                 <!-- Переключатель темы -->
-                <div class="theme-toggle" id="themeToggle" title="Переключить тему">
-                    <i class="fas fa-sun"></i>
-                </div>
+                <button type="button" class="theme-toggle" id="themeToggle" title="Переключить тему" aria-label="Переключить тему">
+                    <i class="fas fa-sun" aria-hidden="true"></i>
+                    <span class="visually-hidden">Сменить тему</span>
+                </button>
             </div>
 
-            <h1 class="app-title"><i class="fas fa-bolt app-title__icon"></i> KSR Matcher</h1>
+            <h1 class="app-title"><i class="fas fa-bolt app-title__icon" aria-hidden="true"></i> KSR Matcher</h1>
             <p class="subtitle">Векторный поиск строительных ресурсов</p>
         </header>
 
@@ -141,28 +145,28 @@
             <!-- === ОСНОВНОЙ КОНТЕНТ === -->
             <div class="app-main">
         
-        <div class="main-card">
+        <main id="searchCard" class="main-card" tabindex="-1">
             <div class="card-header">
                 <div class="header-top-row">
                     <div class="header-title">
-                        <i class="fas fa-search header-title__icon"></i> Поиск материалов
+                        <i class="fas fa-search header-title__icon" aria-hidden="true"></i> Поиск материалов
                     </div>
 
-                    <div class="metrics-panel">
+                    <div class="metrics-panel" role="status" aria-live="polite">
                         <div class="metric-item">
-                            <i class="fas fa-wave-square metric-item__icon metric-item__icon--success"></i>
+                            <i class="fas fa-wave-square metric-item__icon metric-item__icon--success" aria-hidden="true"></i>
                             Cosine: <strong id="cosineThreshold">0.30</strong>
                         </div>
                         <div class="metric-item">
-                            <i class="fas fa-bullseye metric-item__icon metric-item__icon--primary"></i>
+                            <i class="fas fa-bullseye metric-item__icon metric-item__icon--primary" aria-hidden="true"></i>
                             Confident ≥: <strong id="confidentMin">0.50</strong>
                         </div>
                         <div class="metric-item">
-                            <i class="fas fa-question-circle metric-item__icon metric-item__icon--muted"></i>
+                            <i class="fas fa-question-circle metric-item__icon metric-item__icon--muted" aria-hidden="true"></i>
                             Uncertain ≥: <strong id="uncertainMin">0.15</strong>
                         </div>
                         <div class="metric-item">
-                            <i class="fas fa-clock metric-item__icon metric-item__icon--muted"></i>
+                            <i class="fas fa-clock metric-item__icon metric-item__icon--muted" aria-hidden="true"></i>
                             Time: <strong id="processingTime">0.00s</strong>
                         </div>
                     </div>
@@ -181,29 +185,31 @@
             </div>
 
             <div class="input-section">
-                <div class="db-options-grid" id="databaseOptions"></div>
+                <div class="db-options-grid" id="databaseOptions" role="radiogroup" aria-label="Доступные базы данных"></div>
 
-                <textarea id="query"
-                    placeholder="Введите описание материала..."></textarea>
+                <label class="visually-hidden" for="query">Поисковый запрос</label>
+                <textarea id="query" name="query"
+                    placeholder="Введите описание материала..."
+                    aria-label="Поисковый запрос"></textarea>
 
                 <div class="button-group">
-                    <button id="clearBtn" class="btn btn-danger">
-                        <i class="fas fa-eraser"></i> Очистить
+                    <button type="button" id="clearBtn" class="btn btn-danger">
+                        <i class="fas fa-eraser" aria-hidden="true"></i> Очистить
                     </button>
-                    <button id="searchBtn" class="btn btn-primary">
-                        <i class="fas fa-bolt"></i> Найти
+                    <button type="button" id="searchBtn" class="btn btn-primary">
+                        <i class="fas fa-bolt" aria-hidden="true"></i> Найти
                     </button>
                 </div>
             </div>
-        </div>
+        </main>
 
-        <div class="main-card">
+        <section class="main-card" aria-label="Результаты поиска">
             <div class="results-header">
                 <div class="header-title">Результаты</div>
                 <div id="statusInfo" class="status-info">Готов к работе</div>
             </div>
 
-            <div id="errorContainer" class="error-message hidden"></div>
+                <div id="errorContainer" class="error-message hidden" role="alert"></div>
 
             <div class="table-container">
                 <table class="ksr-table">
@@ -231,8 +237,8 @@
             <div class="app-status-bar">
                 <div id="processingInfo">Ожидание запроса...</div>
             </div>
-        </div>
-        
+        </section>
+
             </div><!-- /app-main -->
         </div><!-- /app-layout -->
 

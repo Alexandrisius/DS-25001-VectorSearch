@@ -7,6 +7,9 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
+    <meta name="description" content="Админ-панель KSR Matcher — управление коллекциями, импорт данных, настройки LLM API.">
+    <meta name="theme-color" content="#6366f1">
+    <meta name="robots" content="noindex, nofollow">
     <title>Админ-панель | KSR Matcher</title>
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg?v=3">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -30,6 +33,7 @@
 </head>
 
 <body>
+    <a class="skip-link" href="#contentBody">Пропустить навигацию</a>
 
     <!-- === ПРЕДУПРЕЖДЕНИЕ ДЛЯ МОБИЛЬНЫХ УСТРОЙСТВ === -->
     <div id="mobileWarning" class="mobile-warning-overlay hidden">
@@ -45,11 +49,12 @@
 
     <!-- === ЭКРАН ВХОДА === -->
     <div id="loginScreen" class="login-container hidden">
-        <div class="login-card">
-            <h2>Вход в админку</h2>
+        <div class="login-card" role="dialog" aria-labelledby="loginTitle">
+            <h2 id="loginTitle">Вход в админку</h2>
+            <label class="visually-hidden" for="authPassword">Пароль администратора</label>
             <input type="password" id="authPassword" placeholder="Введите пароль..." autofocus>
             <button id="authBtn" class="btn btn-primary">Войти</button>
-            <div id="authError" class="hidden auth-error">Неверный пароль</div>
+            <div id="authError" class="hidden auth-error" role="alert">Неверный пароль</div>
         </div>
     </div>
 
@@ -59,27 +64,27 @@
         <!-- Боковая панель -->
         <aside class="sidebar">
             <div class="sidebar-header">
-                <i class="fas fa-bolt sidebar-header__icon"></i> Админ-панель
+                <i class="fas fa-bolt sidebar-header__icon" aria-hidden="true"></i> Админ-панель
             </div>
 
-            <nav class="nav-links">
+            <nav class="nav-links" aria-label="Главная навигация">
                 <a href="#" class="nav-item active" data-view="collections">
-                    <i class="fas fa-database"></i> Коллекции
+                    <i class="fas fa-database" aria-hidden="true"></i> Коллекции
                 </a>
                 <a href="#" class="nav-item" data-view="jobs">
-                    <i class="fas fa-tasks"></i> Фоновые задачи
+                    <i class="fas fa-tasks" aria-hidden="true"></i> Фоновые задачи
                 </a>
                 <a href="#" class="nav-item" data-view="settings">
-                    <i class="fas fa-cog"></i> Настройки
+                    <i class="fas fa-cog" aria-hidden="true"></i> Настройки
                 </a>
             </nav>
 
             <div class="sidebar-footer">
                 <a href="/" class="nav-item">
-                    <i class="fas fa-external-link-alt"></i> К поиску
+                    <i class="fas fa-external-link-alt" aria-hidden="true"></i> К поиску
                 </a>
-                <button id="logoutBtn" class="nav-item nav-item--logout">
-                    <i class="fas fa-sign-out-alt"></i> Выйти
+                <button id="logoutBtn" class="nav-item nav-item--logout" type="button">
+                    <i class="fas fa-sign-out-alt" aria-hidden="true"></i> Выйти
                 </button>
             </div>
         </aside>
@@ -93,7 +98,7 @@
                 </div>
             </header>
 
-            <div id="contentBody" class="content-body">
+            <div id="contentBody" class="content-body" tabindex="-1">
 
                 <!-- ВИД: СЕТКА КОЛЛЕКЦИЙ -->
                 <div id="viewCollections" class="view-section">
@@ -483,11 +488,11 @@
     </div>
 
     <!-- Превью правила очистки -->
-    <div id="cleaningRulePreviewModal" class="modal-overlay">
+    <div id="cleaningRulePreviewModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="cleaningPreviewTitle" data-trap-focus>
         <div class="modal-window preview-modal">
             <div class="modal-header">
-                <h3>Проверка правила очистки</h3>
-                <button class="modal-close" data-close="preview">&times;</button>
+                <h3 id="cleaningPreviewTitle">Проверка правила очистки</h3>
+                <button class="modal-close" data-close="preview" aria-label="Закрыть">&times;</button>
             </div>
             <div class="modal-body">
                 <div class="preview-meta" id="previewMeta">
@@ -516,11 +521,11 @@
     <!-- === МОДАЛЬНЫЕ ОКНА === -->
 
     <!-- Настройки коллекции (Phase 4: RRF + MMR + adaptive) -->
-    <div id="configModal" class="modal-overlay">
+    <div id="configModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="configTitle" data-trap-focus>
         <div class="modal-window">
             <div class="modal-header">
-                <h3>Настройки коллекции</h3>
-                <button class="modal-close">&times;</button>
+                <h3 id="configTitle">Настройки коллекции</h3>
+                <button class="modal-close" aria-label="Закрыть">&times;</button>
             </div>
             <div class="modal-body">
                 <input type="hidden" id="cfgName">
@@ -617,11 +622,11 @@
     </div>
 
     <!-- Создание коллекции -->
-    <div id="createModal" class="modal-overlay">
+    <div id="createModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="createTitle" data-trap-focus>
         <div class="modal-window">
             <div class="modal-header">
-                <h3>Создать коллекцию</h3>
-                <button class="modal-close">&times;</button>
+                <h3 id="createTitle">Создать коллекцию</h3>
+                <button class="modal-close" aria-label="Закрыть">&times;</button>
             </div>
             <div class="modal-body">
                 <div class="form-section-spaced">
@@ -656,11 +661,11 @@
     </div>
 
     <!-- Добавление записи -->
-    <div id="addRecordModal" class="modal-overlay">
+    <div id="addRecordModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="addRecordTitle" data-trap-focus>
         <div class="modal-window">
             <div class="modal-header">
-                <h3>Добавить запись</h3>
-                <button class="modal-close">&times;</button>
+                <h3 id="addRecordTitle">Добавить запись</h3>
+                <button class="modal-close" aria-label="Закрыть">&times;</button>
             </div>
             <div class="modal-body">
                 <div class="form-section-spaced">
@@ -680,16 +685,17 @@
     </div>
 
     <!-- Модальное окно подтверждения удаления коллекции -->
-    <div id="deleteConfirmModal" class="modal-overlay">
+    <div id="deleteConfirmModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="deleteTitle" data-trap-focus>
         <div class="modal-window modal-window--narrow">
             <div class="modal-header modal-header--danger">
-                <h3><i class="fas fa-exclamation-triangle"></i> Удаление коллекции</h3>
-                <button class="modal-close">&times;</button>
+                <h3 id="deleteTitle"><i class="fas fa-exclamation-triangle" aria-hidden="true"></i> Удаление коллекции</h3>
+                <button class="modal-close" aria-label="Закрыть">&times;</button>
             </div>
             <div class="modal-body">
                 <div class="delete-warning">
                     <i class="fas fa-skull-crossbones delete-warning__icon"></i>
-                    <h4 class="delete-warning__heading">Это действие необратимо!</h4>
+                        <h4 class="delete-warning__heading">Это действие необратимо!</h4>
+                        <span class="visually-hidden">Удаление коллекции — необратимое действие</span>
                     <p class="delete-warning__hint">
                         Коллекция <strong id="deleteCollectionName" class="delete-warning__collection-name">—</strong>
                         и все её данные будут <strong>безвозвратно удалены</strong>.
@@ -717,14 +723,14 @@
     </div>
 
     <!-- Мастер импорта (расширенный, ресайзабельный) -->
-    <div id="importModal" class="modal-overlay">
+    <div id="importModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="importTitle" data-trap-focus>
         <div class="modal-window modal-resizable" id="importModalWindow">
             <!-- Resizer для изменения ширины -->
             <div class="modal-resizer modal-resizer-left" data-direction="left"></div>
             <div class="modal-resizer modal-resizer-right" data-direction="right"></div>
             <div class="modal-header">
-                <h3><i class="fas fa-file-import"></i> Импорт данных</h3>
-                <button class="modal-close">&times;</button>
+                <h3 id="importTitle"><i class="fas fa-file-import" aria-hidden="true"></i> Импорт данных</h3>
+                <button class="modal-close" aria-label="Закрыть">&times;</button>
             </div>
             <div class="modal-body">
                 <input type="hidden" id="importTargetCollection">
