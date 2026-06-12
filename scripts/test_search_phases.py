@@ -22,6 +22,11 @@ CASES = [
     "Котёл газовый настенный",
 ]
 
+# max_results передаётся в search() — проверяем, что confident/low_confidence
+# ветки возвращают до 50 кaндидатов (как заказывал инженер, чтобы видеть все
+# похожие котлы/задвижки и выбрать нужный по параметрам).
+TEST_MAX_RESULTS = 50
+
 
 async def main():
     app = create_app()
@@ -40,7 +45,7 @@ async def main():
             print(f"Q: {q!r}")
             print("=" * 70)
             t0 = time.time()
-            result = await svc.search(coll, q)
+            result = await svc.search(coll, q, max_results=TEST_MAX_RESULTS)
             elapsed = time.time() - t0
             cands = result.get("candidates", [])
             trace = result.get("search_trace") or {}
@@ -64,13 +69,27 @@ async def main():
                         f"rr={c.get('reranker_score', 0):.3f} [{c.get('code', '?')}] {desc}"
                     )
 
-            if cands:
+            # Проверки:
+            ok = bool(cands)
+            if ok and branch in ("confident", "low_confidence"):
+                # Confident/low_confidence должны отдавать <= max_results
+                if len(cands) > TEST_MAX_RESULTS:
+                    print(f"  FAIL: branch={branch} returned {len(cands)} > max_results={TEST_MAX_RESULTS}")
+                    ok = False
+            if ok and branch == "uncertain":
+                # Uncertain жёстко capped до 5 (хинт)
+                if len(cands) > 5:
+                    print(f"  FAIL: branch=uncertain returned {len(cands)} > 5")
+                    ok = False
+            if ok:
                 total_pass += 1
+                print(f"  PASS")
             else:
                 total_fail += 1
+                print(f"  FAIL")
 
         print(f"\n{'=' * 70}")
-        print(f"ИТОГО: {total_pass} с результатами, {total_fail} пустых")
+        print(f"ИТОГО: {total_pass} PASS, {total_fail} FAIL (max_results={TEST_MAX_RESULTS})")
         print("=" * 70)
 
 

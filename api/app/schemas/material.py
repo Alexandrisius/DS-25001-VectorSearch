@@ -18,6 +18,7 @@ class MatchRequest(BaseModel):
     filter_level: int | None = None
     filter_paths: list[FilterPath] | None = None
     top_k: int | None = None
+    max_results: int | None = Field(None, ge=1, le=200)
 
 
 class CandidateResult(BaseModel):

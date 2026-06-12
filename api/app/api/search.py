@@ -45,6 +45,7 @@ async def match(
         collection=coll,
         query=request.text,
         filter_paths=filter_paths,
+        max_results=request.max_results,
     )
     return MatchResponse(**result)
 

@@ -243,13 +243,18 @@ class SearchService:
         rrf_dense_w = collection.rrf_dense_weight or settings.rrf_dense_weight
         rrf_bm25_w = collection.rrf_bm25_weight or settings.rrf_bm25_weight
         mmr_lam = collection.mmr_lambda or settings.mmr_lambda
-        mmr_pool = collection.mmr_pool_size or settings.mmr_pool_size
         confident_min = collection.adaptive_confident_min or settings.adaptive_confident_min
         uncertain_min = collection.adaptive_uncertain_min or settings.adaptive_uncertain_min
         fallback_cos = collection.fallback_cosine_min or settings.fallback_cosine_min
-        confident_n = settings.confident_top_n
-        uncertain_n = settings.uncertain_top_n
-        fallback_n = settings.fallback_top_n
+        # max_results: explicit param > settings.max_results. Used for confident
+        # and low_confidence branches. Uncertain keeps a small cap (5) — 50
+        # similar items + a hint would be UX spam.
+        effective_max = max_results or settings.max_results
+        # RRF pool must be >= effective_max so we don't truncate before cap.
+        mmr_pool = max(
+            collection.mmr_pool_size or settings.mmr_pool_size, effective_max
+        )
+        uncertain_n = 5
 
         top_k = top_k or settings.top_k_qdrant
 
@@ -403,7 +408,7 @@ class SearchService:
 
         if max_rerank >= confident_min:
             branch = "confident"
-            limit = confident_n
+            limit = effective_max
             hint = None
         elif max_rerank >= uncertain_min:
             branch = "uncertain"
@@ -414,7 +419,7 @@ class SearchService:
             )
         else:
             branch = "low_confidence"
-            limit = fallback_n
+            limit = effective_max
             hint = None  # fallback сам покажет результат
 
         trace["adaptive_branch"] = branch
@@ -453,7 +458,7 @@ class SearchService:
 
         # ===== Шаг 8: Форматирование =====
         out = []
-        for idx, r in enumerate(valid[:max_results or 10]):
+        for idx, r in enumerate(valid[:effective_max]):
             meta = r.get("metadata") or {}
             out.append(
                 {

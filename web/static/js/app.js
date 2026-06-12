@@ -439,9 +439,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
         try {
             // Формируем тело запроса с учётом фильтра по категориям
-            const requestBody = { 
-                text: q, 
-                database: currentDatabase 
+            const requestBody = {
+                text: q,
+                database: currentDatabase,
+                max_results: 50,
             };
             
             // Приоритет: множественный фильтр (selectedPaths) > одиночный (currentFilterPath)

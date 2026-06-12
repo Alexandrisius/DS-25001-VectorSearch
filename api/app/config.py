@@ -110,16 +110,12 @@ class Settings(BaseSettings):
     mmr_lambda: float = 0.7
     mmr_pool_size: int = 100
     # Adaptive threshold: if max rerank_score >= adaptive_confident_min,
-    # "confident" → top-10. If in [adaptive_uncertain_min, confident_min) —
-    # "uncertain" → top-5 + UI hint. If < adaptive_uncertain_min — fallback
-    # to top-N by cosine similarity (>= fallback_cosine_min).
+    # "confident" → top-N (max_results). If in [adaptive_uncertain_min,
+    # confident_min) — "uncertain" → top-5 + UI hint. If < adaptive_uncertain_min
+    # — fallback to top-N by cosine similarity (>= fallback_cosine_min).
     adaptive_confident_min: float = 0.5
     adaptive_uncertain_min: float = 0.15
     fallback_cosine_min: float = 0.30
-    # How many candidates to keep in the uncertain/hint branch.
-    uncertain_top_n: int = 5
-    confident_top_n: int = 10
-    fallback_top_n: int = 10
 
     # ===== Import =====
     import_batch_size_api: int = 10
