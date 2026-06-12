@@ -16,6 +16,7 @@
 import { authFetch } from '../../shared/api.js';
 import { openrouterState } from './openrouter-state.js';
 import { updateOpenRouterUI } from './openrouter-display.js';
+import { testOpenRouterConnection } from './openrouter-test.js';
 
 /**
  * Load LLM-API settings from the server. Called on bootstrap.
@@ -68,13 +69,7 @@ export function initOpenRouterSettings() {
         });
     }
     saveBtn?.addEventListener('click', saveOpenRouterSettings);
-    // Test button is wired by openrouter-test.js to keep save/test
-    // concerns in separate files.
-    if (testBtn) {
-        import('./openrouter-test.js').then((m) => {
-            testBtn.addEventListener('click', m.testOpenRouterConnection);
-        });
-    }
+    testBtn?.addEventListener('click', testOpenRouterConnection);
 }
 
 async function saveOpenRouterSettings() {
