@@ -58,9 +58,12 @@ export async function loadData() {
 
         if (!state.dataOffset) stopInfiniteScroll();
     } catch (e) {
-        if (e.message !== 'Unauthorized') {
-            console.error('Failed to load data:', e);
-        }
+        // 'Failed to fetch' is what we get when the user navigates away
+        // (or the table gets re-rendered) while a load is in flight.
+        // That's a normal SPA-race, not a server error — don't log it.
+        if (e.message === 'Unauthorized') return;
+        if (e.message?.includes('Failed to fetch')) return;
+        console.error('Failed to load data:', e);
     } finally {
         state.isLoadingData = false;
         showInfiniteScrollLoader(false);
