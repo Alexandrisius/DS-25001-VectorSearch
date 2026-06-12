@@ -79,7 +79,7 @@ export function updateStickyCategoryHeader() {
         if (catalogState.lastStickyPath !== newStickyKey) {
             const html = visibleCategories.map((cat) => `
                 <div class="sticky-breadcrumb-item" data-level="${cat.level}" data-path="${escapeHtml(cat.path)}">
-                    <i class="fas fa-folder"></i>
+                    <i class="fas fa-folder" aria-hidden="true"></i>
                     <span title="${escapeHtml(cat.path)}">${escapeHtml(cat.name)}</span>
                 </div>
             `).join('');

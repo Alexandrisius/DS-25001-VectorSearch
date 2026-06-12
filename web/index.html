@@ -61,12 +61,12 @@
                 
                 <div class="sidebar-header">
                     <div class="sidebar-title">
-                        <i class="fas fa-folder-tree"></i>
+                        <i class="fas fa-folder-tree" aria-hidden="true"></i>
                         <span>Каталог</span>
                     </div>
-                    <button type="button" class="sidebar-toggle-btn" id="sidebarToggle" title="Свернуть/Развернуть каталог">
+                    <button class="sidebar-toggle-btn" id="sidebarToggle" title="Свернуть/Развернуть каталог">
                         <span class="toggle-text">Свернуть</span>
-                        <i class="fas fa-angles-left"></i>
+                        <i class="fas fa-angles-left" aria-hidden="true"></i>
                     </button>
                 </div>
                 
@@ -79,8 +79,8 @@
                                class="catalog-search-input" 
                                placeholder="Поиск категорий..."
                                autocomplete="off">
-                        <button type="button" class="catalog-search-clear hidden" id="catalogSearchClear" title="Очистить">
-                            <i class="fas" aria-hidden="true"></i>
+                        <button class="catalog-search-clear hidden" id="catalogSearchClear" title="Очистить">
+                            <i class="fas fa-times" aria-hidden="true"></i>
                         </button>
                     </div>
                     <div class="catalog-search-results hidden" id="catalogSearchResults">
@@ -90,10 +90,10 @@
                 
                 <!-- Подсказка о множественном выборе -->
                 <div class="multi-select-hint hidden" id="multiSelectHint">
-                    <i class="fas fa-info-circle"></i>
+                    <i class="fas fa-info-circle" aria-hidden="true"></i>
                     <span>Выбрано категорий: <strong id="selectedCount">0</strong></span>
-                    <button type="button" class="clear-selection-btn" id="clearSelectionBtn">
-                        <i class="fas" aria-hidden="true"></i> Сбросить
+                    <button class="clear-selection-btn" id="clearSelectionBtn">
+                        <i class="fas fa-times" aria-hidden="true"></i> Сбросить
                     </button>
                 </div>
                 
@@ -116,28 +116,28 @@
                     <div class="sidebar-footer-row">
                         <div class="sidebar-stats">
                             <span class="sidebar-stat">
-                                <i class="fas fa-folder"></i>
+                                <i class="fas fa-folder" aria-hidden="true"></i>
                                 <strong id="totalCategories">0</strong> категорий
                             </span>
                             <span class="sidebar-stat">
-                                <i class="fas fa-file-alt"></i>
+                                <i class="fas fa-file-alt" aria-hidden="true"></i>
                                 <strong id="totalItems">0</strong> записей
                             </span>
                         </div>
                         <div class="sidebar-buttons-group">
-                            <button type="button" class="refresh-catalog-btn" id="refreshCatalogBtn" title="Обновить каталог">
-                                <i class="fas" aria-hidden="true"></i>
+                            <button class="refresh-catalog-btn" id="refreshCatalogBtn" title="Обновить каталог">
+                                <i class="fas fa-sync-alt" aria-hidden="true"></i>
                             </button>
-                            <button type="button" class="collapse-all-btn" id="collapseAllBtn" title="Свернуть все категории">
-                                <i class="fas" aria-hidden="true"></i>
+                            <button class="collapse-all-btn" id="collapseAllBtn" title="Свернуть все категории">
+                                <i class="fas fa-compress-alt" aria-hidden="true"></i>
                             </button>
                         </div>
                     </div>
                     <div class="sidebar-hint sidebar-hint-desktop">
-                        <i class="fas fa-keyboard"></i> Ctrl+клик для множественного выбора
+                        <i class="fas fa-keyboard" aria-hidden="true"></i> Ctrl+клик для множественного выбора
                     </div>
                     <div class="sidebar-hint sidebar-hint-mobile">
-                        <i class="fas fa-hand-pointer"></i> Долгое нажатие для выбора
+                        <i class="fas fa-hand-pointer" aria-hidden="true"></i> Долгое нажатие для выбора
                     </div>
                 </div>
             </aside>

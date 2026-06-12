@@ -125,7 +125,7 @@ export function updateAllPreviews() {
         if (hierarchyCols.length === 0) {
             const descColsInner = getOrderedSelection('desc');
             if (descColsInner.length > 0) {
-                hierarchyEl.innerHTML = '<i class="fas fa-link" style="opacity:0.5; margin-right:4px;"></i>как описание';
+                hierarchyEl.innerHTML = '<i class="fas fa-link" aria-hidden="true" style="opacity:0.5; margin-right:4px;"></i>как описание';
                 hierarchyEl.title = 'Будет использоваться колонка Описания';
             } else {
                 hierarchyEl.textContent = '—';

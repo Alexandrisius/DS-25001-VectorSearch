@@ -70,7 +70,7 @@ export async function loadHierarchy(databaseName) {
         if (els.hierarchyTreeEl) {
             els.hierarchyTreeEl.innerHTML = `
                 <div class="tree-empty">
-                    <i class="fas fa-exclamation-triangle" style="color: var(--danger);"></i>
+                    <i class="fas fa-exclamation-triangle" aria-hidden="true" style="color: var(--danger);"></i>
                     <div>Не удалось загрузить каталог</div>
                     <div style="font-size: 0.8rem; margin-top: 5px;">${e.message}</div>
                 </div>

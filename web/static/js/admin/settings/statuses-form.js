@@ -111,7 +111,7 @@ async function saveStatusSettings() {
             const data = await res.json();
             state.statuses = data.statuses;
             state.defaultStatus = data.default_status;
-            saveBtn.innerHTML = '<i class="fas fa-check"></i> Сохранено!';
+            saveBtn.innerHTML = '<i class="fas fa-check" aria-hidden="true"></i> Сохранено!';
             saveBtn.classList.add('is-success');
             setTimeout(() => {
                 saveBtn.innerHTML = originalText;
@@ -124,7 +124,7 @@ async function saveStatusSettings() {
         }
     } catch (e) {
         console.error('Ошибка сохранения статусов:', e);
-        saveBtn.innerHTML = '<i class="fas fa-times"></i> Ошибка';
+        saveBtn.innerHTML = '<i class="fas fa-times" aria-hidden="true"></i> Ошибка';
         saveBtn.classList.add('is-error');
         setTimeout(() => {
             saveBtn.innerHTML = originalText;

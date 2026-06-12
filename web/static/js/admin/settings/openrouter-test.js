@@ -35,10 +35,10 @@ export async function testOpenRouterConnection() {
         updateOpenRouterUI();
 
         if (data.status === 'success') {
-            testBtn.innerHTML = '<i class="fas fa-check"></i> Оба OK';
+            testBtn.innerHTML = '<i class="fas fa-check" aria-hidden="true"></i> Оба OK';
             testBtn.classList.add('is-success');
         } else {
-            testBtn.innerHTML = '<i class="fas fa-times"></i> Есть ошибки';
+            testBtn.innerHTML = '<i class="fas fa-times" aria-hidden="true"></i> Есть ошибки';
             testBtn.classList.add('is-error');
         }
         setTimeout(() => {
@@ -53,7 +53,7 @@ export async function testOpenRouterConnection() {
         openrouterState.rerankTest = { status: 'error', message: 'Ошибка сети: ' + e.message };
         updateOpenRouterUI();
 
-        testBtn.innerHTML = '<i class="fas fa-times"></i> Ошибка';
+        testBtn.innerHTML = '<i class="fas fa-times" aria-hidden="true"></i> Ошибка';
         testBtn.classList.add('is-error');
         setTimeout(() => {
             testBtn.innerHTML = originalText;

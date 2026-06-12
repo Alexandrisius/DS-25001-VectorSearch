@@ -42,7 +42,7 @@ export function displayResults(data) {
     if (data.candidates.length === 0) {
         els.resultsBody.innerHTML = `
             <tr><td colspan="6" style="text-align: center; padding: 40px 20px; color: var(--text-secondary);">
-                <i class="fas fa-search" style="font-size: 2rem; margin-bottom: 15px; display: block; opacity: 0.5"></i>
+                <i class="fas fa-search" aria-hidden="true" style="font-size: 2rem; margin-bottom: 15px; display: block; opacity: 0.5"></i>
                 Ничего не найдено по вашему запросу.<br>Попробуйте переформулировать или изменить параметры поиска.
             </td></tr>`;
         if (els.statusInfo) {
@@ -60,7 +60,7 @@ export function displayResults(data) {
         const categoryPathDisplay = categoryPath ? categoryPath.replace(/ → /g, ' / ') : '';
         const categoryHtml = categoryPath
             ? `<div class="result-category-path" data-category-path="${escapeHtml(categoryPath)}" title="Перейти в каталог: ${escapeHtml(categoryPath)}">
-                   <i class="fas fa-folder"></i>
+                   <i class="fas fa-folder" aria-hidden="true"></i>
                    <span>${escapeHtml(categoryPathDisplay)}</span>
                </div>`
             : '';
@@ -73,7 +73,7 @@ export function displayResults(data) {
                 </td>
                 <td class="copy-cell">
                     <button class="copy-btn" title="Копировать">
-                        <i class="fas fa-copy"></i>
+                        <i class="fas fa-copy" aria-hidden="true"></i>
                     </button>
                 </td>
                 <td class="description-cell">
@@ -82,7 +82,7 @@ export function displayResults(data) {
                 </td>
                 <td class="copy-cell">
                     <button class="dislike-btn" data-rank="${c.rank}">
-                        <i class="far fa-thumbs-down"></i>
+                        <i class="far fa-thumbs-down" aria-hidden="true"></i>
                     </button>
                 </td>
                 <td>

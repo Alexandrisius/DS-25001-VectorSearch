@@ -13,6 +13,7 @@
 import { els } from '../../els.js';
 import { diffData, diffActiveTab } from '../state.js';
 import { renderDiffTable } from './render-tables.js';
+import { updateDiffTabUI } from './tabs.js';
 
 /**
  * Update counters, badges, and the delete-warning visibility.
@@ -46,16 +47,6 @@ export function updateDiffUI() {
 
     updateDiffTabUI();
     renderDiffTable();
-}
-
-/**
- * Toggle the .active class on the right tab button.
- */
-export function updateDiffTabUI() {
-    document.querySelectorAll('.diff-tab-btn').forEach((btn) => {
-        if (btn.dataset.tab === diffActiveTab.current) btn.classList.add('active');
-        else btn.classList.remove('active');
-    });
 }
 
 // Re-export the table renderer for the tabs handler.

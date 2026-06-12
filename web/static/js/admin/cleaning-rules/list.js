@@ -135,10 +135,10 @@ export const CleaningRulesModule = {
                     </div>
                     <div class="rule-actions">
                         <button class="btn-icon" data-action="preview-rule" data-rule-id="${escapeHtml(rule.id)}" title="Тест">
-                            <i class="fas fa-vial"></i>
+                            <i class="fas fa-vial" aria-hidden="true"></i>
                         </button>
                         <button class="btn-icon danger" data-action="delete-rule" data-rule-id="${escapeHtml(rule.id)}" title="Удалить">
-                            <i class="fas fa-trash"></i>
+                            <i class="fas fa-trash" aria-hidden="true"></i>
                         </button>
                     </div>
                 </div>

@@ -26,7 +26,7 @@ export function renderTreeLazy(nodes, materials = []) {
     if (!hasNodes && !hasMaterials) {
         els.hierarchyTreeEl.innerHTML = `
             <div class="tree-empty">
-                <i class="fas fa-folder-open" style="opacity: 0.5;"></i>
+                <i class="fas fa-folder-open" aria-hidden="true" style="opacity: 0.5;"></i>
                 <div>Категории не найдены</div>
             </div>
         `;
@@ -63,7 +63,7 @@ export function renderTreeNodesLazy(nodes, materials = []) {
             const codeValue = node.code || (node.codes && node.codes.length > 0 ? node.codes[0] : null);
             const copyBtnHtml = codeValue
                 ? `<button class="tree-node-copy" data-code="${escapeHtml(codeValue)}" title="Копировать ${escapeHtml(codeValue)}">
-                       <i class="fas fa-copy"></i>
+                       <i class="fas fa-copy" aria-hidden="true"></i>
                    </button>`
                 : '';
 
@@ -76,7 +76,7 @@ export function renderTreeNodesLazy(nodes, materials = []) {
                 <div class="tree-node ${isCategory ? 'category' : 'material'}" data-path="${escapeHtml(node.path)}" data-level="${node.level || 0}">
                     <div class="${headerClasses}" data-path="${escapeHtml(node.path)}" data-level="${node.level || 0}">
                         <span class="tree-node-expand ${hasChildren ? '' : 'empty'}">
-                            <i class="fas fa-chevron-right"></i>
+                            <i class="fas fa-chevron-right" aria-hidden="true"></i>
                         </span>
                         <span class="tree-node-icon ${iconTypeClass}">
                             <i class="fas ${iconClass}"></i>
@@ -100,17 +100,17 @@ export function renderTreeNodesLazy(nodes, materials = []) {
             const codeValue = material.code || '';
             const copyBtnHtml = codeValue
                 ? `<button class="tree-node-copy" data-code="${escapeHtml(codeValue)}" title="Копировать ${escapeHtml(codeValue)}">
-                       <i class="fas fa-copy"></i>
+                       <i class="fas fa-copy" aria-hidden="true"></i>
                    </button>`
                 : '';
             html += `
                 <div class="tree-node material" data-code="${escapeHtml(codeValue)}">
                     <div class="tree-node-header material-item" data-code="${escapeHtml(codeValue)}">
                         <span class="tree-node-expand empty">
-                            <i class="fas fa-chevron-right" style="visibility: hidden;"></i>
+                            <i class="fas fa-chevron-right" aria-hidden="true" style="visibility: hidden;"></i>
                         </span>
                         <span class="tree-node-icon material">
-                            <i class="fas fa-cube"></i>
+                            <i class="fas fa-cube" aria-hidden="true"></i>
                         </span>
                         <span class="tree-node-name" title="${escapeHtml(material.name)}">${escapeHtml(material.name)}</span>
                         ${copyBtnHtml}

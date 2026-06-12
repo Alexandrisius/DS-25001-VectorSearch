@@ -50,7 +50,7 @@ export async function loadJobs() {
                 ? new Date(j.created_at).toLocaleString('ru-RU')
                 : '—';
             const stopButton = canStop
-                ? `<button class="btn btn-danger btn-stop-job" data-job-id="${j.id}" title="Остановить"><i class="fas fa-stop"></i></button>`
+                ? `<button class="btn btn-danger btn-stop-job" data-job-id="${j.id}" title="Остановить"><i class="fas fa-stop" aria-hidden="true"></i></button>`
                 : '';
             return `
             <tr>

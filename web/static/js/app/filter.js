@@ -110,7 +110,7 @@ export function showCategoryOnlyToast() {
     removeExistingToast();
     const toast = document.createElement('div');
     toast.className = 'longpress-toast toast-warning';
-    toast.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Можно выбрать только категории';
+    toast.innerHTML = '<i class="fas fa-exclamation-triangle" aria-hidden="true"></i> Можно выбрать только категории';
     document.body.appendChild(toast);
     scheduleToastRemoval(toast);
 }
@@ -125,8 +125,8 @@ export function showLongPressToast(added) {
     const toast = document.createElement('div');
     toast.className = 'longpress-toast';
     toast.innerHTML = added
-        ? '<i class="fas fa-check"></i> Добавлено в фильтр'
-        : '<i class="fas fa-times"></i> Удалено из фильтра';
+        ? '<i class="fas fa-check" aria-hidden="true"></i> Добавлено в фильтр'
+        : '<i class="fas fa-times" aria-hidden="true"></i> Удалено из фильтра';
     document.body.appendChild(toast);
     scheduleToastRemoval(toast);
 }

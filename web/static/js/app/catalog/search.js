@@ -81,7 +81,7 @@ export async function performCatalogSearch(query) {
         console.error('❌ Ошибка поиска категорий:', e);
         els.catalogSearchResults.innerHTML = [
             '<div class="catalog-search-empty">',
-            '<i class="fas fa-exclamation-triangle" style="color: var(--danger);"></i>',
+            '<i class="fas fa-exclamation-triangle" aria-hidden="true" style="color: var(--danger);"></i>',
             '<div>Ошибка поиска</div>',
             '</div>',
         ].join('');
@@ -102,7 +102,7 @@ export function displayCatalogSearchResults(categories) {
     if (!categories || categories.length === 0) {
         els.catalogSearchResults.innerHTML = [
             '<div class="catalog-search-empty">',
-            '<i class="fas fa-folder-open" style="opacity: 0.5;"></i>',
+            '<i class="fas fa-folder-open" aria-hidden="true" style="opacity: 0.5;"></i>',
             '<div>Категории не найдены</div>',
             '</div>',
         ].join('');
@@ -111,7 +111,7 @@ export function displayCatalogSearchResults(categories) {
 
     let html = [
         '<div class="catalog-search-hint">',
-        '<i class="fas fa-keyboard"></i> Ctrl+клик для добавления в фильтр',
+        '<i class="fas fa-keyboard" aria-hidden="true"></i> Ctrl+клик для добавления в фильтр',
         '</div>',
     ].join('');
 
@@ -130,8 +130,8 @@ export function displayCatalogSearchResults(categories) {
             `     data-path="${escapeHtml(cat.path)}"`,
             `     data-level="${cat.level}">`,
             '    <div class="catalog-search-result-name">',
-            isSelected ? '<i class="fas fa-check-circle" style="color: var(--success); margin-right: 5px;"></i>' : '',
-            '<i class="fas fa-folder" style="color: #f59e0b; margin-right: 5px;"></i>',
+            isSelected ? '<i class="fas fa-check-circle" aria-hidden="true" style="color: var(--success); margin-right: 5px;"></i>' : '',
+            '<i class="fas fa-folder" aria-hidden="true" style="color: #f59e0b; margin-right: 5px;"></i>',
             `        ${escapeHtml(folderName)}`,
             `        <span class="catalog-search-result-score">${scoreText}</span>`,
             '    </div>',
@@ -156,7 +156,7 @@ export function displayCatalogSearchResults(categories) {
                 if (isNowSelected && !checkIcon) {
                     nameEl.insertAdjacentHTML(
                         'afterbegin',
-                        '<i class="fas fa-check-circle" style="color: var(--success); margin-right: 5px;"></i>',
+                        '<i class="fas fa-check-circle" aria-hidden="true" style="color: var(--success); margin-right: 5px;"></i>',
                     );
                 } else if (!isNowSelected && checkIcon) {
                     checkIcon.remove();

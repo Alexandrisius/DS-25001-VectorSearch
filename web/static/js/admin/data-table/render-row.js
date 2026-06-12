@@ -58,7 +58,7 @@ export function createRowElement(row) {
     html += `
         <td class="col-actions">
             <button class="btn btn-danger btn-delete-record btn-action-sm" data-id="${row.id}" title="Удалить">
-                <i class="fas fa-trash"></i>
+                <i class="fas fa-trash" aria-hidden="true"></i>
             </button>
         </td>
     `;

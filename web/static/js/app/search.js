@@ -25,7 +25,7 @@ export function setLoading(loading) {
             els.processingInfo.textContent = 'Нейросеть обрабатывает запрос...';
         }
     } else {
-        els.searchBtn.innerHTML = '<i class="fas fa-bolt"></i> Найти';
+        els.searchBtn.innerHTML = '<i class="fas fa-bolt" aria-hidden="true"></i> Найти';
     }
 }
 

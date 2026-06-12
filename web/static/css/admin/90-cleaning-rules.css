@@ -458,6 +458,12 @@
     word-break: break-word;
 }
 
+.preview-output__placeholder {
+    color: var(--color-text-muted);
+    font-style: italic;
+    font-size: 0.85rem;
+}
+
 .preview-run {
     margin: 10px 0 4px;
 }

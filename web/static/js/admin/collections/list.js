@@ -47,7 +47,7 @@ function renderCollectionsGrid() {
         card.innerHTML = `
             <div class="card-header">
                 <div class="card-title">
-                    ${isLocked ? '<i class="fas fa-lock" title="Защищённая коллекция" style="color: var(--adm-warning); margin-right: 6px;"></i>' : ''}
+                    ${isLocked ? '<i class="fas fa-lock" aria-hidden="true" title="Защищённая коллекция" style="color: var(--adm-warning); margin-right: 6px;"></i>' : ''}
                     ${c.name}
                 </div>
                 <span class="status-badge ${isVisible ? 'status-visible' : 'status-hidden'}">
@@ -70,13 +70,13 @@ function renderCollectionsGrid() {
 
             <div class="card-actions">
                 <button class="btn btn-outline" data-action="config" data-name="${c.name}">
-                    <i class="fas fa-cog"></i> Настройки
+                    <i class="fas fa-cog" aria-hidden="true"></i> Настройки
                 </button>
                 <button class="btn btn-outline" data-action="data-view" data-name="${c.name}">
-                    <i class="fas fa-table"></i> Данные
+                    <i class="fas fa-table" aria-hidden="true"></i> Данные
                 </button>
                 <button class="btn btn-outline" data-action="import" data-name="${c.name}">
-                    <i class="fas fa-upload"></i> Импорт
+                    <i class="fas fa-upload" aria-hidden="true"></i> Импорт
                 </button>
                 <button class="btn btn-danger ${isLocked ? 'btn-locked' : ''}"
                         data-action="delete" data-name="${c.name}" data-locked="${isLocked}"

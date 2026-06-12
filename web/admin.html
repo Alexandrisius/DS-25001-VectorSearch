@@ -38,12 +38,12 @@
     <!-- === ПРЕДУПРЕЖДЕНИЕ ДЛЯ МОБИЛЬНЫХ УСТРОЙСТВ === -->
     <div id="mobileWarning" class="mobile-warning-overlay hidden">
         <div class="mobile-warning-card">
-            <i class="fas fa-desktop"></i>
+            <i class="fas fa-desktop" aria-hidden="true"></i>
             <h2>Админ-панель оптимизирована для ПК</h2>
             <p>Для полноценной работы с админ-панелью рекомендуется использовать компьютер с большим экраном.</p>
             <p class="mobile-warning-card__hint">На мобильных устройствах некоторые функции могут работать
                 некорректно.</p>
-            <button type="button" id="mobileWarningClose" class="btn btn-primary">Понятно, продолжить</button>
+            <button id="mobileWarningClose" class="btn btn-primary">Понятно, продолжить</button>
         </div>
     </div>
 
@@ -53,7 +53,7 @@
             <h2 id="loginTitle">Вход в админку</h2>
             <label class="visually-hidden" for="authPassword">Пароль администратора</label>
             <input type="password" id="authPassword" placeholder="Введите пароль..." autofocus>
-            <button type="button" id="authBtn" class="btn btn-primary">Войти</button>
+            <button id="authBtn" class="btn btn-primary">Войти</button>
             <div id="authError" class="hidden auth-error" role="alert">Неверный пароль</div>
         </div>
     </div>
@@ -131,7 +131,7 @@
                         </div>
                         <!-- Индикатор загрузки для infinite scroll -->
                         <div id="infiniteScrollLoader" class="infinite-scroll-loader hidden">
-                            <i class="fas fa-spinner"></i>
+                            <i class="fas fa-spinner" aria-hidden="true"></i>
                             <span>Загрузка данных...</span>
                         </div>
                     </div>
@@ -163,7 +163,7 @@
                         <!-- Карточка: Управление статусами -->
                         <div class="settings-card">
                             <div class="settings-card-header">
-                                <i class="fas fa-palette"></i>
+                                <i class="fas fa-palette" aria-hidden="true"></i>
                                 <h3>Статусы записей</h3>
                             </div>
                             <p class="settings-card-desc">
@@ -179,7 +179,7 @@
                             <!-- Форма добавления нового статуса -->
                             <div class="add-status-section">
                                 <div class="add-status-header">
-                                    <i class="fas fa-plus"></i>
+                                    <i class="fas fa-plus" aria-hidden="true"></i>
                                     <span>Добавить новый статус</span>
                                 </div>
                                 <div class="add-status-row">
@@ -189,8 +189,8 @@
                                 <div class="new-status-color-preview" id="newStatusColorPreview"></div>
                                         <input type="color" id="newStatusColor" value="#6366f1">
                                     </div>
-                                    <button type="button" id="addStatusBtn" class="btn btn-primary" title="Добавить статус">
-                                        <i class="fas" aria-hidden="true"></i>
+                                    <button id="addStatusBtn" class="btn btn-primary" title="Добавить статус">
+                                        <i class="fas fa-plus" aria-hidden="true"></i>
                                     </button>
                                 </div>
                             </div>
@@ -198,7 +198,7 @@
                             <!-- Статус по умолчанию -->
                             <div class="default-status-section">
                                 <div class="default-status-header">
-                                    <i class="fas fa-star"></i>
+                                    <i class="fas fa-star" aria-hidden="true"></i>
                                     <span>Статус по умолчанию</span>
                                 </div>
                                 <p class="default-status-description">
@@ -211,8 +211,8 @@
 
                             <!-- Кнопка сохранения -->
                             <div class="save-statuses-section">
-                                <button type="button" id="saveStatusesBtn" class="btn btn-primary">
-                                    <i class="fas" aria-hidden="true"></i> Сохранить изменения
+                                <button id="saveStatusesBtn" class="btn btn-primary">
+                                    <i class="fas fa-save" aria-hidden="true"></i> Сохранить изменения
                                 </button>
                             </div>
                         </div>
@@ -220,7 +220,7 @@
                         <!-- Карточка: Настройки LLM API (OpenRouter / LM Studio) -->
                         <div class="settings-card">
                             <div class="settings-card-header">
-                                <i class="fas fa-cloud"></i>
+                                <i class="fas fa-cloud" aria-hidden="true"></i>
                                 <h3>LLM API (эмбеддинги + реранкер)</h3>
                             </div>
                             <p class="settings-card-desc">
@@ -245,7 +245,7 @@
                             <!-- API Key -->
                             <div class="openrouter-field-section">
                                 <label class="field-label">
-                                    <i class="fas fa-key"></i>
+                                    <i class="fas fa-key" aria-hidden="true"></i>
                                     API Key
                                 </label>
                                 <div class="api-key-input-wrapper">
@@ -253,7 +253,7 @@
                                         autocomplete="off">
                                     <button type="button" class="toggle-visibility-btn" id="toggleApiKeyVisibility"
                                         title="Показать/скрыть">
-                                        <i class="fas fa-eye"></i>
+                                        <i class="fas fa-eye" aria-hidden="true"></i>
                                     </button>
                                 </div>
                                 <p class="field-hint">
@@ -267,7 +267,7 @@
                             <!-- Base URL (опционально) -->
                             <div class="openrouter-field-section">
                                 <label class="field-label">
-                                    <i class="fas fa-link"></i>
+                                    <i class="fas fa-link" aria-hidden="true"></i>
                                     Base URL
                                     <span class="field-label__inline-hint">
                                         (опционально, для OpenAI-совместимых серверов)
@@ -277,7 +277,7 @@
                                     placeholder="http://host.docker.internal:1234/v1"
                                     class="form-input" autocomplete="off">
                                 <p class="field-hint">
-                                    <i class="fas fa-info-circle"></i>
+                                    <i class="fas fa-info-circle" aria-hidden="true"></i>
                                     Оставьте пустым для OpenRouter.
                                     Для <b>LM Studio</b> внутри Docker на этом же ПК используйте
                                     <code>http://host.docker.internal:1234/v1</code>.
@@ -287,7 +287,7 @@
                             <!-- Модель эмбеддингов -->
                             <div class="openrouter-field-section">
                                 <label class="field-label">
-                                    <i class="fas fa-brain"></i>
+                                    <i class="fas fa-brain" aria-hidden="true"></i>
                                     Модель эмбеддингов
                                 </label>
                                 <input type="text" id="openrouterModel" class="form-input"
@@ -311,7 +311,7 @@
                             <!-- Модель реранкера (cross-encoder) -->
                             <div class="openrouter-field-section">
                                 <label class="field-label">
-                                    <i class="fas fa-sort-amount-down"></i>
+                                    <i class="fas fa-sort-amount-down" aria-hidden="true"></i>
                                     Модель реранкера (cross-encoder)
                                 </label>
                                 <input type="text" id="openrouterRerankModel" class="form-input"
@@ -330,7 +330,7 @@
                             <!-- Настройки батчинга -->
                             <div class="openrouter-field-section">
                                 <label class="field-label">
-                                    <i class="fas fa-layer-group"></i>
+                                    <i class="fas fa-layer-group" aria-hidden="true"></i>
                                     Параметры батчинга
                                 </label>
                                 <div class="openrouter-batch-grid">
@@ -346,7 +346,7 @@
                                     </div>
                                 </div>
                                 <p class="field-hint form-hint-spaced">
-                                    <i class="fas fa-info-circle"></i>
+                                    <i class="fas fa-info-circle" aria-hidden="true"></i>
                                     Уменьшите значения при ошибках "No successful provider responses"
                                 </p>
                             </div>
@@ -355,7 +355,7 @@
                             <div class="openrouter-status-section" id="openrouterStatus">
                                 <div class="status-row" id="openrouterEmbedStatus">
                                     <div class="status-indicator" id="openrouterEmbedIndicator">
-                                        <i class="fas fa-circle"></i>
+                                        <i class="fas fa-circle" aria-hidden="true"></i>
                                     </div>
                                     <div class="status-text-block">
                                         <div class="status-label">Эмбеддинги:</div>
@@ -365,7 +365,7 @@
                                 </div>
                                 <div class="status-row" id="openrouterRerankStatus">
                                     <div class="status-indicator" id="openrouterRerankIndicator">
-                                        <i class="fas fa-circle"></i>
+                                        <i class="fas fa-circle" aria-hidden="true"></i>
                                     </div>
                                     <div class="status-text-block">
                                         <div class="status-label">Реранкер:</div>
@@ -377,11 +377,11 @@
 
                             <!-- Кнопки действий -->
                             <div class="openrouter-actions">
-                                <button type="button" id="testOpenrouterBtn" class="btn btn-outline">
-                                    <i class="fas" aria-hidden="true"></i> Проверить подключение
+                                <button id="testOpenrouterBtn" class="btn btn-outline">
+                                    <i class="fas fa-plug" aria-hidden="true"></i> Проверить подключение
                                 </button>
-                                <button type="button" id="saveOpenrouterBtn" class="btn btn-primary">
-                                    <i class="fas" aria-hidden="true"></i> Сохранить
+                                <button id="saveOpenrouterBtn" class="btn btn-primary">
+                                    <i class="fas fa-save" aria-hidden="true"></i> Сохранить
                                 </button>
                             </div>
                         </div>
@@ -389,7 +389,7 @@
                         <!-- Карточка: Правила очистки данных -->
                         <div class="settings-card">
                             <div class="settings-card-header">
-                                <i class="fas fa-broom"></i>
+                                <i class="fas fa-broom" aria-hidden="true"></i>
                                 <h3>Правила очистки данных</h3>
                             </div>
                             <p class="settings-card-desc">
@@ -400,7 +400,7 @@
                             <!-- Готовые шаблоны (раскрывающийся список) -->
                             <div class="templates-section" id="templatesSection">
                                 <button id="templatesToggle" class="templates-toggle" type="button">
-                                    <i class="fas fa-lightbulb"></i>
+                                    <i class="fas fa-lightbulb" aria-hidden="true"></i>
                                     <span>Готовые шаблоны</span>
                                     <i class="fas fa-chevron-down toggle-icon"></i>
                                 </button>
@@ -417,7 +417,7 @@
                             <!-- Форма добавления нового правила (свёрнута по умолчанию) -->
                             <div class="add-rule-section" id="addRuleSection">
                                 <button id="addRuleToggle" class="add-rule-toggle" type="button">
-                                    <i class="fas fa-plus"></i>
+                                    <i class="fas fa-plus" aria-hidden="true"></i>
                                     <span>Новое правило</span>
                                     <i class="fas fa-chevron-down toggle-icon"></i>
                                 </button>
@@ -444,17 +444,17 @@
                                         <div class="target-pills" id="newRuleTargets">
                                             <label class="target-pill" data-target="description">
                                                 <input type="checkbox" name="newRuleTarget" value="description">
-                                                <i class="fas fa-align-left"></i>
+                                                <i class="fas fa-align-left" aria-hidden="true"></i>
                                                 <span>Описание</span>
                                             </label>
                                             <label class="target-pill" data-target="hierarchy">
                                                 <input type="checkbox" name="newRuleTarget" value="hierarchy">
-                                                <i class="fas fa-sitemap"></i>
+                                                <i class="fas fa-sitemap" aria-hidden="true"></i>
                                                 <span>Иерархия</span>
                                             </label>
                                             <label class="target-pill" data-target="hierarchy_level">
                                                 <input type="checkbox" name="newRuleTarget" value="hierarchy_level" checked>
-                                                <i class="fas fa-layer-group"></i>
+                                                <i class="fas fa-layer-group" aria-hidden="true"></i>
                                                 <span>Уровни иерархии</span>
                                             </label>
                                         </div>
@@ -464,10 +464,10 @@
                                             Отмена
                                         </button>
                                         <button id="previewCleaningRuleBtn" class="btn btn-outline" type="button">
-                                            <i class="fas fa-vial"></i> Тест
+                                            <i class="fas fa-vial" aria-hidden="true"></i> Тест
                                         </button>
                                         <button id="addCleaningRuleBtn" class="btn btn-primary" type="button">
-                                            <i class="fas fa-plus"></i> Добавить
+                                            <i class="fas fa-plus" aria-hidden="true"></i> Добавить
                                         </button>
                                     </div>
                                 </div>
@@ -475,8 +475,8 @@
 
                             <!-- Кнопка сохранения -->
                             <div class="save-rules-section">
-                                <button type="button" id="saveCleaningRulesBtn" class="btn btn-primary">
-                                    <i class="fas" aria-hidden="true"></i> Сохранить правила
+                                <button id="saveCleaningRulesBtn" class="btn btn-primary">
+                                    <i class="fas fa-save" aria-hidden="true"></i> Сохранить правила
                                 </button>
                             </div>
                         </div>
@@ -492,7 +492,7 @@
         <div class="modal-window preview-modal">
             <div class="modal-header">
                 <h3 id="cleaningPreviewTitle">Проверка правила очистки</h3>
-                <button type="button" class="modal-close" data-close="preview" aria-label="Закрыть">&times;</button>
+                <button class="modal-close" data-close="preview" aria-label="Закрыть">&times;</button>
             </div>
             <div class="modal-body">
                 <div class="preview-meta" id="previewMeta">
@@ -502,7 +502,7 @@
                 <textarea id="previewTestInput" class="preview-input" rows="3"
                     placeholder="Введите тестовую строку, например: «Раздел  1.2.3  Трубы»"></textarea>
                 <button id="runPreviewBtn" class="btn btn-primary preview-run" type="button">
-                    <i class="fas fa-play"></i> Запустить
+                    <i class="fas fa-play" aria-hidden="true"></i> Запустить
                 </button>
                 <label class="preview-label">Результат</label>
                 <div id="previewOutput" class="preview-output">
@@ -513,7 +513,7 @@
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-outline" data-close="preview">Закрыть</button>
+                <button class="btn btn-outline" data-close="preview">Закрыть</button>
             </div>
         </div>
     </div>
@@ -525,7 +525,7 @@
         <div class="modal-window">
             <div class="modal-header">
                 <h3 id="configTitle">Настройки коллекции</h3>
-                <button type="button" class="modal-close" aria-label="Закрыть">&times;</button>
+                <button class="modal-close" aria-label="Закрыть">&times;</button>
             </div>
             <div class="modal-body">
                 <input type="hidden" id="cfgName">
@@ -541,7 +541,7 @@
                 <!-- Phase 4: RRF fusion -->
                 <div class="config-section">
                     <div class="config-section-title">
-                        <i class="fas fa-layer-group"></i>
+                        <i class="fas fa-layer-group" aria-hidden="true"></i>
                         <span>RRF fusion</span>
                         <small>Reciprocal Rank Fusion — слияние dense (vector) + BM25 (sparse) результатов</small>
                     </div>
@@ -570,7 +570,7 @@
                 <!-- Phase 4: MMR + adaptive threshold -->
                 <div class="config-section">
                     <div class="config-section-title">
-                        <i class="fas fa-filter"></i>
+                        <i class="fas fa-filter" aria-hidden="true"></i>
                         <span>Адаптивный threshold</span>
                         <small>Ручные пороги не нужны — система сама выбирает ветку по max(rerank_score)</small>
                     </div>
@@ -599,7 +599,7 @@
                 <!-- Legacy поля (deprecated, но оставлены для обратной совместимости) -->
                 <details class="config-section config-section-deprecated">
                     <summary class="config-section-title">
-                        <i class="fas fa-clock-rotate-left"></i>
+                        <i class="fas fa-clock-rotate-left" aria-hidden="true"></i>
                         <span>Устаревшие пороги (не используются)</span>
                     </summary>
                     <div class="form-row form-row-pair form-row-pair--spaced">
@@ -615,8 +615,8 @@
                 </details>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-outline modal-close-btn">Отмена</button>
-                <button type="button" id="saveConfigBtn" class="btn btn-primary">Сохранить</button>
+                <button class="btn btn-outline modal-close-btn">Отмена</button>
+                <button id="saveConfigBtn" class="btn btn-primary">Сохранить</button>
             </div>
         </div>
     </div>
@@ -626,7 +626,7 @@
         <div class="modal-window">
             <div class="modal-header">
                 <h3 id="createTitle">Создать коллекцию</h3>
-                <button type="button" class="modal-close" aria-label="Закрыть">&times;</button>
+                <button class="modal-close" aria-label="Закрыть">&times;</button>
             </div>
             <div class="modal-body">
                 <div class="form-section-spaced">
@@ -654,8 +654,8 @@
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-outline modal-close-btn">Отмена</button>
-                <button type="button" id="createCollBtn" class="btn btn-primary">Создать</button>
+                <button class="btn btn-outline modal-close-btn">Отмена</button>
+                <button id="createCollBtn" class="btn btn-primary">Создать</button>
             </div>
         </div>
     </div>
@@ -665,7 +665,7 @@
         <div class="modal-window">
             <div class="modal-header">
                 <h3 id="addRecordTitle">Добавить запись</h3>
-                <button type="button" class="modal-close" aria-label="Закрыть">&times;</button>
+                <button class="modal-close" aria-label="Закрыть">&times;</button>
             </div>
             <div class="modal-body">
                 <div class="form-section-spaced">
@@ -678,8 +678,8 @@
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-outline modal-close-btn">Отмена</button>
-                <button type="button" id="saveRecBtn" class="btn btn-primary">Сохранить</button>
+                <button class="btn btn-outline modal-close-btn">Отмена</button>
+                <button id="saveRecBtn" class="btn btn-primary">Сохранить</button>
             </div>
         </div>
     </div>
@@ -689,7 +689,7 @@
         <div class="modal-window modal-window--narrow">
             <div class="modal-header modal-header--danger">
                 <h3 id="deleteTitle"><i class="fas fa-exclamation-triangle" aria-hidden="true"></i> Удаление коллекции</h3>
-                <button type="button" class="modal-close" aria-label="Закрыть">&times;</button>
+                <button class="modal-close" aria-label="Закрыть">&times;</button>
             </div>
             <div class="modal-body">
                 <div class="delete-warning">
@@ -714,9 +714,9 @@
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-outline modal-close-btn">Отмена</button>
-                <button type="button" id="confirmDeleteBtn" class="btn btn-danger" disabled>
-                    <i class="fas" aria-hidden="true"></i> Удалить навсегда
+                <button class="btn btn-outline modal-close-btn">Отмена</button>
+                <button id="confirmDeleteBtn" class="btn btn-danger" disabled>
+                    <i class="fas fa-trash" aria-hidden="true"></i> Удалить навсегда
                 </button>
             </div>
         </div>
@@ -730,7 +730,7 @@
             <div class="modal-resizer modal-resizer-right" data-direction="right"></div>
             <div class="modal-header">
                 <h3 id="importTitle"><i class="fas fa-file-import" aria-hidden="true"></i> Импорт данных</h3>
-                <button type="button" class="modal-close" aria-label="Закрыть">&times;</button>
+                <button class="modal-close" aria-label="Закрыть">&times;</button>
             </div>
             <div class="modal-body">
                 <input type="hidden" id="importTargetCollection">
@@ -740,11 +740,11 @@
 
                     <!-- Вкладки: CSV / Excel -->
                     <div class="import-source-tabs">
-                        <button type="button" class="source-tab active" data-source="paste">
-                            <i class="fas" aria-hidden="true"></i> Вставить CSV/TSV
+                        <button class="source-tab active" data-source="paste">
+                            <i class="fas fa-paste" aria-hidden="true"></i> Вставить CSV/TSV
                         </button>
-                        <button type="button" class="source-tab" data-source="excel">
-                            <i class="fas" aria-hidden="true"></i> Загрузить Excel
+                        <button class="source-tab" data-source="excel">
+                            <i class="fas fa-file-excel" aria-hidden="true"></i> Загрузить Excel
                         </button>
                     </div>
 
@@ -757,7 +757,7 @@
                         <!-- Выбор разделителя -->
                         <div class="delimiter-selector delimiter-selector--spaced">
                             <label class="delimiter-label">
-                                <i class="fas fa-columns"></i> Разделитель колонок:
+                                <i class="fas fa-columns" aria-hidden="true"></i> Разделитель колонок:
                             </label>
                             <div class="delimiter-options">
                                 <label class="delimiter-option">
@@ -791,11 +791,11 @@
 
                         <!-- Зона drag-and-drop для Excel -->
                         <div class="excel-drop-zone" id="excelDropZone">
-                            <i class="fas fa-file-excel"></i>
+                            <i class="fas fa-file-excel" aria-hidden="true"></i>
                             <p>Перетащите Excel файл сюда</p>
                             <span>или</span>
                             <label for="excelFileInput" class="btn btn-outline excel-cursor-pointer">
-                                <i class="fas fa-folder-open"></i> Выбрать файл
+                                <i class="fas fa-folder-open" aria-hidden="true"></i> Выбрать файл
                             </label>
                             <input type="file" id="excelFileInput" accept=".xlsx,.xls" hidden>
                         </div>
@@ -803,13 +803,13 @@
                         <!-- Информация о загруженном файле -->
                         <div id="excelFileInfo" class="excel-file-info hidden">
                             <div class="file-info-card">
-                                <i class="fas fa-file-excel"></i>
+                                <i class="fas fa-file-excel" aria-hidden="true"></i>
                                 <div class="file-details">
                                     <span id="excelFileName" class="file-name">—</span>
                                     <span id="excelFileStats" class="file-stats">—</span>
                                 </div>
-                                <button type="button" id="excelFileClear" class="btn btn-sm btn-outline" title="Очистить">
-                                    <i class="fas" aria-hidden="true"></i>
+                                <button id="excelFileClear" class="btn btn-sm btn-outline" title="Очистить">
+                                    <i class="fas fa-times" aria-hidden="true"></i>
                                 </button>
                             </div>
                         </div>
@@ -817,7 +817,7 @@
                         <!-- Выбор листа (если несколько) -->
                         <div id="excelSheetSelector" class="excel-sheet-selector hidden">
                             <label class="excel-label">
-                                <i class="fas fa-layer-group"></i> Выберите лист:
+                                <i class="fas fa-layer-group" aria-hidden="true"></i> Выберите лист:
                             </label>
                             <select id="excelSheetSelect" class="form-select-modern">
                                 <!-- Заполняется через JS -->
@@ -834,7 +834,7 @@
                         <!-- Панель 1: Колонки Кода (ID) -->
                         <div class="mapper-card">
                             <div class="mapper-card-header">
-                                <i class="fas fa-hashtag"></i>
+                                <i class="fas fa-hashtag" aria-hidden="true"></i>
                                 <span>Колонки Кода (ID)</span>
                                 <!-- Разделитель перемещён сюда -->
                                 <div class="header-separator">
@@ -847,7 +847,7 @@
                                 <!-- Заполняется через JS -->
                             </div>
                             <p class="mapper-hint">
-                                <i class="fas fa-lightbulb"></i>
+                                <i class="fas fa-lightbulb" aria-hidden="true"></i>
                                 Уникальный шифр записи
                             </p>
                         </div>
@@ -855,7 +855,7 @@
                         <!-- Панель 2: Колонки Описания (название материала) -->
                         <div class="mapper-card">
                             <div class="mapper-card-header">
-                                <i class="fas fa-align-left"></i>
+                                <i class="fas fa-align-left" aria-hidden="true"></i>
                                 <span>Колонки Описания</span>
                                 <!-- Кастомный разделитель для склейки описания -->
                                 <div class="header-separator">
@@ -869,7 +869,7 @@
                                 <!-- Заполняется через JS -->
                             </div>
                             <p class="mapper-hint">
-                                <i class="fas fa-lightbulb"></i>
+                                <i class="fas fa-lightbulb" aria-hidden="true"></i>
                                 Полное наименование материала
                             </p>
                         </div>
@@ -877,7 +877,7 @@
                         <!-- Панель 3: Колонки Иерархии (каталог) -->
                         <div class="mapper-card">
                             <div class="mapper-card-header">
-                                <i class="fas fa-folder-tree"></i>
+                                <i class="fas fa-folder-tree" aria-hidden="true"></i>
                                 <span>Колонки Иерархии</span>
                             </div>
                             <!-- Цифровые чек-боксы для иерархии -->
@@ -885,7 +885,7 @@
                                 <!-- Заполняется через JS -->
                             </div>
                             <p class="mapper-hint">
-                                <i class="fas fa-lightbulb"></i>
+                                <i class="fas fa-lightbulb" aria-hidden="true"></i>
                                 Структура каталога (или как описание)
                             </p>
                         </div>
@@ -912,7 +912,7 @@
                     <!-- Предпросмотр данных -->
                     <div class="import-preview">
                         <div class="preview-header">
-                            <i class="fas fa-table"></i> Предпросмотр данных
+                            <i class="fas fa-table" aria-hidden="true"></i> Предпросмотр данных
                             <span id="previewCount" class="preview-count">0 строк</span>
                         </div>
                         <div class="preview-table-wrap">
@@ -929,22 +929,22 @@
                     <!-- Статистика изменений -->
                     <div class="diff-summary" id="diffSummary">
                         <div class="diff-stat added">
-                            <i class="fas fa-plus-circle"></i>
+                            <i class="fas fa-plus-circle" aria-hidden="true"></i>
                             <span class="count" id="diffAddedCount">0</span>
                             <span>добавлено</span>
                         </div>
                         <div class="diff-stat modified">
-                            <i class="fas fa-edit"></i>
+                            <i class="fas fa-edit" aria-hidden="true"></i>
                             <span class="count" id="diffModifiedCount">0</span>
                             <span>изменено</span>
                         </div>
                         <div class="diff-stat deleted">
-                            <i class="fas fa-minus-circle"></i>
+                            <i class="fas fa-minus-circle" aria-hidden="true"></i>
                             <span class="count" id="diffDeletedCount">0</span>
                             <span>удалено</span>
                         </div>
                         <div class="diff-stat folders">
-                            <i class="fas fa-folder"></i>
+                            <i class="fas fa-folder" aria-hidden="true"></i>
                             <span class="count" id="diffFoldersCount">0</span>
                             <span>папок</span>
                         </div>
@@ -952,26 +952,26 @@
 
                     <!-- Предупреждение об удалениях -->
                     <div class="diff-delete-warning hidden" id="diffDeleteWarning">
-                        <i class="fas fa-exclamation-triangle"></i>
+                        <i class="fas fa-exclamation-triangle" aria-hidden="true"></i>
                         <span>Записи будут удалены из базы! Проверьте список ниже.</span>
                     </div>
 
                     <!-- Табы для категорий -->
                     <div class="diff-tabs">
-                        <button type="button" class="diff-tab-btn active" data-tab="added">
-                            <i class="fas" aria-hidden="true"></i> Добавленные
+                        <button class="diff-tab-btn active" data-tab="added">
+                            <i class="fas fa-plus" aria-hidden="true"></i> Добавленные
                             <span class="badge" id="diffAddedBadge">0</span>
                         </button>
-                        <button type="button" class="diff-tab-btn" data-tab="modified">
-                            <i class="fas" aria-hidden="true"></i> Изменённые
+                        <button class="diff-tab-btn" data-tab="modified">
+                            <i class="fas fa-edit" aria-hidden="true"></i> Изменённые
                             <span class="badge" id="diffModifiedBadge">0</span>
                         </button>
-                        <button type="button" class="diff-tab-btn" data-tab="deleted">
-                            <i class="fas" aria-hidden="true"></i> Удалённые
+                        <button class="diff-tab-btn" data-tab="deleted">
+                            <i class="fas fa-trash" aria-hidden="true"></i> Удалённые
                             <span class="badge" id="diffDeletedBadge">0</span>
                         </button>
-                        <button type="button" class="diff-tab-btn" data-tab="folders">
-                            <i class="fas" aria-hidden="true"></i> Папки
+                        <button class="diff-tab-btn" data-tab="folders">
+                            <i class="fas fa-folder" aria-hidden="true"></i> Папки
                             <span class="badge" id="diffFoldersBadge">0</span>
                         </button>
                     </div>
@@ -993,7 +993,7 @@
 
                     <!-- Empty state -->
                     <div class="diff-empty hidden" id="diffEmpty">
-                        <i class="fas fa-check-circle"></i>
+                        <i class="fas fa-check-circle" aria-hidden="true"></i>
                         <p>Нет записей в этой категории</p>
                     </div>
 
@@ -1018,20 +1018,20 @@
             </div>
             <div class="modal-footer">
                 <!-- Кнопки меняются в зависимости от шага -->
-                <button type="button" id="importBackBtn" class="btn btn-outline hidden">
-                    <i class="fas" aria-hidden="true"></i> Назад
+                <button id="importBackBtn" class="btn btn-outline hidden">
+                    <i class="fas fa-arrow-left" aria-hidden="true"></i> Назад
                 </button>
-                <button type="button" id="importNextBtn" class="btn btn-primary">
-                    Далее <i class="fas" aria-hidden="true"></i>
+                <button id="importNextBtn" class="btn btn-primary">
+                    Далее <i class="fas fa-arrow-right" aria-hidden="true"></i>
                 </button>
-                <button type="button" id="importCompareBtn" class="btn btn-warning hidden">
-                    <i class="fas" aria-hidden="true"></i> Сравнить с базой
+                <button id="importCompareBtn" class="btn btn-warning hidden">
+                    <i class="fas fa-code-compare" aria-hidden="true"></i> Сравнить с базой
                 </button>
-                <button type="button" id="importUploadBtn" class="btn btn-primary hidden">
-                    <i class="fas" aria-hidden="true"></i> Загрузить всё
+                <button id="importUploadBtn" class="btn btn-primary hidden">
+                    <i class="fas fa-upload" aria-hidden="true"></i> Загрузить всё
                 </button>
-                <button type="button" id="importApplyBtn" class="btn btn-success hidden">
-                    <i class="fas" aria-hidden="true"></i> Применить изменения
+                <button id="importApplyBtn" class="btn btn-success hidden">
+                    <i class="fas fa-check" aria-hidden="true"></i> Применить изменения
                 </button>
             </div>
         </div>

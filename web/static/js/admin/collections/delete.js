@@ -97,6 +97,6 @@ async function onConfirmDelete() {
         alert('Ошибка сети: ' + e.message);
     } finally {
         els.confirmDeleteBtn.disabled = false;
-        els.confirmDeleteBtn.innerHTML = '<i class="fas fa-trash"></i> Удалить навсегда';
+        els.confirmDeleteBtn.innerHTML = '<i class="fas fa-trash" aria-hidden="true"></i> Удалить навсегда';
     }
 }

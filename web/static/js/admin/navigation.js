@@ -57,7 +57,7 @@ export function switchView(viewName) {
         els.pageTitle.innerText = 'Коллекции';
         const createBtn = document.createElement('button');
         createBtn.className = 'btn btn-primary';
-        createBtn.innerHTML = '<i class="fas fa-plus"></i> Создать коллекцию';
+        createBtn.innerHTML = '<i class="fas fa-plus" aria-hidden="true"></i> Создать коллекцию';
         createBtn.addEventListener('click', () => openModal('create'));
         els.headerActions.appendChild(createBtn);
         loadCollections();
@@ -69,14 +69,14 @@ export function switchView(viewName) {
 
         const backBtn = document.createElement('button');
         backBtn.className = 'btn btn-outline';
-        backBtn.innerHTML = '<i class="fas fa-arrow-left"></i> Назад';
+        backBtn.innerHTML = '<i class="fas fa-arrow-left" aria-hidden="true"></i> Назад';
         backBtn.addEventListener('click', () => switchView('collections'));
         els.headerActions.appendChild(backBtn);
 
         const addBtn = document.createElement('button');
         addBtn.className = 'btn btn-primary';
         addBtn.style.marginLeft = '10px';
-        addBtn.innerHTML = '<i class="fas fa-plus"></i> Добавить запись';
+        addBtn.innerHTML = '<i class="fas fa-plus" aria-hidden="true"></i> Добавить запись';
         addBtn.addEventListener('click', () => {
             if (els.newRecCode) els.newRecCode.value = '';
             if (els.newRecDesc) els.newRecDesc.value = '';

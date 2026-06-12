@@ -34,7 +34,7 @@ export function initResultsHandlers() {
             const rank = parseInt(row.dataset.rank, 10);
             navigator.clipboard.writeText(code).then(() => {
                 const originalHtml = btn.innerHTML;
-                btn.innerHTML = '<i class="fas fa-check" style="color:var(--success)"></i>';
+                btn.innerHTML = '<i class="fas fa-check" aria-hidden="true" style="color:var(--success)"></i>';
                 setTimeout(() => { btn.innerHTML = originalHtml; }, 1500);
                 if (appState.currentQuery && appState.currentResults.length > 0) {
                     const result = appState.currentResults.find((r) => r.rank === rank);
@@ -59,7 +59,7 @@ export function initResultsHandlers() {
             const row = btn.closest('tr');
             if (!row) return;
             const rank = parseInt(row.dataset.rank, 10);
-            btn.innerHTML = '<i class="fas fa-thumbs-down" style="color:var(--danger)"></i>';
+            btn.innerHTML = '<i class="fas fa-thumbs-down" aria-hidden="true" style="color:var(--danger)"></i>';
             if (appState.currentQuery && appState.currentResults.length > 0) {
                 const result = appState.currentResults.find((r) => r.rank === rank);
                 if (result) {

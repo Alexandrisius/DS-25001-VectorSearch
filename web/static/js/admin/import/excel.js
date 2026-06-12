@@ -76,11 +76,11 @@ export function resetExcelUploadUI() {
     if (dropZone) {
         dropZone.classList.remove('hidden');
         dropZone.innerHTML = `
-            <i class="fas fa-file-excel"></i>
+            <i class="fas fa-file-excel" aria-hidden="true"></i>
             <p>Перетащите Excel файл сюда</p>
             <span>или</span>
             <label for="excelFileInput" class="btn btn-outline" style="cursor: pointer;">
-                <i class="fas fa-folder-open"></i> Выбрать файл
+                <i class="fas fa-folder-open" aria-hidden="true"></i> Выбрать файл
             </label>
             <input type="file" id="excelFileInput" accept=".xlsx,.xls" hidden>
         `;

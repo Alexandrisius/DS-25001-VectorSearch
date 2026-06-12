@@ -81,7 +81,7 @@ export function renderTemplates() {
         <button class="template-chip" type="button"
                 data-template-id="${escapeHtml(t.id)}"
                 title="${escapeHtml(t.description)}">
-            <i class="fas fa-magic"></i>
+            <i class="fas fa-magic" aria-hidden="true"></i>
             ${escapeHtml(t.name)}
         </button>
     `).join('');

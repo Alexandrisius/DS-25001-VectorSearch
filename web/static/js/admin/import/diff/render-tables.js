@@ -95,7 +95,7 @@ function renderFoldersDiffTable() {
         html += `
             <tr class="folder-section-header">
                 <td colspan="3" class="diff-folder-section-header diff-folder-section-header--added">
-                    <i class="fas fa-plus-circle"></i> Новые папки — ${added.length} шт.
+                    <i class="fas fa-plus-circle" aria-hidden="true"></i> Новые папки — ${added.length} шт.
                 </td>
             </tr>
             <tr class="folder-table-subheader">
@@ -110,7 +110,7 @@ function renderFoldersDiffTable() {
                     <td>
                         <div class="folder-name-cell">
                             <span class="folder-leaf-name">${escapeHtml(folder.leaf_name)}</span>
-                            <span class="folder-full-path"><i class="fas fa-folder-open"></i> ${escapeHtml(folder.full_path)}</span>
+                            <span class="folder-full-path"><i class="fas fa-folder-open" aria-hidden="true"></i> ${escapeHtml(folder.full_path)}</span>
                         </div>
                     </td>
                     <td><span class="status-badge status-new">Новая папка</span></td>
@@ -127,7 +127,7 @@ function renderFoldersDiffTable() {
         html += `
             <tr class="folder-section-header">
                 <td colspan="3" class="diff-folder-section-header diff-folder-section-header--modified">
-                    <i class="fas fa-pen"></i> Переименованные папки — ${modified.length} шт.
+                    <i class="fas fa-pen" aria-hidden="true"></i> Переименованные папки — ${modified.length} шт.
                 </td>
             </tr>
             <tr class="folder-table-subheader">
@@ -142,13 +142,13 @@ function renderFoldersDiffTable() {
                     <td>
                         <div class="folder-name-cell">
                             <span class="folder-leaf-name">${escapeHtml(folder.leaf_name)}</span>
-                            <span class="folder-full-path"><i class="fas fa-folder-open"></i> ${escapeHtml(folder.full_path)}</span>
+                            <span class="folder-full-path"><i class="fas fa-folder-open" aria-hidden="true"></i> ${escapeHtml(folder.full_path)}</span>
                         </div>
                     </td>
                     <td>
                         <div class="folder-name-cell">
                             <span class="folder-leaf-name folder-leaf-name--old">${escapeHtml(folder.old_leaf_name || '')}</span>
-                            <span class="folder-full-path folder-full-path--old"><i class="fas fa-folder-open"></i> ${escapeHtml(folder.old_path || '')}</span>
+                            <span class="folder-full-path folder-full-path--old"><i class="fas fa-folder-open" aria-hidden="true"></i> ${escapeHtml(folder.old_path || '')}</span>
                         </div>
                     </td>
                     <td class="folder-count-cell">${folder.items_count}</td>
@@ -164,7 +164,7 @@ function renderFoldersDiffTable() {
         html += `
             <tr class="folder-section-header">
                 <td colspan="3" class="diff-folder-section-header diff-folder-section-header--deleted">
-                    <i class="fas fa-trash-alt"></i> Удаляемые папки — ${deleted.length} шт. (нет материалов)
+                    <i class="fas fa-trash-alt" aria-hidden="true"></i> Удаляемые папки — ${deleted.length} шт. (нет материалов)
                 </td>
             </tr>
             <tr class="folder-table-subheader">
@@ -179,7 +179,7 @@ function renderFoldersDiffTable() {
                     <td>
                         <div class="folder-name-cell">
                             <span class="folder-leaf-name">${escapeHtml(folder.leaf_name)}</span>
-                            <span class="folder-full-path"><i class="fas fa-folder-open"></i> ${escapeHtml(folder.full_path)}</span>
+                            <span class="folder-full-path"><i class="fas fa-folder-open" aria-hidden="true"></i> ${escapeHtml(folder.full_path)}</span>
                         </div>
                     </td>
                     <td><span class="status-badge status-deleted">Папка осиротела — нет материалов</span></td>

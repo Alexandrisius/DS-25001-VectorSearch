@@ -49,18 +49,18 @@ export function renderStatusesSettings() {
     container.innerHTML = state.statuses.map((status) => `
         <div class="status-item" data-status-id="${escapeHtml(status.id)}" style="--status-color: ${status.color};">
             <div class="status-color-preview" style="background: ${status.color};" title="Нажмите для изменения цвета">
-                <i class="fas fa-palette"></i>
+                <i class="fas fa-palette" aria-hidden="true"></i>
                 <input type="color" class="status-color-picker" value="${status.color}">
             </div>
             <div class="status-content">
                 <div class="status-id-badge">
-                    <i class="fas fa-hashtag"></i>
+                    <i class="fas fa-hashtag" aria-hidden="true"></i>
                     ${escapeHtml(status.id)}
                 </div>
                 <input type="text" class="status-label-input" value="${escapeHtml(status.label)}" placeholder="Название статуса">
             </div>
             <button class="btn-remove-status" title="Удалить статус">
-                <i class="fas fa-trash"></i>
+                <i class="fas fa-trash" aria-hidden="true"></i>
             </button>
         </div>
     `).join('');
