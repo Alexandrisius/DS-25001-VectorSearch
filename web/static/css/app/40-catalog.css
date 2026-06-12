@@ -420,10 +420,6 @@
     line-height: 1.4;
 }
 
-.tree-node-code {
-    display: none;  /* KSR code badge is hidden by design */
-}
-
 .tree-node-count {
     font-size: 0.65rem;
     color: var(--text-secondary);

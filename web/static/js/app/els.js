@@ -9,6 +9,9 @@ function $id(id) {
 const themeToggle = $id('themeToggle');
 const themeIcon = themeToggle ? themeToggle.querySelector('i') : null;
 const themeText = themeToggle ? themeToggle.querySelector('span') : null;
+// (themeText is the visible label inside the toggle on desktop;
+//  on mobile it is .visually-hidden so screen readers still
+//  announce the state change.)
 
 export const els = {
     // Search

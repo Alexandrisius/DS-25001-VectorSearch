@@ -2,7 +2,13 @@
  * Light/dark theme toggle.
  *
  * The current theme is stored in localStorage under the `theme` key
- * (see shared/constants.js). The default is `dark`.
+ * (see shared/constants.js). The default is `dark`, but if the user
+ * hasn't made a choice the OS preference (prefers-color-scheme) wins
+ * — the shared/00-tokens.css file already implements the right CSS
+ * cascade for that.
+ *
+ * Renders the sun/moon icon into the toggle's <i> element by
+ * toggling fa-sun / fa-moon class on it.
  */
 
 import { els } from './els.js';
@@ -12,7 +18,7 @@ const THEME_KEY = STORAGE_KEYS.theme;
 const DEFAULT_THEME = 'dark';
 
 /**
- * Initialise the theme: read from storage, fall back to dark.
+ * Initialise the theme: read from storage, fall back to OS default.
  * Called once at bootstrap.
  */
 export function initTheme() {
@@ -32,7 +38,7 @@ export function initTheme() {
 }
 
 /**
- * Apply a theme to the document and update the toggle button label.
+ * Apply a theme to the document and update the toggle button icon.
  *
  * @param {'dark'|'light'} theme
  */
@@ -44,13 +50,16 @@ export function setTheme(theme) {
         /* storage unavailable */
     }
 
-    if (theme === 'dark') {
-        els.themeIcon?.classList.remove('fa-moon');
-        els.themeIcon?.classList.add('fa-sun');
-        if (els.themeText) els.themeText.textContent = 'Светлая тема';
-    } else {
-        els.themeIcon?.classList.remove('fa-sun');
-        els.themeIcon?.classList.add('fa-moon');
-        if (els.themeText) els.themeText.textContent = 'Тёмная тема';
+    if (els.themeIcon) {
+        if (theme === 'dark') {
+            els.themeIcon.classList.remove('fa-moon');
+            els.themeIcon.classList.add('fa-sun');
+        } else {
+            els.themeIcon.classList.remove('fa-sun');
+            els.themeIcon.classList.add('fa-moon');
+        }
+    }
+    if (els.themeText) {
+        els.themeText.textContent = theme === 'dark' ? 'Светлая тема' : 'Тёмная тема';
     }
 }

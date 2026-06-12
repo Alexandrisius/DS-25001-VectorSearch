@@ -66,7 +66,9 @@ WebSocket progress: `/admin/jobs/{id}/ws` (Redis pub/sub `job:{id}`).
 | `web/static/**` | Refresh browser (`Ctrl+Shift+R`) |
 | `web/admin.html` (JS version) | Bump `?v=` in `<script src=...>` |
 | `Makefile` / `docker-compose.yml` | `make restart` (no rebuild needed) |
-| `web/static/css/**` | Bump `?v=` in `<link href=...>` |
+| `web/static/css/**` | Bump `?v=` in `<link href=...>` (currently `?v=5` for all CSS) |
+| `web/static/js/**/*.js` | ES modules are content-addressed; just refresh |
+| `web/admin.html` / `web/index.html` | Refresh browser |
 
 ## 5. Critical Gotchas (READ FIRST — top 7)
 
