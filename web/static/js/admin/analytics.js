@@ -209,9 +209,9 @@ async function loadRecent(hours) {
                 <td>${escapeHtml(r.query || '')}</td>
                 <td>${escapeHtml(r.collection || '')}</td>
                 <td class="td-num-inline">${r.candidates_count}</td>
-                <td>${branchTag(r.branch)}</td>
+                <td class="td-center">${branchTag(r.branch)}</td>
                 <td>${renderTimings(r)}</td>
-                <td>${renderActions(r.copied_codes, r.disliked_codes)}</td>
+                <td class="td-center">${renderActions(r.copied_codes, r.disliked_codes)}</td>
             </tr>`;
         })
         .join('');

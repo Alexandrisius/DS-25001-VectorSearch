@@ -184,17 +184,18 @@
     font-variant-numeric: tabular-nums;
 }
 
-/* Числовые row-атрибуты (counts): left-align, но цифры ровные */
+/* Числовые row-атрибуты (counts): center + моноширинно + tabular-nums */
 .analytics-table .td-num-inline {
+    text-align: center;
     font-variant-numeric: tabular-nums;
     font-family: var(--font-mono);
     font-size: 12px;
     color: var(--adm-text);
 }
 
-/* Числовые измерения (time, размер): right-align + моноширинно */
+/* Числовые измерения (time, размер): center + моноширинно */
 .analytics-table .td-num {
-    text-align: right;
+    text-align: center;
     font-variant-numeric: tabular-nums;
     font-family: var(--font-mono);
     font-size: 12px;
@@ -203,6 +204,16 @@
 .analytics-table .td-num--strong {
     color: var(--adm-text);
     font-weight: 700;
+}
+
+/* Универсальный center для тегов / бейджей / действий */
+.analytics-table .td-center,
+.analytics-table th.td-center {
+    text-align: center;
+}
+
+.analytics-table .td-center > * {
+    display: inline-block;
 }
 
 .analytics-table .mono {
