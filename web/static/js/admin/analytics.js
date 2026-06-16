@@ -63,7 +63,7 @@ function fmtMs(v) {
 }
 
 function branchTag(branch) {
-    if (!branch) return '<span class="branch-tag" style="background:#f3f4f6;color:#6b7280">—</span>';
+    if (!branch) return '<span class="branch-tag branch-tag--empty">—</span>';
     const cls = `branch-tag--${branch}`;
     const labels = {
         confident: 'уверен',

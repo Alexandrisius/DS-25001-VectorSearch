@@ -1,5 +1,10 @@
-/* ===== Аналитика: KPI-карточки + таблицы + toolbar ===== */
+/* ==========================================================================
+   Аналитика поиска: KPI-карточки + таблицы + toolbar.
+   Использует токены --adm-* (cascade от --color-*) — автоматически
+   работает в светлой и тёмной теме.
+   ========================================================================== */
 
+/* === TOOLBAR === */
 .analytics-toolbar {
     display: flex;
     align-items: center;
@@ -9,18 +14,19 @@
 }
 
 .analytics-toolbar__label {
-    color: var(--text-secondary, #6b7280);
+    color: var(--adm-text-sec);
     font-size: 14px;
     font-weight: 500;
 }
 
 .analytics-toolbar__updated {
-    color: var(--text-muted, #9ca3af);
+    color: var(--adm-text-sec);
     font-size: 12px;
     margin-left: auto;
+    opacity: 0.8;
 }
 
-/* --- KPI grid --- */
+/* === KPI GRID === */
 .analytics-kpi-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -29,58 +35,59 @@
 }
 
 .kpi-card {
-    background: var(--bg-card, #ffffff);
-    border: 1px solid var(--border-color, #e5e7eb);
-    border-radius: 12px;
+    background: var(--adm-surface);
+    border: 1px solid var(--adm-border);
+    border-radius: var(--card-radius);
     padding: 18px 20px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
-    transition: transform 0.12s, box-shadow 0.12s;
+    box-shadow: var(--shadow-sm);
+    transition: transform 0.12s, box-shadow 0.12s, border-color 0.12s;
+    border-left: 3px solid transparent;
 }
 
 .kpi-card:hover {
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+    box-shadow: var(--shadow-md);
 }
 
 .kpi-card__label {
-    font-size: 12px;
-    color: var(--text-secondary, #6b7280);
+    font-size: 11px;
+    color: var(--adm-text-sec);
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.6px;
     margin-bottom: 8px;
     font-weight: 600;
 }
 
 .kpi-card__value {
-    font-size: 32px;
+    font-size: 28px;
     font-weight: 700;
-    color: var(--text-primary, #111827);
+    color: var(--adm-text);
     line-height: 1.1;
     font-variant-numeric: tabular-nums;
 }
 
 .kpi-card__delta {
-    font-size: 13px;
-    color: var(--text-muted, #9ca3af);
-    margin-top: 6px;
+    font-size: 12px;
+    color: var(--adm-text-sec);
+    margin-top: 8px;
 }
 
-.kpi-card__delta--up { color: #10b981; }
-.kpi-card__delta--down { color: #ef4444; }
+.kpi-card__delta--up { color: var(--adm-success); font-weight: 500; }
+.kpi-card__delta--down { color: var(--adm-danger); font-weight: 500; }
 
-/* Цветовые состояния для zero-result */
-.kpi-card--ok { border-color: #10b981; }
-.kpi-card--warn { border-color: #f59e0b; }
-.kpi-card--bad { border-color: #ef4444; }
+/* Цвет акцента слева для zero-result карточки — индикатор здоровья */
+.kpi-card--ok   { border-left-color: var(--adm-success); }
+.kpi-card--warn { border-left-color: var(--adm-warning); }
+.kpi-card--bad  { border-left-color: var(--adm-danger); }
 
-/* --- Панели --- */
+/* === PANELS === */
 .analytics-panel {
-    background: var(--bg-card, #ffffff);
-    border: 1px solid var(--border-color, #e5e7eb);
-    border-radius: 12px;
+    background: var(--adm-surface);
+    border: 1px solid var(--adm-border);
+    border-radius: var(--card-radius);
     padding: 18px 20px;
     margin-bottom: 20px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    box-shadow: var(--shadow-sm);
 }
 
 .analytics-panel__header {
@@ -94,24 +101,26 @@
 
 .analytics-panel__header h3 {
     margin: 0;
-    font-size: 16px;
+    font-size: 15px;
     font-weight: 600;
-    color: var(--text-primary, #111827);
+    color: var(--adm-text);
     display: flex;
     align-items: center;
     gap: 8px;
 }
 
 .analytics-panel__header h3 i {
-    color: var(--color-primary, #6366f1);
+    color: var(--adm-primary);
+    font-size: 14px;
 }
 
 .analytics-panel__hint {
     font-size: 12px;
-    color: var(--text-muted, #9ca3af);
+    color: var(--adm-text-sec);
+    opacity: 0.85;
 }
 
-/* --- Две колонки --- */
+/* === TWO-COLUMN LAYOUT === */
 .analytics-two-col {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -122,87 +131,150 @@
     .analytics-two-col { grid-template-columns: 1fr; }
 }
 
-/* --- Таблица --- */
+/* === TABLE — наследует стили admin `table` / `.table-container`.
+   Только добавляем то, что нужно для аналитики. === */
+
 .analytics-table {
-    width: 100%;
-    border-collapse: collapse;
     font-size: 13px;
+    /* `table` уже определён в admin/40-data-table.css: width:100%,
+       border-collapse:collapse. Эти свойства — расширения. */
 }
 
+/* Более компактные отступы чем у дефолтного admin `td/th`
+   (там 15/20px) — здесь 8 колонок, нужно экономить место. */
 .analytics-table th,
 .analytics-table td {
-    padding: 8px 10px;
-    text-align: left;
-    border-bottom: 1px solid var(--border-color, #f3f4f6);
-    vertical-align: top;
+    padding: 10px 12px;
+    white-space: nowrap;
 }
 
 .analytics-table th {
-    color: var(--text-secondary, #6b7280);
-    font-weight: 600;
-    text-transform: uppercase;
     font-size: 11px;
+    text-transform: uppercase;
     letter-spacing: 0.4px;
-    background: var(--bg-table-header, #f9fafb);
-    position: sticky;
-    top: 0;
-}
-
-.analytics-table tbody tr:hover {
-    background: var(--bg-table-row-hover, #f9fafb);
 }
 
 .analytics-table td {
-    color: var(--text-primary, #1f2937);
+    color: var(--adm-text);
     font-variant-numeric: tabular-nums;
 }
 
-/* Код материала — моноширинно */
-.analytics-table .mono {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    font-size: 12px;
-    color: var(--color-primary, #6366f1);
+.analytics-table tbody tr:hover td {
+    /* Оверрайдим дефолтный tr:hover td, чтобы соответствовать
+       color-mix логике остальных элементов */
+    background: var(--adm-bg-hover);
 }
 
-/* Метки ветки */
+/* Моноширинный код материала */
+.analytics-table .mono {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--adm-primary);
+    font-weight: 500;
+}
+
+/* IP / session в моно */
+.analytics-table .mono-cell {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--adm-text-sec);
+}
+
+/* === BRANCH TAGS (confident / uncertain / low_confidence) ===
+   Полупрозрачные фон + цветной текст/граница — работает и в тёмной, и в светлой теме. */
 .branch-tag {
     display: inline-block;
-    padding: 2px 8px;
-    border-radius: 4px;
+    padding: 3px 9px;
+    border-radius: var(--radius-full);
     font-size: 11px;
     font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.3px;
+    letter-spacing: 0.4px;
+    border: 1px solid transparent;
+    white-space: nowrap;
 }
-.branch-tag--confident { background: #d1fae5; color: #065f46; }
-.branch-tag--uncertain { background: #fef3c7; color: #92400e; }
-.branch-tag--low_confidence { background: #fee2e2; color: #991b1b; }
 
-/* Иконки действий */
-.action-icons { display: flex; gap: 6px; align-items: center; }
-.action-icons .fa-copy { color: #10b981; }
-.action-icons .fa-thumbs-down { color: #ef4444; }
-.action-icons .fa-circle { color: #d1d5db; font-size: 6px; }
+.branch-tag--confident {
+    background: color-mix(in srgb, var(--adm-success) 18%, transparent);
+    color: var(--adm-success);
+    border-color: color-mix(in srgb, var(--adm-success) 35%, transparent);
+}
 
+.branch-tag--uncertain {
+    background: color-mix(in srgb, var(--adm-warning) 18%, transparent);
+    color: var(--adm-warning);
+    border-color: color-mix(in srgb, var(--adm-warning) 35%, transparent);
+}
+
+.branch-tag--low_confidence {
+    background: color-mix(in srgb, var(--adm-danger) 18%, transparent);
+    color: var(--adm-danger);
+    border-color: color-mix(in srgb, var(--adm-danger) 35%, transparent);
+}
+
+.branch-tag--empty {
+    background: var(--adm-bg);
+    color: var(--adm-text-sec);
+    border-color: var(--adm-border);
+}
+
+/* Fallback для браузеров без color-mix() */
+@supports not (background: color-mix(in srgb, red 50%, transparent)) {
+    .branch-tag--confident { background: rgba(16, 185, 129, 0.15); color: #10b981; }
+    .branch-tag--uncertain { background: rgba(245, 158, 11, 0.15); color: #d97706; }
+    .branch-tag--low_confidence { background: rgba(239, 68, 68, 0.15); color: #dc2626; }
+
+    [data-theme="dark"] .branch-tag--confident { color: #34d399; }
+    [data-theme="dark"] .branch-tag--uncertain { color: #fbbf24; }
+    [data-theme="dark"] .branch-tag--low_confidence { color: #f87171; }
+}
+
+/* === ACTION ICONS (copy / dislike после поиска) === */
+.action-icons {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    font-size: 12px;
+    color: var(--adm-text-sec);
+}
+
+.action-icons .fa-copy {
+    color: var(--adm-success);
+}
+
+.action-icons .fa-thumbs-down {
+    color: var(--adm-danger);
+}
+
+.action-icons .fa-circle {
+    color: var(--adm-text-sec);
+    opacity: 0.4;
+    font-size: 6px;
+}
+
+/* === TIMING CELL (per-stage подсветка) === */
 .timing-cell {
     font-size: 12px;
-    line-height: 1.5;
+    line-height: 1.55;
+    white-space: nowrap;
 }
-.timing-cell .t-slow { color: #ef4444; font-weight: 600; }
-.timing-cell .t-fast { color: #10b981; }
-.timing-cell .t-ok { color: var(--text-primary, #1f2937); }
 
-/* Empty / loading состояния */
+.timing-cell .t-total { font-weight: 600; color: var(--adm-text); }
+.timing-cell .t-slow { color: var(--adm-danger); font-weight: 500; }
+.timing-cell .t-fast { color: var(--adm-success); }
+.timing-cell .t-ok { color: var(--adm-text-sec); }
+
+/* === EMPTY / LOADING STATES === */
 .analytics-empty {
-    padding: 24px;
+    padding: 28px 20px;
     text-align: center;
-    color: var(--text-muted, #9ca3af);
+    color: var(--adm-text-sec);
     font-size: 14px;
 }
 
 .analytics-empty i {
-    font-size: 24px;
+    font-size: 22px;
     display: block;
     margin-bottom: 8px;
-    opacity: 0.5;
+    opacity: 0.55;
 }
