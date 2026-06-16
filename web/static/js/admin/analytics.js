@@ -63,14 +63,26 @@ function fmtMs(v) {
 }
 
 function branchTag(branch) {
-    if (!branch) return '<span class="branch-tag branch-tag--empty">—</span>';
-    const cls = `branch-tag--${branch}`;
-    const labels = {
-        confident: 'уверен',
-        uncertain: 'неуверен',
-        low_confidence: 'low-conf',
+    // Уверенность top-1 результата (адаптивный порог реранкера)
+    const meta = {
+        confident: {
+            label: 'Уверенно',
+            tip: 'Top-1 результат реранкера выше порога — модель уверена в выдаче',
+        },
+        uncertain: {
+            label: 'Сомнительно',
+            tip: 'Top-1 ниже высокого порога — возможно стоит уточнить запрос',
+        },
+        low_confidence: {
+            label: 'Низкая',
+            tip: 'Все результаты низкого качества — пользователь не нашёл подходящего',
+        },
     };
-    return `<span class="branch-tag ${cls}">${labels[branch] || branch}</span>`;
+    if (!branch || !meta[branch]) {
+        return '<span class="branch-tag branch-tag--empty">—</span>';
+    }
+    const m = meta[branch];
+    return `<span class="branch-tag branch-tag--${branch}" title="${m.tip}">${m.label}</span>`;
 }
 
 function renderTimings(t) {
@@ -80,7 +92,6 @@ function renderTimings(t) {
     const embed = t.embed_ms || 0;
     const qdrant = t.qdrant_ms || 0;
     const bm25 = t.bm25_ms || 0;
-    // Подсветка: rerank > 1500ms — slow
     const rerankCls = rerank > 1500 ? 't-slow' : rerank < 500 ? 't-fast' : 't-ok';
     const embedCls = embed > 500 ? 't-slow' : 't-fast';
     return `
@@ -92,17 +103,53 @@ function renderTimings(t) {
     `;
 }
 
-function renderActions(c, d) {
-    const hasCopy = c > 0;
-    const hasDislike = d > 0;
-    return `
-        <div class="action-icons" title="Копирования после поиска / Дизлайки">
-            <i class="fas ${hasCopy ? 'fa-copy' : 'fa-circle'}" aria-hidden="true"></i>
-            <span>${c || 0}</span>
-            <i class="fas ${hasDislike ? 'fa-thumbs-down' : 'fa-circle'}" aria-hidden="true"></i>
-            <span>${d || 0}</span>
-        </div>
-    `;
+/**
+ * Колонка "Что сделал" — что ИМЕННО сотрудник сделал после поиска:
+ *  - скопировал (какой код утащил в буфер)
+ *  - дизлайкнул (какие коды отверг)
+ *
+ * Если ничего — показываем "—" с пояснением.
+ */
+function renderActions(copiedCodes, dislikedCodes) {
+    const copied = (copiedCodes || []).filter(Boolean);
+    const disliked = (dislikedCodes || []).filter(Boolean);
+    const parts = [];
+
+    if (copied.length > 0) {
+        const chips = copied.slice(0, 3)
+            .map((c) => `<span class="action-chip action-chip--copy" title="Скопировал в буфер">${escapeHtml(c)}</span>`)
+            .join(' ');
+        const more = copied.length > 3 ? ` <small class="action-more">+${copied.length - 3}</small>` : '';
+        parts.push(`
+            <div class="action-row action-row--copy">
+                <i class="fas fa-copy" aria-hidden="true"></i>
+                <span class="action-label">Скопировал${copied.length > 1 ? ` (${copied.length})` : ''}:</span>
+                ${chips}${more}
+            </div>
+        `);
+    }
+
+    if (disliked.length > 0) {
+        const chips = disliked.slice(0, 3)
+            .map((c) => `<span class="action-chip action-chip--dislike" title="Дизлайкнул">${escapeHtml(c)}</span>`)
+            .join(' ');
+        const more = disliked.length > 3 ? ` <small class="action-more">+${disliked.length - 3}</small>` : '';
+        parts.push(`
+            <div class="action-row action-row--dislike">
+                <i class="fas fa-thumbs-down" aria-hidden="true"></i>
+                <span class="action-label">Дизлайк${disliked.length > 1 ? ` (${disliked.length})` : ''}:</span>
+                ${chips}${more}
+            </div>
+        `);
+    }
+
+    if (parts.length === 0) {
+        return `<div class="action-empty" title="Сотрудник не отреагировал на выдачу">
+            <i class="fas fa-circle" aria-hidden="true"></i> <span>—</span>
+        </div>`;
+    }
+
+    return `<div class="actions">${parts.join('')}</div>`;
 }
 
 async function loadKpi(hours) {
@@ -138,10 +185,6 @@ async function loadRecent(hours) {
     body.innerHTML = data.items
         .map((r) => {
             const ip = r.user_ip || '—';
-            const codes = (r.top_codes || [])
-                .filter(Boolean)
-                .map((c) => `<span class="mono">${c}</span>`)
-                .join(', ');
             return `
             <tr>
                 <td title="${r.ts || ''}">${fmtTime(r.ts)}</td>
@@ -151,7 +194,7 @@ async function loadRecent(hours) {
                 <td>${r.candidates_count}</td>
                 <td>${branchTag(r.branch)}</td>
                 <td>${renderTimings(r)}</td>
-                <td>${renderActions(r.copies_after, r.dislikes_after)}${codes ? `<br><small>${codes}</small>` : ''}</td>
+                <td>${renderActions(r.copied_codes, r.disliked_codes)}</td>
             </tr>`;
         })
         .join('');

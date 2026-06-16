@@ -168,9 +168,13 @@ class SearchAnalyticsService:
     async def recent_searches(
         self, *, limit: int = 50, hours: int = 168
     ) -> list[dict[str, Any]]:
-        """Последние N поисков (по умолчанию за неделю)."""
+        """Последние N поисков (по умолчанию за неделю).
+
+        Для каждого поиска возвращает КАКИЕ ИМЕННО коды были
+        скопированы или дизлайкнуты сотрудником. JOIN по
+        (user_ip, query) + time-window 10 минут после поиска.
+        """
         since = datetime.now(timezone.utc) - timedelta(hours=hours)
-        # Соединяем с feedback_events, чтобы видеть были ли копирования/дизлайки
         result = await self.session.execute(
             text(
                 """
@@ -189,17 +193,28 @@ class SearchAnalyticsService:
                     s.qdrant_ms,
                     s.bm25_ms,
                     s.status,
-                    s.top_results,
-                    (SELECT COUNT(*) FROM feedback_events f
-                       WHERE f.session_id = s.session_id
-                         AND f.ts >= s.ts
-                         AND f.ts <  s.ts + INTERVAL '10 minutes'
-                         AND f.action = 'copy')                        AS copies_after,
-                    (SELECT COUNT(*) FROM feedback_events f
-                       WHERE f.session_id = s.session_id
-                         AND f.ts >= s.ts
-                         AND f.ts <  s.ts + INTERVAL '10 minutes'
-                         AND f.action = 'dislike')                     AS dislikes_after
+                    -- Скопированные коды (в течение 10 мин после поиска, тот же IP+query)
+                    COALESCE(
+                        (SELECT array_agg(f.selected_code ORDER BY f.ts)
+                           FROM feedback_events f
+                          WHERE f.user_ip = s.user_ip
+                            AND f.query = s.query
+                            AND f.ts >= s.ts
+                            AND f.ts <  s.ts + INTERVAL '10 minutes'
+                            AND f.action = 'copy'),
+                        ARRAY[]::text[]
+                    )                                                    AS copied_codes,
+                    -- Дизлайкнутые коды (тот же IP+query, 10 мин после поиска)
+                    COALESCE(
+                        (SELECT array_agg(f.selected_code ORDER BY f.ts)
+                           FROM feedback_events f
+                          WHERE f.user_ip = s.user_ip
+                            AND f.query = s.query
+                            AND f.ts >= s.ts
+                            AND f.ts <  s.ts + INTERVAL '10 minutes'
+                            AND f.action = 'dislike'),
+                        ARRAY[]::text[]
+                    )                                                    AS disliked_codes
                 FROM search_events s
                 WHERE s.ts >= :since
                 ORDER BY s.ts DESC
@@ -211,7 +226,8 @@ class SearchAnalyticsService:
         rows = result.mappings().all()
         out: list[dict[str, Any]] = []
         for r in rows:
-            tr = r["top_results"] or {}
+            copied = list(r["copied_codes"] or [])
+            disliked = list(r["disliked_codes"] or [])
             out.append(
                 {
                     "id": r["id"],
@@ -228,11 +244,10 @@ class SearchAnalyticsService:
                     "qdrant_ms": r["qdrant_ms"],
                     "bm25_ms": r["bm25_ms"],
                     "status": r["status"],
-                    "top_codes": [
-                        item.get("code") for item in (tr.get("items") or [])[:3]
-                    ],
-                    "copies_after": int(r["copies_after"] or 0),
-                    "dislikes_after": int(r["dislikes_after"] or 0),
+                    "copied_codes": copied,
+                    "disliked_codes": disliked,
+                    "copies_count": len(copied),
+                    "dislikes_count": len(disliked),
                 }
             )
         return out

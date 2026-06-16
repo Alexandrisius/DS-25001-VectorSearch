@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Request
 
+from app.core.middleware import resolve_client_ip
 from app.deps import DBSession
 from app.schemas.feedback import CopyEventIn, DislikeEventIn, FeedbackOut
 from app.services.feedback_service import FeedbackService
@@ -10,17 +11,22 @@ from app.services.feedback_service import FeedbackService
 router = APIRouter(prefix="/feedback", tags=["feedback"])
 
 
-def _client_meta(request: Request) -> tuple[str | None, str | None]:
-    ip = request.headers.get("X-Forwarded-For", "").split(",")[0].strip() or (
-        request.client.host if request.client else None
-    )
+def _client_meta(request: Request) -> tuple[str | None, str | None, str | None]:
+    """Real client IP, UA, session_id из заголовков.
+
+    Использует resolve_client_ip из middleware для правильного приоритета
+    (CF-Connecting-IP → X-Forwarded-For → socket). Session_id приходит
+    из X-Session-ID (генерируется фронтом, см. shared/session.js).
+    """
+    ip = resolve_client_ip(request)
     ua = request.headers.get("User-Agent")
-    return ip, ua
+    sid = request.headers.get("X-Session-ID") or None
+    return ip, ua, sid
 
 
 @router.post("/copy", response_model=FeedbackOut)
 async def feedback_copy(event: CopyEventIn, request: Request, session: DBSession) -> FeedbackOut:
-    ip, ua = _client_meta(request)
+    ip, ua, sid = _client_meta(request)
     svc = FeedbackService(session)
     await svc.record(
         action="copy",
@@ -33,13 +39,14 @@ async def feedback_copy(event: CopyEventIn, request: Request, session: DBSession
         cosine_similarity=event.cosine_similarity,
         user_ip=ip,
         user_agent=ua,
+        session_id=sid,
     )
     return FeedbackOut(status="success", message="Событие сохранено")
 
 
 @router.post("/dislike", response_model=FeedbackOut)
 async def feedback_dislike(event: DislikeEventIn, request: Request, session: DBSession) -> FeedbackOut:
-    ip, ua = _client_meta(request)
+    ip, ua, sid = _client_meta(request)
     svc = FeedbackService(session)
     await svc.record(
         action="dislike",
@@ -52,5 +59,6 @@ async def feedback_dislike(event: DislikeEventIn, request: Request, session: DBS
         cosine_similarity=event.cosine_similarity,
         user_ip=ip,
         user_agent=ua,
+        session_id=sid,
     )
     return FeedbackOut(status="success", message="Дизлайк сохранён")
