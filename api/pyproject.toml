@@ -84,7 +84,9 @@ ignore = ["E501", "B008", "B905"]
 
 [tool.ruff.lint.per-file-ignores]
 "alembic/*" = ["E", "F", "B"]
-"tests/*" = ["E", "F", "B", "DTZ"]
+# Тесты: разрешаем SessionLocal (CamelCase как в проде), однострочные if-ы,
+# pass в except, parametrize-дубли (иногда одинаковый input+expected — окей).
+"tests/*" = ["E", "F", "B", "DTZ", "N806", "SIM103", "SIM105", "I001", "PT014"]
 
 [tool.ruff.format]
 quote-style = "double"

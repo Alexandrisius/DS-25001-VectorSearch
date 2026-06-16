@@ -142,9 +142,16 @@ async def get_all_codes(
             code = payload.get("code")
             if not code:
                 continue
-            full = payload.get("full_description") or payload.get("description", "")
+            # Bug fix: ранее в оба поля description/full_description писалось
+            # одно и то же значение (full_description), из-за чего клиентский
+            # diff терял полный текст описания и сравнивал новую запись (полный
+            # текст) с листом (full_description) → ложные "изменения".
+            # Теперь description = полный текст (как был в Excel),
+            #           full_description = только лист (последний сегмент →).
+            desc = payload.get("description", "")
+            full = payload.get("full_description") or desc
             d = {
-                "description": full,
+                "description": desc,
                 "full_description": full,
                 "code": code,
                 "path_depth": payload.get("path_depth", 0),

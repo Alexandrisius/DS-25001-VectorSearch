@@ -22,6 +22,7 @@ from app.models.material import Material
 from app.services.cleaning_runner import CleaningRunner
 from app.services.embedding_service import EmbeddingService
 from app.utils.path_levels import build_full_path, generate_path_levels
+from app.utils.text import strip_symmetric_quotes
 from app.workers.job_events import publish_job_progress
 
 
@@ -96,7 +97,17 @@ def apply_column_mapping(
     skipped = 0
     for rec in records:
         def parts(cols: list[str]) -> list[str]:
-            return [str(rec.get(c, "")).strip() for c in cols if str(rec.get(c, "")).strip()]
+            # Сначала strip(), затем strip_symmetric_quotes — точно как
+            # в клиентском web/static/js/admin/import/mapping.js:cleanValue.
+            # Без этого клиент (diff) снимет «ёлочки» с краёв, а сервер
+            # (импорт) оставит → ложные изменения при повторной загрузке.
+            result = []
+            for c in cols:
+                raw = str(rec.get(c, "")).strip()
+                if not raw:
+                    continue
+                result.append(strip_symmetric_quotes(raw))
+            return result
 
         code = code_sep.join(parts(code_cols))
         description = desc_sep.join(parts(desc_cols))
@@ -203,8 +214,12 @@ class ImportService:
         for idx, rec in enumerate(records):
             # NB: code НЕ очищается — он идентификатор материала.
             code = str(rec.get("code", "")).strip()
+            # Симметрично клиенту: strip() → strip_symmetric_quotes → cleaning rules.
+            # Без strip_symmetric_quotes клиент (diff) снимет «ёлочки», а
+            # сервер (импорт) оставит — ложные изменения при повторной загрузке.
+            _raw_desc = str(rec.get("description", "")).strip()
             description = self.cleaning.apply(
-                str(rec.get("description", "")).strip(),
+                strip_symmetric_quotes(_raw_desc),
                 "description",
                 cleaning_rules,
             )
@@ -219,7 +234,9 @@ class ImportService:
             path_levels = generate_path_levels(description, hierarchy=hierarchy)
             for k, v in list(path_levels.items()):
                 if k.startswith("path_level_") and isinstance(v, str):
-                    path_levels[k] = self.cleaning.apply(v, "hierarchy", cleaning_rules).strip()
+                    path_levels[k] = self.cleaning.apply(
+                        strip_symmetric_quotes(v), "hierarchy", cleaning_rules
+                    ).strip()
 
             processed.append({
                 "code": code,
@@ -282,12 +299,11 @@ class ImportService:
                 await self.session.commit()
             except Exception as e:
                 logger.error(f"[import] chunk {chunk_idx+1} commit failed: {e}")
-            else:
-                # Invalidate BM25 — следующий /match пересоберёт индекс
-                from app.services.cache_manager import CacheManager
-                CacheManager.invalidate_bm25(collection.name)
                 await self.session.rollback()
                 raise
+            # Commit OK — invalidate BM25 чтобы следующий /match пересобрал индекс
+            from app.services.cache_manager import CacheManager
+            CacheManager.invalidate_bm25(collection.name)
 
             imported_count += len(chunk)
 
