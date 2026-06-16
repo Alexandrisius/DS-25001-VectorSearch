@@ -208,7 +208,7 @@ async function loadRecent(hours) {
                 <td><span class="mono" title="session: ${r.session_id || ''}">${ip}</span></td>
                 <td>${escapeHtml(r.query || '')}</td>
                 <td>${escapeHtml(r.collection || '')}</td>
-                <td class="td-num">${r.candidates_count}</td>
+                <td class="td-num-inline">${r.candidates_count}</td>
                 <td>${branchTag(r.branch)}</td>
                 <td>${renderTimings(r)}</td>
                 <td>${renderActions(r.copied_codes, r.disliked_codes)}</td>
@@ -236,8 +236,8 @@ async function loadZero(daysBack) {
         .map((r) => `
         <tr>
             <td>${escapeHtml(r.query || '')}</td>
-            <td class="td-num">${r.cnt}</td>
-            <td class="td-num">${r.unique_users || 0}</td>
+            <td class="td-num-inline">${r.cnt}</td>
+            <td class="td-num-inline">${r.unique_users || 0}</td>
             <td class="td-mono">${fmtTime(r.last_seen)}</td>
         </tr>`)
         .join('');

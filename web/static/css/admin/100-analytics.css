@@ -184,6 +184,15 @@
     font-variant-numeric: tabular-nums;
 }
 
+/* Числовые row-атрибуты (counts): left-align, но цифры ровные */
+.analytics-table .td-num-inline {
+    font-variant-numeric: tabular-nums;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--adm-text);
+}
+
+/* Числовые измерения (time, размер): right-align + моноширинно */
 .analytics-table .td-num {
     text-align: right;
     font-variant-numeric: tabular-nums;
