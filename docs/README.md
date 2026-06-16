@@ -14,3 +14,4 @@ Each doc covers a single topic in detail. Read only when relevant.
 | [07-data.md](07-data.md) | Data import, Excel format, column mapping | Working with data |
 | [08-deploy-vps.md](08-deploy-vps.md) | Production deployment to VPS | Deploying to server |
 | [09-security-secrets.md](09-security-secrets.md) | Fernet, JWT, bcrypt, .env structure | Changing secrets |
+| [adr/](adr/README.md) | Architecture Decision Records (принятые решения) | Хочу понять почему так сделано |
