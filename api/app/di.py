@@ -20,6 +20,7 @@ from app.services.import_service import ImportService
 from app.services.job_service import JobService
 from app.services.material_service import MaterialService
 from app.services.rerank_service import RerankService
+from app.services.search_analytics_service import SearchAnalyticsService
 from app.services.search_service import SearchService
 from app.services.settings_service import SettingsService
 
@@ -143,6 +144,10 @@ def get_settings_service(session: DBSession) -> SettingsService:
     return SettingsService(session)
 
 
+def get_search_analytics_service(session: DBSession) -> SearchAnalyticsService:
+    return SearchAnalyticsService(session)
+
+
 __all__ = [
     "get_embedding_service",
     "get_rerank_service",
@@ -156,4 +161,5 @@ __all__ = [
     "get_feedback_service",
     "get_job_service",
     "get_settings_service",
+    "get_search_analytics_service",
 ]

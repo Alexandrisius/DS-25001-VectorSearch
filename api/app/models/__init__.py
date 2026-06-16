@@ -7,6 +7,7 @@ from app.models.feedback_event import FeedbackEvent
 from app.models.folder import Folder
 from app.models.material import Material
 from app.models.material_folder import MaterialFolder
+from app.models.search_event import SearchEvent
 from app.models.status import Status
 
 __all__ = [
@@ -19,5 +20,6 @@ __all__ = [
     "JobStatus",
     "Material",
     "MaterialFolder",
+    "SearchEvent",
     "Status",
 ]

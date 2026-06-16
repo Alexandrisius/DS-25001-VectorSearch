@@ -7,6 +7,7 @@
  */
 
 import { appState } from './state.js';
+import { addSessionHeader } from '../shared/session.js';
 
 /**
  * @param {'copy'|'dislike'} type
@@ -25,7 +26,7 @@ export function sendAnalytics(type, payload) {
         };
         fetch('/feedback/copy', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: addSessionHeader({ 'Content-Type': 'application/json' }),
             body: JSON.stringify(copyData),
         })
             .then((res) => res.json())
@@ -45,7 +46,7 @@ export function sendAnalytics(type, payload) {
         };
         fetch('/feedback/dislike', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: addSessionHeader({ 'Content-Type': 'application/json' }),
             body: JSON.stringify(dislikeData),
         })
             .then((res) => res.json())

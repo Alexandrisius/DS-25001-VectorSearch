@@ -1,0 +1,208 @@
+/* ===== Аналитика: KPI-карточки + таблицы + toolbar ===== */
+
+.analytics-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+.analytics-toolbar__label {
+    color: var(--text-secondary, #6b7280);
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.analytics-toolbar__updated {
+    color: var(--text-muted, #9ca3af);
+    font-size: 12px;
+    margin-left: auto;
+}
+
+/* --- KPI grid --- */
+.analytics-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.kpi-card {
+    background: var(--bg-card, #ffffff);
+    border: 1px solid var(--border-color, #e5e7eb);
+    border-radius: 12px;
+    padding: 18px 20px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    transition: transform 0.12s, box-shadow 0.12s;
+}
+
+.kpi-card:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+.kpi-card__label {
+    font-size: 12px;
+    color: var(--text-secondary, #6b7280);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+    font-weight: 600;
+}
+
+.kpi-card__value {
+    font-size: 32px;
+    font-weight: 700;
+    color: var(--text-primary, #111827);
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+}
+
+.kpi-card__delta {
+    font-size: 13px;
+    color: var(--text-muted, #9ca3af);
+    margin-top: 6px;
+}
+
+.kpi-card__delta--up { color: #10b981; }
+.kpi-card__delta--down { color: #ef4444; }
+
+/* Цветовые состояния для zero-result */
+.kpi-card--ok { border-color: #10b981; }
+.kpi-card--warn { border-color: #f59e0b; }
+.kpi-card--bad { border-color: #ef4444; }
+
+/* --- Панели --- */
+.analytics-panel {
+    background: var(--bg-card, #ffffff);
+    border: 1px solid var(--border-color, #e5e7eb);
+    border-radius: 12px;
+    padding: 18px 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.analytics-panel__header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.analytics-panel__header h3 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary, #111827);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.analytics-panel__header h3 i {
+    color: var(--color-primary, #6366f1);
+}
+
+.analytics-panel__hint {
+    font-size: 12px;
+    color: var(--text-muted, #9ca3af);
+}
+
+/* --- Две колонки --- */
+.analytics-two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+@media (max-width: 1024px) {
+    .analytics-two-col { grid-template-columns: 1fr; }
+}
+
+/* --- Таблица --- */
+.analytics-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.analytics-table th,
+.analytics-table td {
+    padding: 8px 10px;
+    text-align: left;
+    border-bottom: 1px solid var(--border-color, #f3f4f6);
+    vertical-align: top;
+}
+
+.analytics-table th {
+    color: var(--text-secondary, #6b7280);
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 11px;
+    letter-spacing: 0.4px;
+    background: var(--bg-table-header, #f9fafb);
+    position: sticky;
+    top: 0;
+}
+
+.analytics-table tbody tr:hover {
+    background: var(--bg-table-row-hover, #f9fafb);
+}
+
+.analytics-table td {
+    color: var(--text-primary, #1f2937);
+    font-variant-numeric: tabular-nums;
+}
+
+/* Код материала — моноширинно */
+.analytics-table .mono {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+    color: var(--color-primary, #6366f1);
+}
+
+/* Метки ветки */
+.branch-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+.branch-tag--confident { background: #d1fae5; color: #065f46; }
+.branch-tag--uncertain { background: #fef3c7; color: #92400e; }
+.branch-tag--low_confidence { background: #fee2e2; color: #991b1b; }
+
+/* Иконки действий */
+.action-icons { display: flex; gap: 6px; align-items: center; }
+.action-icons .fa-copy { color: #10b981; }
+.action-icons .fa-thumbs-down { color: #ef4444; }
+.action-icons .fa-circle { color: #d1d5db; font-size: 6px; }
+
+.timing-cell {
+    font-size: 12px;
+    line-height: 1.5;
+}
+.timing-cell .t-slow { color: #ef4444; font-weight: 600; }
+.timing-cell .t-fast { color: #10b981; }
+.timing-cell .t-ok { color: var(--text-primary, #1f2937); }
+
+/* Empty / loading состояния */
+.analytics-empty {
+    padding: 24px;
+    text-align: center;
+    color: var(--text-muted, #9ca3af);
+    font-size: 14px;
+}
+
+.analytics-empty i {
+    font-size: 24px;
+    display: block;
+    margin-bottom: 8px;
+    opacity: 0.5;
+}

@@ -46,6 +46,9 @@ import {
     loadOpenRouterSettings,
 } from './settings/openrouter.js';
 
+// --- analytics ---
+import { initAnalytics } from './analytics.js';
+
 /**
  * Bootstrap on DOMContentLoaded.
  */
@@ -86,4 +89,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- cleaning rules data ---
     CleaningRulesModule.load();
+
+    // --- analytics ---
+    initAnalytics();
 });

@@ -49,6 +49,7 @@ class Settings(BaseSettings):
     # ===== General =====
     env: Literal["development", "staging", "production"] = "production"
     log_level: str = "INFO"
+    log_format: str = "text"  # text|json (json в production для Docker/jq)
     cors_origins: str = "*"
     server_host: str = "0.0.0.0"
     server_port: int = 8000

@@ -86,5 +86,12 @@ export function switchView(viewName) {
     } else if (viewName === 'settings') {
         els.pageTitle.innerText = 'Настройки';
         renderStatusesSettings();
+    } else if (viewName === 'analytics') {
+        els.pageTitle.innerText = 'Аналитика поиска';
+        // Сообщаем модулю аналитики, что вкладка открыта (запускает загрузку + автообновление)
+        document.dispatchEvent(new CustomEvent('analytics:view-shown'));
+    } else {
+        // Закрываем автообновление, если переключились на другую вкладку
+        document.dispatchEvent(new CustomEvent('analytics:view-hidden'));
     }
 }

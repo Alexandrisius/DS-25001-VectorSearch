@@ -29,6 +29,7 @@
     <link rel="stylesheet" href="/static/css/admin/85-settings-layout.css?v=6">
     <link rel="stylesheet" href="/static/css/admin/90-cleaning-rules.css?v=6">
     <link rel="stylesheet" href="/static/css/admin/95-jobs-and-config.css?v=6">
+    <link rel="stylesheet" href="/static/css/admin/100-analytics.css?v=6">
     <link rel="stylesheet" href="/static/css/admin/99-utilities.css?v=6">
 </head>
 
@@ -73,6 +74,9 @@
                 </a>
                 <a href="#" class="nav-item" data-view="jobs">
                     <i class="fas fa-tasks" aria-hidden="true"></i> Фоновые задачи
+                </a>
+                <a href="#" class="nav-item" data-view="analytics">
+                    <i class="fas fa-chart-line" aria-hidden="true"></i> Аналитика
                 </a>
                 <a href="#" class="nav-item" data-view="settings">
                     <i class="fas fa-cog" aria-hidden="true"></i> Настройки
@@ -154,6 +158,117 @@
                             </thead>
                             <tbody id="jobsTableBody"></tbody>
                         </table>
+                    </div>
+                </div>
+
+                <!-- ВИД: АНАЛИТИКА -->
+                <div id="viewAnalytics" class="view-section hidden">
+                    <!-- Период + кнопка обновления -->
+                    <div class="analytics-toolbar">
+                        <label for="analyticsHours" class="analytics-toolbar__label">Период:</label>
+                        <select id="analyticsHours" class="form-select-modern">
+                            <option value="1">1 час</option>
+                            <option value="24" selected>24 часа</option>
+                            <option value="168">Неделя</option>
+                            <option value="720">Месяц</option>
+                        </select>
+                        <button id="analyticsRefreshBtn" class="btn btn-primary" type="button">
+                            <i class="fas fa-sync" aria-hidden="true"></i> Обновить
+                        </button>
+                        <span id="analyticsUpdated" class="analytics-toolbar__updated">—</span>
+                    </div>
+
+                    <!-- KPI-карточки -->
+                    <div class="analytics-kpi-grid">
+                        <div class="kpi-card">
+                            <div class="kpi-card__label">Поисков</div>
+                            <div class="kpi-card__value" id="kpiSearches">—</div>
+                            <div class="kpi-card__delta" id="kpiSearchesDelta">—</div>
+                        </div>
+                        <div class="kpi-card kpi-card--ok" id="kpiZeroCard">
+                            <div class="kpi-card__label">Без результата</div>
+                            <div class="kpi-card__value" id="kpiZeroPct">—</div>
+                            <div class="kpi-card__delta" id="kpiZeroDelta">—</div>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-card__label">p95 / p50, мс</div>
+                            <div class="kpi-card__value" id="kpiLatency">—</div>
+                            <div class="kpi-card__delta" id="kpiLatencyDelta">—</div>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-card__label">Активных сотрудников</div>
+                            <div class="kpi-card__value" id="kpiUsers">—</div>
+                            <div class="kpi-card__delta" id="kpiUsersDelta">—</div>
+                        </div>
+                    </div>
+
+                    <!-- Последние поиски -->
+                    <div class="analytics-panel">
+                        <div class="analytics-panel__header">
+                            <h3><i class="fas fa-stream" aria-hidden="true"></i> Последние поиски</h3>
+                            <span class="analytics-panel__hint">Скопировал ли сотрудник что-то после запроса</span>
+                        </div>
+                        <div class="table-container">
+                            <table class="analytics-table" id="analyticsRecentTable">
+                                <thead>
+                                    <tr>
+                                        <th>Когда</th>
+                                        <th>IP / сессия</th>
+                                        <th>Запрос</th>
+                                        <th>База</th>
+                                        <th>Результатов</th>
+                                        <th>Ветка</th>
+                                        <th>Тайминги (мс)</th>
+                                        <th>Действия</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="analyticsRecentBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Две колонки: zero-result + топ -->
+                    <div class="analytics-two-col">
+                        <div class="analytics-panel">
+                            <div class="analytics-panel__header">
+                                <h3><i class="fas fa-exclamation-triangle" aria-hidden="true"></i> Без результата</h3>
+                                <span class="analytics-panel__hint">Контент-гэпы базы — что искали, но не нашли</span>
+                            </div>
+                            <div class="table-container">
+                                <table class="analytics-table" id="analyticsZeroTable">
+                                    <thead>
+                                        <tr>
+                                            <th>Запрос</th>
+                                            <th>Раз</th>
+                                            <th>Сотр.</th>
+                                            <th>Последний раз</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="analyticsZeroBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <div class="analytics-panel">
+                            <div class="analytics-panel__header">
+                                <h3><i class="fas fa-tachometer-alt" aria-hidden="true"></i> Медленные запросы</h3>
+                                <span class="analytics-panel__hint">Что тормозит реранкер</span>
+                            </div>
+                            <div class="table-container">
+                                <table class="analytics-table" id="analyticsSlowTable">
+                                    <thead>
+                                        <tr>
+                                            <th>Когда</th>
+                                            <th>Запрос</th>
+                                            <th>Total</th>
+                                            <th>Rerank</th>
+                                            <th>IP</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="analyticsSlowBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
                 </div>
 

@@ -34,6 +34,7 @@ export const els = {
         collections: $id('viewCollections'),
         jobs: $id('viewJobs'),
         data: $id('viewData'),
+        analytics: $id('viewAnalytics'),
         settings: $id('viewSettings'),
     },
 
@@ -140,4 +141,21 @@ export const els = {
     previewHead: $id('previewHead'),
     previewBody: $id('previewBody'),
     previewCount: $id('previewCount'),
+
+    // --- analytics ---
+    analyticsHours: $id('analyticsHours'),
+    analyticsRefreshBtn: $id('analyticsRefreshBtn'),
+    analyticsUpdated: $id('analyticsUpdated'),
+    kpiSearches: $id('kpiSearches'),
+    kpiSearchesDelta: $id('kpiSearchesDelta'),
+    kpiZeroCard: $id('kpiZeroCard'),
+    kpiZeroPct: $id('kpiZeroPct'),
+    kpiZeroDelta: $id('kpiZeroDelta'),
+    kpiLatency: $id('kpiLatency'),
+    kpiLatencyDelta: $id('kpiLatencyDelta'),
+    kpiUsers: $id('kpiUsers'),
+    kpiUsersDelta: $id('kpiUsersDelta'),
+    analyticsRecentBody: $id('analyticsRecentBody'),
+    analyticsZeroBody: $id('analyticsZeroBody'),
+    analyticsSlowBody: $id('analyticsSlowBody'),
 };

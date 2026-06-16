@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from app.api import (
     admin,
     admin_data,
+    analytics,
     collections,
     feedback,
     hierarchy,
@@ -154,6 +155,7 @@ def create_app() -> FastAPI:
     app.include_router(collections.router)
     app.include_router(admin.router)
     app.include_router(admin_data.router)
+    app.include_router(analytics.router)
     app.include_router(settings_api.router)
     app.include_router(import_export.router)
     app.include_router(jobs_ws.router)

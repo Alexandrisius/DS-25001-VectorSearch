@@ -6,6 +6,7 @@
 import { els, setStatusInfoColor } from './els.js';
 import { appState, filterState } from './state.js';
 import { displayResults } from './results.js';
+import { addSessionHeader } from '../shared/session.js';
 
 /**
  * Lock the search button and show the "Searching…" spinner.
@@ -63,7 +64,7 @@ export async function performSearch() {
 
         const res = await fetch('/match', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: addSessionHeader({ 'Content-Type': 'application/json' }),
             body: JSON.stringify(requestBody),
         });
         if (!res.ok) throw new Error('Ошибка соединения с сервером');
